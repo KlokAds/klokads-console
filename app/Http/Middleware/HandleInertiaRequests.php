@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Setting;
 use App\Support\Installer;
+use App\Support\Pricing;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -44,6 +45,8 @@ class HandleInertiaRequests extends Middleware
                 'mode' => ($key = Setting::get('stripe_secret')) ? (str_contains($key, '_live_') ? 'live' : 'test') : null,
                 'lastSyncAt' => Setting::get('last_sync_at'),
             ],
+            // Fee and commission rates, for live "client pays / you receive" previews in forms.
+            'pricing' => fn () => $installed ? Pricing::forClient()->toArray() : null,
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),

@@ -82,7 +82,49 @@ class CashflowReport
     {
         $tx = $this->transactions();
 
-        return $this->summarize($tx, $this->expenseTotal($this->from, $this->to));
+        return $this->summarize($tx, $this->expenseTotal($this->from, $this->to)) + $this->commission();
+    }
+
+    /**
+     * Commission earned and ad budget received on ad-budget invoices paid in the period.
+     *
+     * @return array{commission: int, ad_budget_received: int, budget_invoices: int}
+     */
+    public function commission(): array
+    {
+        $paid = Invoice::where('status', 'paid')->whereNotNull('net_amount')->whereBetween('paid_at', [$this->from, $this->to]);
+
+        return [
+            'commission' => (int) (clone $paid)->sum('commission_amount'),
+            'ad_budget_received' => (int) (clone $paid)->sum('ad_budget'),
+            'budget_invoices' => (clone $paid)->count(),
+        ];
+    }
+
+    /** Expense categories that are money spent on ad platforms on the client's behalf. */
+    public const AD_SPEND_CATEGORIES = ['meta_ads', 'google_ads', 'tiktok_ads'];
+
+    /**
+     * All-time ad budget each client paid us vs what has been spent on their ads.
+     *
+     * @return array<int, array{received: int, spent: int, left: int}> keyed by client id
+     */
+    public static function budgetBalances(?int $clientId = null): array
+    {
+        $received = Invoice::where('status', 'paid')->whereNotNull('ad_budget')->whereNotNull('client_id')
+            ->when($clientId, fn ($q) => $q->where('client_id', $clientId))
+            ->selectRaw('client_id, sum(ad_budget) as total')->groupBy('client_id')->pluck('total', 'client_id');
+
+        $spent = Expense::whereIn('category', self::AD_SPEND_CATEGORIES)->whereNotNull('client_id')
+            ->when($clientId, fn ($q) => $q->where('client_id', $clientId))
+            ->selectRaw('client_id, sum(amount) as total')->groupBy('client_id')->pluck('total', 'client_id');
+
+        return $received->keys()->merge($spent->keys())->unique()
+            ->mapWithKeys(fn ($id) => [$id => [
+                'received' => (int) ($received[$id] ?? 0),
+                'spent' => (int) ($spent[$id] ?? 0),
+                'left' => (int) ($received[$id] ?? 0) - (int) ($spent[$id] ?? 0),
+            ]])->all();
     }
 
     private function summarize(Collection $tx, int $expenses): array
@@ -191,8 +233,13 @@ class CashflowReport
 
         $ids = $tx->keys()->merge($spend->keys())->merge($outstanding->keys())->unique();
 
+        $commission = Invoice::where('status', 'paid')->whereNotNull('client_id')->whereNotNull('commission_amount')
+            ->whereBetween('paid_at', [$this->from, $this->to])
+            ->selectRaw('client_id, sum(commission_amount) as total')->groupBy('client_id')->pluck('total', 'client_id');
+        $budgets = self::budgetBalances();
+
         return Client::whereIn('id', $ids)->get()
-            ->map(function (Client $c) use ($tx, $spend, $outstanding) {
+            ->map(function (Client $c) use ($tx, $spend, $outstanding, $commission, $budgets) {
                 $row = $tx->get($c->id);
                 $net = (int) ($row->net ?? 0);
                 $out = (int) ($spend[$c->id] ?? 0);
@@ -204,6 +251,8 @@ class CashflowReport
                     'fees' => (int) ($row->fees ?? 0),
                     'spend' => $out,
                     'profit' => $net - $out,
+                    'commission' => (int) ($commission[$c->id] ?? 0),
+                    'budget_left' => $budgets[$c->id]['left'] ?? null,
                     'outstanding' => (int) ($outstanding[$c->id] ?? 0),
                 ];
             })

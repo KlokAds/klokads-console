@@ -2,12 +2,49 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Client;
+use App\Support\Pricing;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use RuntimeException;
 use Stripe\Exception\ApiErrorException;
 
 abstract class Controller
 {
+    /**
+     * Validation rules for the shared "ad budget" billing fields.
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    protected function budgetRules(): array
+    {
+        return [
+            'billing' => ['nullable', 'in:standard,budget'],
+            'pass_fees' => ['boolean'],
+            'commission_rate' => ['nullable', 'numeric', 'between:0,100'],
+        ];
+    }
+
+    /**
+     * When the form uses ad-budget billing, the amount is what Klok Ads should net:
+     * the client pays card + payout fees on top and the commission is a share of the net.
+     *
+     * @return array<string, mixed>|null a Pricing::breakdown(), or null for standard billing
+     */
+    protected function budgetFromRequest(Request $request, int $net, ?Client $client): ?array
+    {
+        if ($request->input('billing') !== 'budget') {
+            return null;
+        }
+
+        $pricing = Pricing::forClient($client);
+        if ($request->filled('commission_rate')) {
+            $pricing->commissionRate = (float) $request->input('commission_rate');
+        }
+
+        return $pricing->breakdown($net, $request->boolean('pass_fees', true));
+    }
+
     /** Convert a decimal amount from a form (e.g. "1250.50") to cents. */
     protected function toCents(float|string|null $amount): int
     {

@@ -5,11 +5,14 @@ import EmptyState from '@/Components/EmptyState.vue';
 import Icon from '@/Components/Icon.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { clientName, date, money } from '@/money';
+import BudgetFields from '@/Components/BudgetFields.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const props = defineProps({ links: Array, clients: Array, services: Array, serviceLabels: Object, currency: String });
 
-const form = useForm({ client_id: '', description: '', service: '', amount: '' });
+const form = useForm({ client_id: '', description: '', service: 'meta_ads', amount: '', billing: 'budget', pass_fees: true, commission_rate: 20 });
+const selectedClient = computed(() => props.clients.find((c) => c.id === Number(form.client_id)));
 
 function submit() {
     form.post(route('payment-links.store'), { preserveScroll: true, onSuccess: () => form.reset() });
@@ -40,8 +43,9 @@ const whatsapp = (link) => `https://wa.me/?text=${encodeURIComponent(`${link.des
                         <input v-model="form.description" class="input" placeholder="TikTok Ads setup fee" required />
                         <div v-if="form.errors.description" class="error">{{ form.errors.description }}</div>
                     </div>
+                    <BudgetFields :form="form" :amount="form.amount" :currency="currency" :client-rate="selectedClient?.commission_rate ?? null" compact />
                     <div>
-                        <label class="label">Amount ({{ currency.toUpperCase() }}) *</label>
+                        <label class="label">{{ form.billing === 'budget' ? 'You receive' : 'Amount' }} ({{ currency.toUpperCase() }}) *</label>
                         <div class="relative">
                             <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-ink-400">{{ currency.toUpperCase() }}</span>
                             <input v-model="form.amount" type="number" step="0.01" min="0.5" class="input pl-14 font-semibold" placeholder="0.00" required />

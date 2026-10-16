@@ -2,14 +2,34 @@
 import CopyButton from '@/Components/CopyButton.vue';
 import Icon from '@/Components/Icon.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { date } from '@/money';
+import { date, money } from '@/money';
+import { breakdown } from '@/pricing';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
-const props = defineProps({ stripe: Object, business: Object });
+const props = defineProps({ stripe: Object, business: Object, pricing: Object, descriptors: Object });
+
+const descriptorForm = useForm({ descriptors: Object.fromEntries(props.descriptors.items.map((d) => [d.key, d.value])) });
+const prefix = computed(() => props.descriptors.prefix || 'KLOKADS');
+const preview = (text) => `${prefix.value}* ${(text || '').toUpperCase()}`;
 
 const stripeForm = useForm({ stripe_secret: '', stripe_webhook_secret: '' });
 const businessForm = useForm({ name: props.business.name, currency: props.business.currency.toUpperCase() });
+const pricingForm = useForm({
+    commission_rate: props.pricing.commission_rate,
+    card_fee_percent: props.pricing.card_fee_percent,
+    card_fee_fixed: (props.pricing.card_fee_fixed / 100).toFixed(2),
+    payout_fee_percent: props.pricing.payout_fee_percent,
+});
+const example = computed(() =>
+    breakdown(50000, {
+        commission_rate: Number(pricingForm.commission_rate) || 0,
+        card_fee_percent: Number(pricingForm.card_fee_percent) || 0,
+        card_fee_fixed: Math.round((Number(pricingForm.card_fee_fixed) || 0) * 100),
+        payout_fee_percent: Number(pricingForm.payout_fee_percent) || 0,
+    }),
+);
+const cur = computed(() => props.business.currency);
 const syncing = ref(false);
 
 const events = ['invoice.*', 'customer.subscription.*', 'charge.succeeded', 'charge.refunded', 'payout.*', 'balance.available'];
@@ -125,6 +145,75 @@ function disconnect() {
                 </div>
                 <div class="flex justify-end border-t border-line bg-ink-50/60 px-6 py-4">
                     <button class="btn-primary" :disabled="businessForm.processing">Save</button>
+                </div>
+            </form>
+
+            <div class="border-t border-line pt-6 lg:col-span-3"></div>
+
+            <div class="lg:pt-1">
+                <h2 class="text-base font-bold text-ink-900">Bank statement text</h2>
+                <p class="mt-1 text-sm text-ink-500">What clients see on their card statement for each charge, so they know exactly what it was for.</p>
+                <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    <b>First part ({{ descriptors.prefix ? `"${descriptors.prefix}"` : 'not set yet' }})</b> comes from Stripe:
+                    Stripe Dashboard → Settings → <b>Public details</b> → Statement descriptor and Shortened descriptor (e.g. KLOKADS). Then click "Sync now".
+                </div>
+            </div>
+            <form class="card lg:col-span-2" @submit.prevent="descriptorForm.post(route('settings.descriptors'), { preserveScroll: true })">
+                <div class="divide-y divide-line/70">
+                    <div v-for="d in descriptors.items" :key="d.key" class="grid items-center gap-3 px-5 py-3 sm:grid-cols-[10rem_1fr_auto] sm:px-6">
+                        <span class="text-sm font-semibold text-ink-900">{{ d.label }}</span>
+                        <div>
+                            <input v-model="descriptorForm.descriptors[d.key]" :maxlength="descriptors.max" class="input input-sm font-mono uppercase" />
+                            <div v-if="descriptorForm.errors[`descriptors.${d.key}`]" class="error">{{ descriptorForm.errors[`descriptors.${d.key}`] }}</div>
+                        </div>
+                        <code class="rounded-md bg-ink-50 px-2 py-1 font-mono text-xs text-ink-700 ring-1 ring-line">{{ preview(descriptorForm.descriptors[d.key]) }}</code>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between gap-3 border-t border-line bg-ink-50/60 px-6 py-4">
+                    <span class="text-xs text-ink-500">Max {{ descriptors.max }} characters (card statements allow 22 in total).</span>
+                    <button class="btn-primary" :disabled="descriptorForm.processing">Save</button>
+                </div>
+            </form>
+
+            <div class="border-t border-line pt-6 lg:col-span-3"></div>
+
+            <div class="lg:pt-1">
+                <h2 class="text-base font-bold text-ink-900">Commission & fees</h2>
+                <p class="mt-1 text-sm text-ink-500">Used when billing an ad budget: the client pays the card and payout fees, you net the budget, and your commission is a share of it.</p>
+                <p class="mt-2 text-xs text-ink-500">Each client can have their own commission rate (edit the client).</p>
+            </div>
+            <form class="card lg:col-span-2" @submit.prevent="pricingForm.post(route('settings.pricing'), { preserveScroll: true })">
+                <div class="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
+                    <div>
+                        <label class="label">Default commission (%)</label>
+                        <input v-model="pricingForm.commission_rate" type="number" step="0.5" min="0" max="100" class="input" />
+                        <div v-if="pricingForm.errors.commission_rate" class="error">{{ pricingForm.errors.commission_rate }}</div>
+                    </div>
+                    <div>
+                        <label class="label">Payout / bank fee (%)</label>
+                        <input v-model="pricingForm.payout_fee_percent" type="number" step="0.01" min="0" max="10" class="input" />
+                    </div>
+                    <div>
+                        <label class="label">Card fee (%)</label>
+                        <input v-model="pricingForm.card_fee_percent" type="number" step="0.01" min="0" max="20" class="input" />
+                    </div>
+                    <div>
+                        <label class="label">Card fee, fixed ({{ cur.toUpperCase() }})</label>
+                        <input v-model="pricingForm.card_fee_fixed" type="number" step="0.01" min="0" max="10" class="input" />
+                    </div>
+                    <div class="sm:col-span-2 rounded-xl border border-line bg-ink-50/60 p-4 text-sm">
+                        <div class="mb-1 text-xs font-semibold text-ink-700">Example: you want to receive {{ money(50000, cur) }}</div>
+                        <div class="grid grid-cols-2 gap-x-6 gap-y-0.5 text-ink-600 sm:grid-cols-4">
+                            <span>Client pays <b class="text-ink-900">{{ money(example.charge, cur) }}</b></span>
+                            <span>Fees <b class="text-ink-900">{{ money(example.processing_fee, cur) }}</b></span>
+                            <span>Commission <b class="text-emerald-700">{{ money(example.commission, cur) }}</b></span>
+                            <span>Ad budget <b class="text-ink-900">{{ money(example.ad_budget, cur) }}</b></span>
+                        </div>
+                        <p class="mt-2 text-[11px] text-ink-500">Card fees are an estimate: foreign cards and currency conversion cost more at Stripe, so you may occasionally net slightly less. The dashboard always shows the real fee.</p>
+                    </div>
+                </div>
+                <div class="flex justify-end border-t border-line bg-ink-50/60 px-6 py-4">
+                    <button class="btn-primary" :disabled="pricingForm.processing">Save</button>
                 </div>
             </form>
         </div>

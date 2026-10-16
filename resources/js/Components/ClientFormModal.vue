@@ -7,7 +7,7 @@ import { watch } from 'vue';
 const props = defineProps({ show: Boolean, client: { type: Object, default: null } });
 const emit = defineEmits(['close']);
 
-const blank = { name: '', company: '', email: '', phone: '', country: 'SG', notes: '' };
+const blank = { name: '', company: '', email: '', phone: '', country: 'SG', commission_rate: '', notes: '' };
 const form = useForm({ ...blank });
 
 watch(
@@ -63,6 +63,12 @@ function submit() {
                     <input v-model="form.country" maxlength="2" class="input uppercase" />
                     <div class="hint">2-letter code, e.g. SG, MY</div>
                     <div v-if="form.errors.country" class="error">{{ form.errors.country }}</div>
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="label">Commission (%)</label>
+                    <input v-model="form.commission_rate" type="number" step="0.5" min="0" max="100" class="input" placeholder="Default" />
+                    <div class="hint">Empty = the default from Settings</div>
+                    <div v-if="form.errors.commission_rate" class="error">{{ form.errors.commission_rate }}</div>
                 </div>
                 <div class="col-span-2">
                     <label class="label">Notes</label>

@@ -2,7 +2,9 @@
 import CopyButton from '@/Components/CopyButton.vue';
 import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
+import BudgetFields from '@/Components/BudgetFields.vue';
 import { money } from '@/money';
+import { breakdown } from '@/pricing';
 import { router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
@@ -35,8 +37,13 @@ const expired = (c) => new Date(c.exp_year, c.exp_month) < new Date();
 
 // Charge now
 const showCharge = ref(false);
-const chargeForm = useForm({ amount: '', description: '', service: '', payment_method: '', confirm: false });
-const chargeCents = computed(() => Math.round((Number(chargeForm.amount) || 0) * 100));
+const chargeForm = useForm({ amount: '', description: '', service: '', payment_method: '', confirm: false, billing: 'budget', pass_fees: true, commission_rate: 20 });
+const pricing = computed(() => usePage().props.pricing);
+const chargeCents = computed(() => {
+    const cents = Math.round((Number(chargeForm.amount) || 0) * 100);
+    if (chargeForm.billing !== 'budget' || !pricing.value || !cents) return cents;
+    return breakdown(cents, { ...pricing.value, commission_rate: Number(chargeForm.commission_rate) || 0 }, chargeForm.pass_fees).charge;
+});
 const chargeCard = computed(() => items.value.find((c) => c.id === chargeForm.payment_method) ?? items.value.find((c) => c.is_default));
 
 function openCharge() {
@@ -124,8 +131,11 @@ function submitCharge() {
                     <button type="button" class="icon-btn" @click="showCharge = false"><Icon name="close" /></button>
                 </div>
                 <div class="grid grid-cols-2 gap-4 px-6 py-5">
+                    <div class="col-span-2">
+                        <BudgetFields :form="chargeForm" :amount="chargeForm.amount" :currency="currency" :client-rate="client.commission_rate ?? null" compact />
+                    </div>
                     <div>
-                        <label class="label">Amount ({{ currency.toUpperCase() }}) *</label>
+                        <label class="label">{{ chargeForm.billing === 'budget' ? 'You receive' : 'Amount' }} ({{ currency.toUpperCase() }}) *</label>
                         <input v-model="chargeForm.amount" type="number" step="0.01" min="0.5" class="input font-semibold" required />
                         <div v-if="chargeForm.errors.amount" class="error">{{ chargeForm.errors.amount }}</div>
                     </div>

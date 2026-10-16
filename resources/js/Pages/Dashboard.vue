@@ -169,7 +169,10 @@ const marginPct = (s) => (s.revenue ? Math.round((s.margin / s.revenue) * 100) :
         </div>
 
         <!-- KPI row -->
-        <div class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5">
+            <StatCard label="Commission earned" icon="chart" tone="good" :value="m(summary.commission)"
+                :hint="summary.budget_invoices ? `${summary.budget_invoices} ad-budget payments · ${m(summary.ad_budget_received)} ad budget` : 'From ad-budget invoices'"
+                :current="summary.commission" :previous="prev.commission ?? null" />
             <StatCard label="Gross collected" icon="trend" tone="brand" :value="m(summary.gross)" :hint="`${summary.payments_count} payments`"
                 :current="summary.gross" :previous="prev.gross ?? null" :spark="spark('gross')" spark-color="#2a78d6" />
             <StatCard label="Stripe fees" icon="fee" :value="m(summary.fees)" :hint="`${summary.fee_rate}% of gross`"
@@ -305,7 +308,7 @@ const marginPct = (s) => (s.revenue ? Math.round((s.margin / s.revenue) * 100) :
             </div>
             <div v-if="clients.length" class="overflow-x-auto">
                 <table class="table">
-                    <thead><tr><th>Client</th><th class="num">Paid</th><th class="num">Stripe fees</th><th class="num">Spend</th><th class="num">Profit</th><th>Margin</th><th class="num">Owes</th></tr></thead>
+                    <thead><tr><th>Client</th><th class="num">Paid</th><th class="num">Commission</th><th class="num">Spend</th><th class="num">Profit</th><th>Margin</th><th class="num">Budget left</th><th class="num">Owes</th></tr></thead>
                     <tbody>
                         <tr v-for="c in clients" :key="c.id">
                             <td>
@@ -314,7 +317,7 @@ const marginPct = (s) => (s.revenue ? Math.round((s.margin / s.revenue) * 100) :
                                 </Link>
                             </td>
                             <td class="num font-medium text-ink-900">{{ m(c.revenue) }}</td>
-                            <td class="num text-ink-500">{{ m(c.fees) }}</td>
+                            <td class="num font-medium text-emerald-700">{{ c.commission ? m(c.commission) : '—' }}</td>
                             <td class="num">{{ m(c.spend) }}</td>
                             <td class="num font-semibold" :class="c.profit < 0 ? 'text-rose-600' : 'text-emerald-600'">{{ m(c.profit) }}</td>
                             <td class="w-40">
@@ -324,6 +327,10 @@ const marginPct = (s) => (s.revenue ? Math.round((s.margin / s.revenue) * 100) :
                                     </div>
                                     <span class="w-9 text-right text-[11px] tabular-nums text-ink-500">{{ Math.round((c.profit / c.revenue) * 100) }}%</span>
                                 </div>
+                            </td>
+                            <td class="num" :class="c.budget_left === null ? 'text-ink-300' : c.budget_left < 0 ? 'font-semibold text-rose-600' : 'text-ink-800'"
+                                :title="c.budget_left !== null && c.budget_left < 0 ? 'More spent on ads than the client has paid' : 'Ad budget paid minus ad spend recorded'">
+                                {{ c.budget_left === null ? '—' : m(c.budget_left) }}
                             </td>
                             <td class="num" :class="c.outstanding ? 'font-semibold text-amber-600' : 'text-ink-300'">{{ m(c.outstanding) }}</td>
                         </tr>

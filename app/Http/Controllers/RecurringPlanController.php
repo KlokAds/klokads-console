@@ -20,7 +20,7 @@ class RecurringPlanController extends Controller
 
         return Inertia::render('Recurring/Index', [
             'plans' => $plans,
-            'clients' => Client::orderBy('name')->get(['id', 'name', 'company']),
+            'clients' => Client::orderBy('name')->get(['id', 'name', 'company', 'commission_rate']),
             'services' => Catalog::options(Catalog::SERVICES),
             'serviceLabels' => Catalog::SERVICES,
             'currency' => $stripe->currency(),
@@ -40,11 +40,14 @@ class RecurringPlanController extends Controller
             'collection' => ['required', Rule::in(['auto', 'invoice'])],
             'days_until_due' => ['nullable', 'integer', 'min:0', 'max:60'],
             'start_date' => ['nullable', 'date', 'after_or_equal:today'],
+            ...$this->budgetRules(),
         ]);
         $data['amount'] = $this->toCents($data['amount']);
+        $client = Client::findOrFail($data['client_id']);
+        $data['budget'] = $this->budgetFromRequest($request, $data['amount'], $client);
 
         return $this->stripeAction(
-            fn () => $stripe->createRecurring(Client::findOrFail($data['client_id']), $data),
+            fn () => $stripe->createRecurring($client, $data),
             $data['collection'] === 'auto'
                 ? 'Recurring plan created. Send the first-invoice link — once the client pays by card, every next cycle is charged automatically.'
                 : 'Recurring plan created. Stripe will email an invoice every cycle.'

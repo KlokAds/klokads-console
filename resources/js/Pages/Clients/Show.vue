@@ -25,6 +25,8 @@ const props = defineProps({
     categoryLabels: Object,
     stripeConnected: Boolean,
     cards: Object,
+    budget: Object,
+    commissionRate: Number,
 });
 
 const defaultCard = computed(() => props.cards?.items?.find((c) => c.is_default));
@@ -73,9 +75,10 @@ function destroy() {
 
         <div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Paid to date" icon="trend" tone="brand" :value="m(totals.revenue)" :hint="`${m(totals.fees)} in Stripe fees`" />
-            <StatCard label="Our spend" icon="card" :value="m(totals.spend)" hint="Ad spend, tools, freelancers" />
-            <StatCard label="Profit" icon="chart" :tone="totals.profit >= 0 ? 'good' : 'bad'" :value="m(totals.profit)"
-                :hint="totals.revenue ? `${Math.round((totals.profit / totals.revenue) * 100)}% margin` : 'net received − spend'" />
+            <StatCard label="Commission earned" icon="chart" tone="good" :value="m(totals.commission ?? 0)"
+                :hint="`${commissionRate}% rate · profit ${m(totals.profit)}`" />
+            <StatCard label="Ad budget left" icon="megaphone" :tone="budget.left < 0 ? 'bad' : 'default'" :value="m(budget.left)"
+                :hint="`${m(budget.received)} paid for ads · ${m(budget.spent)} spent`" />
             <StatCard label="Outstanding" icon="clock" :tone="totals.outstanding ? 'bad' : 'default'" :value="m(totals.outstanding)" />
         </div>
 

@@ -50,13 +50,16 @@ class ClientCardController extends Controller
             'service' => ['nullable', Rule::in(array_keys(Catalog::SERVICES))],
             'payment_method' => ['nullable', 'string', 'starts_with:pm_'],
             'confirm' => ['accepted'],
+            ...$this->budgetRules(),
         ], ['confirm.accepted' => 'Tick the box to confirm the charge.']);
 
         $amount = $this->toCents($data['amount']);
+        $budget = $this->budgetFromRequest($request, $amount, $client);
+        $charged = $budget['charge'] ?? $amount;
 
         return $this->stripeAction(
-            fn () => $stripe->chargeNow($client, $amount, $data['description'], $data['service'] ?? null, $data['payment_method'] ?? null),
-            'Charged '.number_format($amount / 100, 2).' '.strtoupper($stripe->currency()).' — invoice and receipt created.'
+            fn () => $stripe->chargeNow($client, $amount, $data['description'], $data['service'] ?? null, $data['payment_method'] ?? null, $budget),
+            'Charged '.number_format($charged / 100, 2).' '.strtoupper($stripe->currency()).' — invoice and receipt created.'
         );
     }
 

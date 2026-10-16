@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Setting;
 use App\Services\StripeService;
+use App\Support\Catalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -38,7 +39,58 @@ class SettingsController extends Controller
                 'currency' => Setting::get('currency', 'sgd'),
                 'currencyFromStripe' => (bool) $secret,
             ],
+            'descriptors' => [
+                'prefix' => Setting::get('descriptor_prefix'),
+                'max' => StripeService::descriptorMaxLength(),
+                'items' => collect(StripeService::DEFAULT_DESCRIPTORS)->map(fn ($default, $key) => [
+                    'key' => $key,
+                    'label' => Catalog::SERVICES[$key] ?? $key,
+                    'value' => StripeService::descriptorFor($key),
+                ])->values(),
+            ],
+            'pricing' => [
+                'commission_rate' => (float) Setting::get('commission_rate', 20),
+                'card_fee_percent' => (float) Setting::get('card_fee_percent', 2.9),
+                'card_fee_fixed' => (int) Setting::get('card_fee_fixed', 30),
+                'payout_fee_percent' => (float) Setting::get('payout_fee_percent', 0.3),
+            ],
         ]);
+    }
+
+    public function updateDescriptors(Request $request): RedirectResponse
+    {
+        $max = StripeService::descriptorMaxLength();
+        $rules = collect(array_keys(StripeService::DEFAULT_DESCRIPTORS))->mapWithKeys(fn ($key) => [
+            "descriptors.{$key}" => ['required', 'string', "max:{$max}", 'regex:/^[A-Za-z0-9 .\-&]*[A-Za-z][A-Za-z0-9 .\-&]*$/'],
+        ])->all();
+
+        $data = $request->validate($rules, [
+            'descriptors.*.regex' => 'Use letters, numbers, spaces, . - & only, with at least one letter.',
+            'descriptors.*.max' => "Keep it to {$max} characters so it fits on the bank statement.",
+        ]);
+
+        foreach ($data['descriptors'] as $key => $text) {
+            Setting::put("descriptor_{$key}", StripeService::cleanDescriptor($text));
+        }
+
+        return back()->with('success', 'Bank statement text saved — new charges will use it.');
+    }
+
+    public function updatePricing(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'commission_rate' => ['required', 'numeric', 'between:0,100'],
+            'card_fee_percent' => ['required', 'numeric', 'between:0,20'],
+            'card_fee_fixed' => ['required', 'numeric', 'between:0,10'],
+            'payout_fee_percent' => ['required', 'numeric', 'between:0,10'],
+        ]);
+
+        Setting::put('commission_rate', (string) (float) $data['commission_rate']);
+        Setting::put('card_fee_percent', (string) (float) $data['card_fee_percent']);
+        Setting::put('card_fee_fixed', (string) $this->toCents($data['card_fee_fixed']));
+        Setting::put('payout_fee_percent', (string) (float) $data['payout_fee_percent']);
+
+        return back()->with('success', 'Commission and fee settings saved.');
     }
 
     public function updateStripe(Request $request): RedirectResponse

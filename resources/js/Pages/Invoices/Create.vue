@@ -2,7 +2,9 @@
 import Avatar from '@/Components/Avatar.vue';
 import Icon from '@/Components/Icon.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import BudgetFields from '@/Components/BudgetFields.vue';
 import { clientName, money } from '@/money';
+import { breakdown } from '@/pricing';
 import { Head, Link, usePage, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
@@ -10,15 +12,36 @@ const props = defineProps({ clients: Array, services: Array, currency: String, c
 
 const form = useForm({
     client_id: props.clientId ?? '',
-    service: '',
+    service: 'meta_ads',
     memo: '',
     days_until_due: 7,
     send: true,
+    billing: 'budget',
+    pass_fees: true,
+    commission_rate: 20,
+    budget_amount: '',
     items: [{ description: '', amount: '', quantity: 1 }],
 });
 
+const isBudget = computed(() => form.billing === 'budget');
+const pricing = computed(() => usePage().props.pricing);
+const budget = computed(() => {
+    const cents = Math.round((Number(form.budget_amount) || 0) * 100);
+    return isBudget.value && cents && pricing.value
+        ? breakdown(cents, { ...pricing.value, commission_rate: Number(form.commission_rate) || 0 }, form.pass_fees)
+        : null;
+});
+const serviceLabel = computed(() => props.services.find((s) => s.value === form.service)?.label ?? 'Ads');
+
 const lineTotal = (i) => Math.round((Number(i.amount) || 0) * 100) * (Number(i.quantity) || 0);
-const total = computed(() => form.items.reduce((sum, i) => sum + lineTotal(i), 0));
+const previewLines = computed(() => {
+    if (!isBudget.value) return form.items.map((i) => ({ description: i.description || 'Item description', quantity: Number(i.quantity) || 1, amount: lineTotal(i) }));
+    if (!budget.value) return [];
+    const lines = [{ description: `${serviceLabel.value} budget`, quantity: 1, amount: budget.value.net }];
+    if (budget.value.processing_fee > 0) lines.push({ description: 'Card processing fee', quantity: 1, amount: budget.value.processing_fee });
+    return lines;
+});
+const total = computed(() => (isBudget.value ? budget.value?.charge ?? 0 : form.items.reduce((sum, i) => sum + lineTotal(i), 0)));
 const client = computed(() => props.clients.find((c) => c.id === Number(form.client_id)));
 const dueDate = computed(() => {
     const d = new Date();
@@ -73,6 +96,19 @@ function setService(value) {
                 </div>
 
                 <div class="card">
+                    <div class="card-head"><div class="card-title">Amount</div></div>
+                    <div class="space-y-4 p-5 sm:p-6">
+                        <BudgetFields :form="form" :amount="form.budget_amount" :currency="currency" :client-rate="client?.commission_rate ?? null" />
+                        <div v-if="isBudget">
+                            <label class="label">You want to receive ({{ currency.toUpperCase() }}) *</label>
+                            <input v-model="form.budget_amount" type="number" step="0.01" min="1" class="input text-lg font-semibold" placeholder="500.00" required />
+                            <div class="hint">The net amount after Stripe and payout fees — the {{ serviceLabel }} budget including our commission.</div>
+                            <div v-if="form.errors.budget_amount" class="error">{{ form.errors.budget_amount }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="!isBudget" class="card">
                     <div class="card-head"><div class="card-title">Line items</div></div>
                     <div class="p-5 sm:p-6">
                         <div class="mb-2 hidden grid-cols-12 gap-3 text-[11px] font-semibold uppercase tracking-wider text-ink-400 sm:grid">
@@ -141,15 +177,19 @@ function setService(value) {
                                 </div>
                             </div>
                             <div class="mt-5 divide-y divide-line border-y border-line">
-                                <div v-for="(item, i) in form.items" :key="i" class="flex justify-between gap-4 py-2.5 text-sm">
-                                    <span class="text-ink-700">{{ item.description || 'Item description' }}<span v-if="item.quantity > 1" class="text-ink-400"> × {{ item.quantity }}</span></span>
-                                    <span class="tabular-nums text-ink-900">{{ money(lineTotal(item), currency) }}</span>
+                                <div v-for="(item, i) in previewLines" :key="i" class="flex justify-between gap-4 py-2.5 text-sm">
+                                    <span class="text-ink-700">{{ item.description }}<span v-if="item.quantity > 1" class="text-ink-400"> × {{ item.quantity }}</span></span>
+                                    <span class="tabular-nums text-ink-900">{{ money(item.amount, currency) }}</span>
                                 </div>
+                                <div v-if="!previewLines.length" class="py-2.5 text-sm text-ink-400">Enter an amount…</div>
                             </div>
                             <div class="mt-3 flex justify-between text-sm font-bold text-ink-900">
                                 <span>Total</span><span class="tabular-nums">{{ money(total, currency) }}</span>
                             </div>
                             <p v-if="form.memo" class="mt-4 rounded-xl bg-ink-50 p-3 text-xs text-ink-600">{{ form.memo }}</p>
+                            <div v-if="budget" class="mt-4 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/60 p-3 text-xs text-emerald-800">
+                                Only you see this: you receive <b>{{ money(budget.net, currency) }}</b> → commission <b>{{ money(budget.commission, currency) }}</b>, ad budget {{ money(budget.ad_budget, currency) }}.
+                            </div>
                         </div>
                     </div>
 

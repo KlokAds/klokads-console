@@ -185,8 +185,11 @@ class StripeService
      * Charge a saved card right away for any amount. Creates a finalized invoice so the
      * charge has a number, a receipt and shows up in every total.
      */
-    public function chargeNow(Client $client, int $amount, string $description, ?string $service = null, ?string $paymentMethodId = null): Invoice
+    public function chargeNow(Client $client, int $amount, string $description, ?string $service = null, ?string $paymentMethodId = null, ?array $budget = null): Invoice
     {
+        $items = $budget
+            ? self::budgetItems($budget, $description)
+            : [['description' => $description, 'amount' => $amount, 'quantity' => 1]];
         $stripe = $this->stripe();
         $customer = $this->ensureCustomer($client);
         $paymentMethodId ??= collect($this->paymentMethods($client))->firstWhere('is_default', true)['id'] ?? null;
@@ -204,16 +207,19 @@ class StripeService
             'currency' => $this->currency(),
             'description' => $description,
             'pending_invoice_items_behavior' => 'exclude',
-            'metadata' => ['klok_client_id' => $client->id, 'service' => $service ?? '', 'charged_from' => 'klokads-console'],
+            'metadata' => ['klok_client_id' => $client->id, 'service' => $service ?? '', 'charged_from' => 'klokads-console'] + self::budgetMetadata($budget),
+            'statement_descriptor' => self::descriptorFor($service),
         ]);
 
-        $stripe->invoiceItems->create([
-            'customer' => $customer,
-            'invoice' => $invoice->id,
-            'currency' => $this->currency(),
-            'amount' => $amount,
-            'description' => $description,
-        ]);
+        foreach ($items as $item) {
+            $stripe->invoiceItems->create([
+                'customer' => $customer,
+                'invoice' => $invoice->id,
+                'currency' => $this->currency(),
+                'amount' => $item['amount'],
+                'description' => $item['description'],
+            ]);
+        }
 
         $stripe->invoices->finalizeInvoice($invoice->id, ['auto_advance' => false]);
 
@@ -242,6 +248,105 @@ class StripeService
         }
     }
 
+    // ---------------------------------------------------------------- bank statement text
+
+    /** What the client's bank statement shows after the account prefix, per service. */
+    public const DEFAULT_DESCRIPTORS = [
+        'meta_ads' => 'META ADS',
+        'google_ads' => 'GOOGLE ADS',
+        'tiktok_ads' => 'TIKTOK ADS',
+        'seo' => 'SEO',
+        'web' => 'WEBSITE',
+        'retainer' => 'MGMT FEE',
+        'other' => 'SERVICES',
+    ];
+
+    /** Longest suffix that fits the 22-character card statement limit with the account prefix. */
+    public static function descriptorMaxLength(): int
+    {
+        $prefix = (string) Setting::get('descriptor_prefix', 'KLOKADS');
+
+        return max(5, 22 - strlen($prefix) - 2);
+    }
+
+    /** Statement suffix for a service, e.g. "META ADS" → bank shows "KLOKADS* META ADS". */
+    public static function descriptorFor(?string $service): ?string
+    {
+        $key = $service && array_key_exists($service, self::DEFAULT_DESCRIPTORS) ? $service : 'other';
+        $text = Setting::get("descriptor_{$key}") ?: self::DEFAULT_DESCRIPTORS[$key];
+
+        return self::cleanDescriptor($text);
+    }
+
+    /** Uppercase, only characters card networks accept, within the length limit. */
+    public static function cleanDescriptor(?string $text): ?string
+    {
+        $text = strtoupper(trim(preg_replace('/\s+/', ' ', preg_replace('/[^A-Za-z0-9 .\-&]/', '', (string) $text))));
+        $text = rtrim(substr($text, 0, self::descriptorMaxLength()));
+
+        return preg_match('/[A-Z]/', $text) ? $text : null;
+    }
+
+    // ---------------------------------------------------------------- ad budget & commission
+
+    /** Local columns that hold an ad-budget breakdown (see App\Support\Pricing). */
+    public const BUDGET_FIELDS = ['net_amount', 'processing_fee', 'commission_rate', 'commission_amount', 'ad_budget'];
+
+    /**
+     * Budget line plus the card processing fee line the client pays on top.
+     *
+     * @param  array{net: int, processing_fee: int}  $budget
+     * @return array<int, array{description: string, amount: int, quantity: int}>
+     */
+    public static function budgetItems(array $budget, string $label): array
+    {
+        $items = [['description' => $label, 'amount' => $budget['net'], 'quantity' => 1]];
+
+        if ($budget['processing_fee'] > 0) {
+            $items[] = ['description' => 'Card processing fee', 'amount' => $budget['processing_fee'], 'quantity' => 1];
+        }
+
+        return $items;
+    }
+
+    /** @return array<string, string> Stripe metadata for a Pricing::breakdown() */
+    public static function budgetMetadata(?array $budget): array
+    {
+        if (! $budget) {
+            return [];
+        }
+
+        return [
+            'net_amount' => (string) $budget['net'],
+            'processing_fee' => (string) $budget['processing_fee'],
+            'commission_rate' => (string) $budget['commission_rate'],
+            'commission_amount' => (string) $budget['commission'],
+            'ad_budget' => (string) $budget['ad_budget'],
+        ];
+    }
+
+    /** @return array<string, int|float> local columns from Stripe metadata, or [] when absent */
+    private static function budgetFields(mixed $metadata): array
+    {
+        if (! $metadata || ! isset($metadata['net_amount'])) {
+            return [];
+        }
+
+        return [
+            'net_amount' => (int) $metadata['net_amount'],
+            'processing_fee' => (int) ($metadata['processing_fee'] ?? 0),
+            'commission_rate' => (float) ($metadata['commission_rate'] ?? 0),
+            'commission_amount' => (int) ($metadata['commission_amount'] ?? 0),
+            'ad_budget' => (int) ($metadata['ad_budget'] ?? 0),
+        ];
+    }
+
+    /** Local columns for a Pricing::breakdown() */
+    public static function budgetColumns(?array $budget): array
+    {
+        return $budget ? self::budgetFields(self::budgetMetadata($budget)) : [];
+    }
+
     // ---------------------------------------------------------------- invoices
 
     /**
@@ -259,8 +364,13 @@ class StripeService
             'currency' => $currency,
             'description' => $opts['memo'] ?? null,
             'pending_invoice_items_behavior' => 'exclude',
-            'metadata' => ['klok_client_id' => $client->id, 'service' => $opts['service'] ?? ''],
+            'metadata' => ['klok_client_id' => $client->id, 'service' => $opts['service'] ?? ''] + self::budgetMetadata($opts['budget'] ?? null),
+            'statement_descriptor' => self::descriptorFor($opts['service'] ?? null),
         ]);
+
+        if (! empty($opts['budget'])) {
+            $items = self::budgetItems($opts['budget'], $opts['budget_label'] ?? 'Ads budget');
+        }
 
         foreach ($items as $item) {
             $qty = max(1, (int) $item['quantity']);
@@ -327,7 +437,12 @@ class StripeService
 
         $existing = Invoice::where('stripe_invoice_id', $si->id)->first();
 
-        return Invoice::updateOrCreate(['stripe_invoice_id' => $si->id], [
+        // Commission details ride along in Stripe metadata; subscription invoices inherit the plan's.
+        $budget = self::budgetFields($si->metadata)
+            ?: self::budgetFields($si->parent?->subscription_details?->metadata ?? null)
+            ?: ($plan && $plan->net_amount !== null ? $plan->only(self::BUDGET_FIELDS) : []);
+
+        return Invoice::updateOrCreate(['stripe_invoice_id' => $si->id], $budget + [
             'client_id' => $clientId ?: $existing?->client_id,
             'stripe_subscription_id' => $subscriptionId,
             'number' => $si->number,
@@ -358,23 +473,33 @@ class StripeService
         $stripe = $this->stripe();
         $currency = $data['currency'] ?? $this->currency();
 
-        $product = $stripe->products->create([
-            'name' => $data['description'],
-            'metadata' => ['service' => $data['service'] ?? ''],
-        ]);
+        $budget = $data['budget'] ?? null;
+        $recurring = ['interval' => $data['interval'], 'interval_count' => $data['interval_count']];
+        $lines = $budget
+            ? self::budgetItems($budget, $data['description'])
+            : [['description' => $data['description'], 'amount' => $data['amount'], 'quantity' => 1]];
+
+        $items = collect($lines)->map(function ($line) use ($stripe, $currency, $recurring, $data) {
+            // Subscription invoices take the statement text from the first item's product.
+            $product = $stripe->products->create(array_filter([
+                'name' => $line['description'],
+                'metadata' => ['service' => $data['service'] ?? ''],
+                'statement_descriptor' => self::descriptorFor($data['service'] ?? null),
+            ]));
+
+            return ['price_data' => [
+                'currency' => $currency,
+                'product' => $product->id,
+                'unit_amount' => $line['amount'],
+                'recurring' => $recurring,
+            ]];
+        })->all();
 
         $params = [
             'customer' => $this->ensureCustomer($client),
-            'items' => [[
-                'price_data' => [
-                    'currency' => $currency,
-                    'product' => $product->id,
-                    'unit_amount' => $data['amount'],
-                    'recurring' => ['interval' => $data['interval'], 'interval_count' => $data['interval_count']],
-                ],
-            ]],
+            'items' => $items,
             'description' => $data['description'],
-            'metadata' => ['klok_client_id' => $client->id, 'service' => $data['service'] ?? ''],
+            'metadata' => ['klok_client_id' => $client->id, 'service' => $data['service'] ?? ''] + self::budgetMetadata($budget),
             'expand' => ['latest_invoice'],
         ];
 
@@ -397,12 +522,12 @@ class StripeService
 
         $sub = $stripe->subscriptions->create($params);
 
-        $plan = RecurringPlan::create([
+        $plan = RecurringPlan::create(self::budgetColumns($budget) + [
             'client_id' => $client->id,
             'stripe_subscription_id' => $sub->id,
             'description' => $data['description'],
             'service' => $data['service'] ?? null,
-            'amount' => $data['amount'],
+            'amount' => $budget ? $budget['charge'] : $data['amount'],
             'currency' => $currency,
             'interval' => $data['interval'],
             'interval_count' => $data['interval_count'],
@@ -446,30 +571,41 @@ class StripeService
     {
         $stripe = $this->stripe();
         $currency = $data['currency'] ?? $this->currency();
-        $meta = ['klok_client_id' => $client?->id ?? '', 'service' => $data['service'] ?? ''];
+        $budget = $data['budget'] ?? null;
+        $meta = ['klok_client_id' => $client?->id ?? '', 'service' => $data['service'] ?? ''] + self::budgetMetadata($budget);
+        $lines = $budget
+            ? self::budgetItems($budget, $data['description'])
+            : [['description' => $data['description'], 'amount' => $data['amount'], 'quantity' => 1]];
 
-        $price = $stripe->prices->create([
-            'currency' => $currency,
-            'unit_amount' => $data['amount'],
-            'product_data' => ['name' => $data['description']],
-        ]);
+        $lineItems = collect($lines)->map(fn ($line) => [
+            'price' => $stripe->prices->create([
+                'currency' => $currency,
+                'unit_amount' => $line['amount'],
+                'product_data' => ['name' => $line['description']],
+            ])->id,
+            'quantity' => 1,
+        ])->all();
 
         $link = $stripe->paymentLinks->create([
-            'line_items' => [['price' => $price->id, 'quantity' => 1]],
+            'line_items' => $lineItems,
             'metadata' => $meta,
             // Every payment produces an invoice + receipt, so it lands in our invoice totals too.
             'invoice_creation' => ['enabled' => true, 'invoice_data' => ['metadata' => $meta, 'description' => $data['description']]],
-            'payment_intent_data' => ['metadata' => $meta, 'description' => $data['description']],
+            'payment_intent_data' => array_filter([
+                'metadata' => $meta,
+                'description' => $data['description'],
+                'statement_descriptor_suffix' => self::descriptorFor($data['service'] ?? null),
+            ]),
             'customer_creation' => 'always',
         ]);
 
-        return PaymentLink::create([
+        return PaymentLink::create(self::budgetColumns($budget) + [
             'client_id' => $client?->id,
             'stripe_payment_link_id' => $link->id,
             'url' => $link->url,
             'description' => $data['description'],
             'service' => $data['service'] ?? null,
-            'amount' => $data['amount'],
+            'amount' => $budget ? $budget['charge'] : $data['amount'],
             'currency' => $currency,
             'active' => true,
         ]);
@@ -597,6 +733,24 @@ class StripeService
 
         Setting::put('stripe_account_name', $account->settings?->dashboard?->display_name ?: $account->email ?: $account->id);
         Setting::put('stripe_mode', self::isLive() ? 'live' : 'test');
+
+        // The fixed part of the bank statement text is set in the Stripe Dashboard.
+        $prefix = $account->settings?->card_payments?->statement_descriptor_prefix
+            ?: substr((string) ($account->settings?->payments?->statement_descriptor ?? ''), 0, 10);
+        Setting::put('descriptor_prefix', $prefix ?: null);
+
+        // Standard card pricing for the account's country, until the owner sets their own.
+        if (Setting::get('card_fee_percent') === null) {
+            [$percent, $fixed] = match ($account->country) {
+                'SG' => [3.4, 50],
+                'MY' => [3.0, 100],
+                'AU' => [1.75, 30],
+                'GB' => [1.5, 20],
+                default => [2.9, 30],
+            };
+            Setting::put('card_fee_percent', (string) $percent);
+            Setting::put('card_fee_fixed', (string) $fixed);
+        }
     }
 
     public function syncInvoices(Carbon $from): int

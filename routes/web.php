@@ -69,6 +69,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/settings/stripe', [SettingsController::class, 'updateStripe'])->name('settings.stripe');
     Route::delete('/settings/stripe', [SettingsController::class, 'disconnect'])->name('settings.stripe.disconnect');
     Route::post('/settings/business', [SettingsController::class, 'updateBusiness'])->name('settings.business');
+    Route::post('/settings/pricing', [SettingsController::class, 'updatePricing'])->name('settings.pricing');
+    Route::post('/settings/descriptors', [SettingsController::class, 'updateDescriptors'])->name('settings.descriptors');
     Route::post('/settings/sync', [SettingsController::class, 'sync'])->name('settings.sync');
     Route::post('/settings/auto-sync', [SettingsController::class, 'autoSync'])->name('settings.auto-sync');
 

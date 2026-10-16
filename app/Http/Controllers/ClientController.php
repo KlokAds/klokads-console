@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Models\Setting;
 use App\Services\CashflowReport;
 use App\Services\StripeService;
 use App\Support\Catalog;
@@ -41,7 +42,9 @@ class ClientController extends Controller
             'client' => $client,
             'stripeCustomerId' => $client->stripeCustomerId(),
             'currency' => $stripe->currency(),
-            'totals' => $row ?? ['revenue' => 0, 'fees' => 0, 'spend' => 0, 'profit' => 0, 'outstanding' => 0],
+            'totals' => $row ?? ['revenue' => 0, 'fees' => 0, 'spend' => 0, 'profit' => 0, 'commission' => 0, 'budget_left' => null, 'outstanding' => 0],
+            'budget' => CashflowReport::budgetBalances($client->id)[$client->id] ?? ['received' => 0, 'spent' => 0, 'left' => 0],
+            'commissionRate' => $client->commission_rate ?? (float) Setting::get('commission_rate', 20),
             'invoices' => $client->invoices()->latest('issued_at')->get(),
             'plans' => $client->plans()->latest()->get(),
             'paymentLinks' => $client->paymentLinks()->latest()->get(),
@@ -103,6 +106,7 @@ class ClientController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
             'country' => ['required', 'string', 'size:2'],
             'notes' => ['nullable', 'string', 'max:5000'],
+            'commission_rate' => ['nullable', 'numeric', 'between:0,100'],
         ]);
     }
 }

@@ -8,7 +8,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Client extends Model
 {
-    protected $fillable = ['name', 'company', 'email', 'phone', 'country', 'stripe_customer_id', 'stripe_test_customer_id', 'notes'];
+    protected $fillable = ['name', 'company', 'email', 'phone', 'country', 'commission_rate', 'stripe_customer_id', 'stripe_test_customer_id', 'notes'];
+
+    protected $casts = ['commission_rate' => 'float'];
 
     /** The Stripe customer column for the mode of the connected key (test and live customers differ). */
     public static function customerColumn(): string

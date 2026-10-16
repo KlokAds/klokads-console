@@ -43,7 +43,7 @@ class InvoiceController extends Controller
     public function create(Request $request, StripeService $stripe): Response
     {
         return Inertia::render('Invoices/Create', [
-            'clients' => Client::orderBy('name')->get(['id', 'name', 'company', 'email']),
+            'clients' => Client::orderBy('name')->get(['id', 'name', 'company', 'email', 'commission_rate']),
             'services' => Catalog::options(Catalog::SERVICES),
             'currency' => $stripe->currency(),
             'clientId' => $request->integer('client_id') ?: null,
@@ -58,21 +58,27 @@ class InvoiceController extends Controller
             'memo' => ['nullable', 'string', 'max:500'],
             'days_until_due' => ['required', 'integer', 'min:0', 'max:365'],
             'send' => ['boolean'],
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.description' => ['required', 'string', 'max:250'],
-            'items.*.amount' => ['required', 'numeric', 'min:0.5'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            ...$this->budgetRules(),
+            'budget_amount' => ['required_if:billing,budget', 'nullable', 'numeric', 'min:1'],
+            'items' => ['exclude_if:billing,budget', 'required', 'array', 'min:1'],
+            'items.*.description' => ['exclude_if:billing,budget', 'required', 'string', 'max:250'],
+            'items.*.amount' => ['exclude_if:billing,budget', 'required', 'numeric', 'min:0.5'],
+            'items.*.quantity' => ['exclude_if:billing,budget', 'required', 'integer', 'min:1'],
         ]);
 
-        $items = collect($data['items'])->map(fn ($i) => [
+        $client = Client::findOrFail($data['client_id']);
+        $items = collect($data['items'] ?? [])->map(fn ($i) => [
             'description' => $i['description'],
             'amount' => $this->toCents($i['amount']),
             'quantity' => (int) $i['quantity'],
         ])->all();
 
+        $data['budget'] = $this->budgetFromRequest($request, $this->toCents($data['budget_amount'] ?? 0), $client);
+        $data['budget_label'] = (Catalog::SERVICES[$data['service'] ?? ''] ?? 'Ads').' budget';
+
         return $this->stripeAction(
-            function () use ($stripe, $data, $items) {
-                $stripe->createInvoice(Client::findOrFail($data['client_id']), $items, $data);
+            function () use ($stripe, $data, $items, $client) {
+                $stripe->createInvoice($client, $items, $data);
 
                 return redirect()->route('invoices.index');
             },

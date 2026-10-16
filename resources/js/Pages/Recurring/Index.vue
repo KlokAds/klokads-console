@@ -1,5 +1,6 @@
 <script setup>
 import Avatar from '@/Components/Avatar.vue';
+import BudgetFields from '@/Components/BudgetFields.vue';
 import CopyButton from '@/Components/CopyButton.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import Icon from '@/Components/Icon.vue';
@@ -24,7 +25,11 @@ const form = useForm({
     collection: 'auto',
     days_until_due: 7,
     start_date: '',
+    billing: 'budget',
+    pass_fees: true,
+    commission_rate: 20,
 });
+const selectedClient = computed(() => props.clients.find((c) => c.id === Number(form.client_id)));
 
 const active = computed(() => props.plans.filter((p) => ['active', 'trialing', 'past_due', 'incomplete'].includes(p.status)));
 const ended = computed(() => props.plans.filter((p) => !active.value.includes(p)));
@@ -153,9 +158,12 @@ function cancel(plan) {
                         </select>
                     </div>
                     <div>
-                        <label class="label">Amount ({{ currency.toUpperCase() }}) *</label>
+                        <label class="label">{{ form.billing === 'budget' ? 'You receive each cycle' : 'Amount' }} ({{ currency.toUpperCase() }}) *</label>
                         <input v-model="form.amount" type="number" step="0.01" min="0.5" class="input" placeholder="0.00" required />
                         <div v-if="form.errors.amount" class="error">{{ form.errors.amount }}</div>
+                    </div>
+                    <div class="col-span-2">
+                        <BudgetFields :form="form" :amount="form.amount" :currency="currency" :client-rate="selectedClient?.commission_rate ?? null" compact />
                     </div>
                     <div>
                         <label class="label">Bill every</label>
@@ -200,7 +208,7 @@ function cancel(plan) {
                 </div>
 
                 <div class="flex items-center justify-between gap-3 border-t border-line bg-ink-50/60 px-6 py-4">
-                    <span class="text-sm text-ink-500"><template v-if="form.amount">≈ <b class="text-ink-800">{{ money(Math.round(form.amount * 100 * ({ week: 52 / 12, month: 1, year: 1 / 12 }[form.interval]) / (form.interval_count || 1)), currency) }}</b> / month</template></span>
+                    <span class="text-sm text-ink-500"><template v-if="form.amount">≈ <b class="text-ink-800">{{ money(Math.round(form.amount * 100 * ({ week: 52 / 12, month: 1, year: 1 / 12 }[form.interval]) / (form.interval_count || 1)), currency) }}</b> / month {{ form.billing === 'budget' ? 'received' : '' }}</template></span>
                     <div class="flex gap-2">
                         <button type="button" class="btn-secondary" @click="showForm = false">Cancel</button>
                         <button class="btn-primary" :disabled="form.processing">{{ form.processing ? 'Creating…' : 'Create plan' }}</button>
