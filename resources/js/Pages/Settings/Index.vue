@@ -54,7 +54,7 @@ function disconnect() {
                                 <span v-if="stripe.connected" class="badge" :class="stripe.mode === 'live' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ stripe.mode === 'live' ? 'Live' : 'Test mode' }}</span>
                             </div>
                             <div v-if="stripe.connected" class="mt-0.5 font-mono text-xs text-ink-400">{{ stripe.masked }}</div>
-                            <div v-if="stripe.connected" class="mt-0.5 text-xs text-ink-500">Last sync {{ stripe.lastSyncAt ? date(stripe.lastSyncAt, true) : 'never' }} · auto every 15 min</div>
+                            <div v-if="stripe.connected" class="mt-0.5 text-xs text-ink-500">Last sync {{ stripe.lastSyncAt ? date(stripe.lastSyncAt, true) : 'never' }} · refreshes by itself when the console is open (at most every 15 min)</div>
                             <div v-else class="mt-0.5 text-xs text-ink-500">Paste your secret key below to connect.</div>
                         </div>
                     </div>

@@ -6,14 +6,19 @@ use App\Models\Setting;
 use App\Services\StripeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 use Stripe\Exception\ApiErrorException;
 use Stripe\StripeClient;
+use Throwable;
 
 class SettingsController extends Controller
 {
+    public const AUTO_SYNC_MINUTES = 15;
+
     public function edit(): Response
     {
         $secret = Setting::get('stripe_secret');
@@ -100,5 +105,39 @@ class SettingsController extends Controller
             $c = $stripe->sync();
             session()->flash('sync', $c);
         }, 'Synced from Stripe.');
+    }
+
+    /**
+     * Quiet background sync the layout fires when data is older than 15 minutes,
+     * so the console stays fresh without a server cron job.
+     */
+    public function autoSync(StripeService $stripe): RedirectResponse
+    {
+        $lastSync = Setting::get('last_sync_at');
+        $isFresh = $lastSync && Carbon::parse($lastSync)->gt(now()->subMinutes(self::AUTO_SYNC_MINUTES));
+
+        if (! StripeService::configured() || $isFresh) {
+            return back();
+        }
+
+        // Only one sync at a time, even with several tabs open.
+        $lock = Cache::lock('klok:auto-sync', 300);
+
+        if (! $lock->get()) {
+            return back();
+        }
+
+        ignore_user_abort(true);
+        @set_time_limit(300);
+
+        try {
+            $stripe->sync();
+        } catch (Throwable $e) {
+            Log::warning('Auto-sync from Stripe failed: '.$e->getMessage());
+        } finally {
+            $lock->release();
+        }
+
+        return back();
     }
 }

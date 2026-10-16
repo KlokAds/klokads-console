@@ -56,6 +56,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/settings/stripe', [SettingsController::class, 'disconnect'])->name('settings.stripe.disconnect');
     Route::post('/settings/business', [SettingsController::class, 'updateBusiness'])->name('settings.business');
     Route::post('/settings/sync', [SettingsController::class, 'sync'])->name('settings.sync');
+    Route::post('/settings/auto-sync', [SettingsController::class, 'autoSync'])->name('settings.auto-sync');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

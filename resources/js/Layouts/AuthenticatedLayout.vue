@@ -79,7 +79,33 @@ const closeMenus = (e) => {
         userOpen.value = false;
     }
 };
-onMounted(() => document.addEventListener('click', closeMenus));
+/** Data older than this is refreshed from Stripe in the background (no server cron needed). */
+const AUTO_SYNC_MINUTES = 15;
+let autoSyncStarted = false;
+
+function autoSyncIfStale() {
+    const { mode, lastSyncAt } = stripe.value;
+    const stale = !lastSyncAt || Date.now() - Date.parse(lastSyncAt) > AUTO_SYNC_MINUTES * 60 * 1000;
+    if (!mode || !stale || autoSyncStarted || syncing.value) return;
+
+    autoSyncStarted = true;
+    syncing.value = true;
+    router.post(route('settings.auto-sync'), {}, {
+        async: true,
+        showProgress: false,
+        preserveScroll: true,
+        preserveState: true,
+        onFinish: () => {
+            syncing.value = false;
+            setTimeout(() => (autoSyncStarted = false), AUTO_SYNC_MINUTES * 60 * 1000);
+        },
+    });
+}
+
+onMounted(() => {
+    document.addEventListener('click', closeMenus);
+    autoSyncIfStale();
+});
 onUnmounted(() => document.removeEventListener('click', closeMenus));
 router.on('navigate', () => {
     sidebarOpen.value = false;
