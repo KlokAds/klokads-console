@@ -73,7 +73,7 @@ class InvoiceDocument
             'amount_due' => (int) $invoice->amount_remaining,
             'paid_with' => $payment['paid_with'],
             'transaction_id' => $payment['charge_id'],
-            'pay_url' => $invoice->status === 'open' ? $invoice->hosted_invoice_url : null,
+            'pay_url' => $invoice->status === 'open' ? $invoice->publicUrl() : null,
         ]);
     }
 

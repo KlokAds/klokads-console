@@ -416,6 +416,7 @@ class StripeService
 
         $invoice = $stripe->invoices->create([
             'customer' => $this->ensureCustomer($client),
+            'auto_advance' => false,
             'collection_method' => 'send_invoice',
             'days_until_due' => $opts['days_until_due'] ?? 7,
             'currency' => $currency,
@@ -450,11 +451,8 @@ class StripeService
             ]);
         }
 
-        $invoice = $stripe->invoices->finalizeInvoice($invoice->id);
-
-        if ($opts['send'] ?? false) {
-            $invoice = $stripe->invoices->sendInvoice($invoice->id);
-        }
+        // auto_advance off: Stripe never emails the client; we send our own email.
+        $invoice = $stripe->invoices->finalizeInvoice($invoice->id, ['auto_advance' => false]);
 
         $local = $this->upsertInvoice($invoice);
         $local->update([
@@ -463,6 +461,21 @@ class StripeService
         ]);
 
         return $local;
+    }
+
+    /**
+     * Secret for the card box on our public invoice page (the invoice's PaymentIntent).
+     * Null when the invoice can't be paid by card right now.
+     */
+    public function paymentSecret(Invoice $invoice): ?string
+    {
+        if ($invoice->status !== 'open') {
+            return null;
+        }
+
+        $si = $this->stripe()->invoices->retrieve($invoice->stripe_invoice_id, ['expand' => ['confirmation_secret']]);
+
+        return $si->status === 'open' ? ($si->confirmation_secret?->client_secret ?? null) : null;
     }
 
     /**
@@ -492,11 +505,6 @@ class StripeService
         $invoice->update($info);
 
         return $info;
-    }
-
-    public function sendInvoice(Invoice $invoice): Invoice
-    {
-        return $this->upsertInvoice($this->stripe()->invoices->sendInvoice($invoice->stripe_invoice_id));
     }
 
     public function voidInvoice(Invoice $invoice): Invoice
@@ -544,7 +552,7 @@ class StripeService
             ?: self::budgetFields($si->parent?->subscription_details?->metadata ?? null)
             ?: ($plan && $plan->net_amount !== null ? $plan->only(self::BUDGET_FIELDS) : []);
 
-        return Invoice::updateOrCreate(['stripe_invoice_id' => $si->id], $budget + [
+        $saved = Invoice::updateOrCreate(['stripe_invoice_id' => $si->id], $budget + [
             'client_id' => $clientId ?: $existing?->client_id,
             'stripe_subscription_id' => $subscriptionId,
             'number' => $si->number,
@@ -571,6 +579,11 @@ class StripeService
             'due_at' => $this->ts($si->due_date),
             'paid_at' => $this->ts($si->status_transitions->paid_at ?? null),
         ]);
+
+        // Our own receipt / recurring-invoice emails (Stripe's are switched off).
+        app(InvoiceMailer::class)->afterSync($existing, $saved);
+
+        return $saved;
     }
 
     // ---------------------------------------------------------------- recurring
@@ -650,13 +663,12 @@ class StripeService
 
         if ($sub->latest_invoice instanceof \Stripe\Invoice) {
             $invoice = $sub->latest_invoice;
-            // Send-invoice subscriptions: make sure the first invoice goes out by email right away.
-            if ($data['collection'] !== 'auto' && $invoice->status === 'draft') {
+            if ($invoice->status === 'draft') {
                 $invoice = $stripe->invoices->finalizeInvoice($invoice->id);
-                $invoice = $stripe->invoices->sendInvoice($invoice->id);
-                $plan->update(['first_invoice_url' => $invoice->hosted_invoice_url]);
             }
-            $this->upsertInvoice($invoice);
+            // A new open subscription invoice triggers our own invoice email (see InvoiceMailer::afterSync).
+            $local = $this->upsertInvoice($invoice);
+            $plan->update(['first_invoice_url' => $local->publicUrl()]);
         }
 
         return $plan;

@@ -6,11 +6,13 @@ use App\Models\Setting;
 use App\Services\StripeService;
 use App\Support\Business;
 use App\Support\Catalog;
+use App\Support\MailSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -33,6 +35,7 @@ class SettingsController extends Controller
                 'masked' => $secret ? substr($secret, 0, 8).'••••'.substr($secret, -4) : null,
                 'account' => Setting::get('stripe_account_name'),
                 'hasWebhookSecret' => (bool) Setting::get('stripe_webhook_secret'),
+                'publishable' => ($pk = Setting::get('stripe_publishable')) ? substr($pk, 0, 12).'…'.substr($pk, -4) : null,
                 'webhookUrl' => route('stripe.webhook'),
                 'lastSyncAt' => Setting::get('last_sync_at'),
             ],
@@ -41,6 +44,7 @@ class SettingsController extends Controller
                 'currencyFromStripe' => (bool) $secret,
             ],
             'gst' => Business::gst(),
+            'mail' => MailSettings::current() + ['configured' => MailSettings::configured()],
             'templates' => [
                 'options' => Catalog::options(Catalog::TEMPLATES),
                 'defaults' => collect(Catalog::DEFAULT_TEMPLATE_FOR)->map(fn ($t, $service) => [
@@ -66,6 +70,53 @@ class SettingsController extends Controller
                 'payout_fee_percent' => (float) Setting::get('payout_fee_percent', 0.3),
             ],
         ]);
+    }
+
+    public function updateEmail(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'host' => ['required', 'string', 'max:150'],
+            'port' => ['required', 'integer', Rule::in([25, 465, 587, 2525])],
+            'username' => ['required', 'string', 'max:150'],
+            'password' => [MailSettings::current()['has_password'] ? 'nullable' : 'required', 'string', 'max:200'],
+            'from_address' => ['required', 'email', 'max:150'],
+            'from_name' => ['required', 'string', 'max:100'],
+            'auto_receipts' => ['boolean'],
+            'auto_invoices' => ['boolean'],
+        ]);
+
+        Setting::put('smtp_host', $data['host']);
+        Setting::put('smtp_port', (string) $data['port']);
+        Setting::put('smtp_username', $data['username']);
+        if (filled($data['password'] ?? null)) {
+            Setting::put('smtp_password', $data['password']);
+        }
+        Setting::put('mail_from_address', $data['from_address']);
+        Setting::put('mail_from_name', $data['from_name']);
+        Setting::put('mail_auto_receipts', $request->boolean('auto_receipts') ? '1' : '0');
+        Setting::put('mail_auto_invoices', $request->boolean('auto_invoices') ? '1' : '0');
+
+        return back()->with('success', 'Email settings saved — send a test email to check them.');
+    }
+
+    public function testEmail(Request $request): RedirectResponse
+    {
+        if (! MailSettings::configured()) {
+            return back()->with('error', 'Save your SMTP details first.');
+        }
+
+        MailSettings::apply();
+        $to = $request->user()->email;
+
+        try {
+            Mail::raw("This is a test email from your Klok Ads console.\n\nIf you received it, invoices and receipts will be sent from ".MailSettings::current()['from_address'].'.', function ($message) use ($to) {
+                $message->to($to)->subject('Klok Ads console — test email');
+            });
+        } catch (Throwable $e) {
+            return back()->with('error', 'Test email failed: '.$e->getMessage());
+        }
+
+        return back()->with('success', "Test email sent to {$to} — check your inbox.");
     }
 
     public function updateGst(Request $request): RedirectResponse
@@ -143,7 +194,9 @@ class SettingsController extends Controller
         $data = $request->validate([
             'stripe_secret' => ['nullable', 'string', 'regex:/^(sk|rk)_(test|live)_[A-Za-z0-9]+$/'],
             'stripe_webhook_secret' => ['nullable', 'string', 'starts_with:whsec_'],
+            'stripe_publishable' => ['nullable', 'string', 'regex:/^pk_(test|live)_[A-Za-z0-9]+$/'],
         ], [
+            'stripe_publishable.regex' => 'Use your publishable key (pk_test_… / pk_live_…).',
             'stripe_secret.regex' => 'Use a Stripe secret key (sk_test_… / sk_live_…) or restricted key (rk_…).',
         ]);
 
@@ -167,12 +220,23 @@ class SettingsController extends Controller
             Setting::put('stripe_webhook_secret', $data['stripe_webhook_secret']);
         }
 
+        if (filled($data['stripe_publishable'] ?? null)) {
+            $secret = Setting::get('stripe_secret');
+            $live = str_contains($data['stripe_publishable'], '_live_');
+
+            if ($secret && $live !== str_contains($secret, '_live_')) {
+                return back()->withErrors(['stripe_publishable' => 'This publishable key is '.($live ? 'live' : 'test').' but your secret key is '.($live ? 'test' : 'live').' — use the matching pair.']);
+            }
+
+            Setting::put('stripe_publishable', $data['stripe_publishable']);
+        }
+
         return back()->with('success', 'Stripe settings saved. Click "Sync now" to import your Stripe history.');
     }
 
     public function disconnect(): RedirectResponse
     {
-        foreach (['stripe_secret', 'stripe_webhook_secret', 'stripe_account_name', 'last_sync_at'] as $key) {
+        foreach (['stripe_secret', 'stripe_webhook_secret', 'stripe_publishable', 'stripe_account_name', 'last_sync_at'] as $key) {
             Setting::put($key, null);
         }
         StripeService::forgetBalance();

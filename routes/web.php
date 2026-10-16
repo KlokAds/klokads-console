@@ -11,6 +11,7 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\PaymentLinkController;
 use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PublicInvoiceController;
 use App\Http\Controllers\RecurringPlanController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\StripeWebhookController;
@@ -21,6 +22,12 @@ Route::redirect('/', '/dashboard');
 Route::post('/stripe/webhook', StripeWebhookController::class)->name('stripe.webhook');
 
 Route::get('/card-saved', [ClientCardController::class, 'saved'])->name('cards.saved');
+
+// Client-facing invoice / receipt pages (secret link per invoice).
+Route::middleware('throttle:60,1')->group(function () {
+    Route::get('/i/{token}', [PublicInvoiceController::class, 'show'])->name('public.invoice');
+    Route::get('/i/{token}/pdf', [PublicInvoiceController::class, 'pdf'])->name('public.invoice.pdf');
+});
 
 Route::prefix('install')->name('install.')->group(function () {
     Route::get('/', [InstallController::class, 'show'])->name('show');
@@ -76,6 +83,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/settings/pricing', [SettingsController::class, 'updatePricing'])->name('settings.pricing');
     Route::post('/settings/descriptors', [SettingsController::class, 'updateDescriptors'])->name('settings.descriptors');
     Route::post('/settings/gst', [SettingsController::class, 'updateGst'])->name('settings.gst');
+    Route::post('/settings/email', [SettingsController::class, 'updateEmail'])->name('settings.email');
+    Route::post('/settings/email/test', [SettingsController::class, 'testEmail'])->name('settings.email.test');
     Route::post('/settings/templates', [SettingsController::class, 'updateTemplates'])->name('settings.templates');
     Route::post('/settings/sync', [SettingsController::class, 'sync'])->name('settings.sync');
     Route::post('/settings/auto-sync', [SettingsController::class, 'autoSync'])->name('settings.auto-sync');

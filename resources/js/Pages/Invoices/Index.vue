@@ -128,11 +128,11 @@ const copyLink = (url) => navigator.clipboard?.writeText(url);
                                             <Icon :name="inv.template === key ? 'check' : 'invoice'" :size="15" :class="inv.template === key ? 'text-brand-600' : 'text-ink-300'" /> {{ name }}
                                         </button>
                                         <div class="my-1 border-t border-line"></div>
-                                        <button v-if="inv.hosted_invoice_url && inv.status === 'open'" class="menu-item" @click="copyLink(inv.hosted_invoice_url)"><Icon name="copy" :size="15" /> Copy pay link</button>
-                                        <template v-if="inv.status === 'open'">
-                                            <button class="menu-item" @click="act(inv, 'send')"><Icon name="send" :size="15" /> Email to client</button>
-                                            <button class="menu-item" @click="act(inv, 'mark-paid')"><Icon name="check" :size="15" /> Mark paid (bank / PayNow)</button>
-                                        </template>
+                                        <button class="menu-item" @click="copyLink(inv.public_url)"><Icon name="copy" :size="15" /> {{ inv.status === 'open' ? 'Copy pay link' : 'Copy link' }}</button>
+                                        <button v-if="['open', 'paid'].includes(inv.status)" class="menu-item" @click="act(inv, 'send')">
+                                            <Icon name="send" :size="15" /> {{ inv.status === 'paid' ? (inv.receipt_sent_at ? 'Re-send receipt' : 'Email receipt') : (inv.invoice_sent_at ? 'Re-send invoice' : 'Email invoice') }}
+                                        </button>
+                                        <button v-if="inv.status === 'open'" class="menu-item" @click="act(inv, 'mark-paid')"><Icon name="check" :size="15" /> Mark paid (bank / PayNow)</button>
                                         <button class="menu-item" @click="act(inv, 'refresh')"><Icon name="sync" :size="15" /> Refresh from Stripe</button>
                                         <button v-if="inv.status === 'open'" class="menu-item text-rose-600 hover:bg-rose-50 hover:text-rose-700" @click="act(inv, 'void')"><Icon name="close" :size="15" /> Void invoice</button>
                                     </RowMenu>

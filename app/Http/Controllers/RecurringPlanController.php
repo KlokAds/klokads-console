@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Models\Invoice;
 use App\Models\RecurringPlan;
 use App\Services\StripeService;
 use App\Support\Catalog;
@@ -17,6 +18,11 @@ class RecurringPlanController extends Controller
     public function index(StripeService $stripe): Response
     {
         $plans = RecurringPlan::with('client:id,name,company')->latest()->get();
+
+        // Waiting plans: link to OUR page for their first (open) invoice.
+        $firstInvoices = Invoice::where('status', 'open')->whereIn('stripe_subscription_id', $plans->where('status', 'incomplete')->pluck('stripe_subscription_id'))
+            ->get()->keyBy('stripe_subscription_id');
+        $plans->each(fn (RecurringPlan $p) => $p->setAttribute('first_invoice_public_url', $firstInvoices->get($p->stripe_subscription_id)?->public_url));
 
         return Inertia::render('Recurring/Index', [
             'plans' => $plans,

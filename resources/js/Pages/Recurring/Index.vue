@@ -111,7 +111,7 @@ async function cancel(plan) {
                             </td>
                             <td>
                                 <div class="flex justify-end gap-1.5">
-                                    <CopyButton v-if="p.first_invoice_url && p.status === 'incomplete'" :text="p.first_invoice_url" label="First pay link" />
+                                    <CopyButton v-if="p.first_invoice_public_url && p.status === 'incomplete'" :text="p.first_invoice_public_url" label="First pay link" />
                                     <button class="btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700" @click="cancel(p)">Cancel</button>
                                 </div>
                             </td>

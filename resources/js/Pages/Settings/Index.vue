@@ -8,7 +8,20 @@ import { breakdown } from '@/pricing';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
-const props = defineProps({ stripe: Object, business: Object, pricing: Object, descriptors: Object, gst: Object, templates: Object });
+const props = defineProps({ stripe: Object, business: Object, pricing: Object, descriptors: Object, gst: Object, templates: Object, mail: Object });
+
+const mailForm = useForm({
+    host: props.mail.host ?? 'smtp.hostinger.com',
+    port: props.mail.port ?? 465,
+    username: props.mail.username ?? 'billing@klokads.com',
+    password: '',
+    from_address: props.mail.from_address ?? 'billing@klokads.com',
+    from_name: props.mail.from_name ?? 'Klok Ads',
+    auto_receipts: props.mail.auto_receipts,
+    auto_invoices: props.mail.auto_invoices,
+});
+const testing = ref(false);
+const sendTest = () => router.post(route('settings.email.test'), {}, { preserveScroll: true, onStart: () => (testing.value = true), onFinish: () => (testing.value = false) });
 
 const descriptorForm = useForm({
     descriptors: Object.fromEntries(props.descriptors.items.map((d) => [d.key, d.value])),
@@ -20,7 +33,7 @@ const previewUrl = (template, type) => route('settings.templates.preview', { tem
 const prefix = computed(() => props.descriptors.prefix || 'KLOKADS');
 const preview = (text) => `${prefix.value}* ${(text || '').toUpperCase()}`;
 
-const stripeForm = useForm({ stripe_secret: '', stripe_webhook_secret: '' });
+const stripeForm = useForm({ stripe_secret: '', stripe_webhook_secret: '', stripe_publishable: '' });
 const businessForm = useForm({
     name: props.business.name,
     currency: props.business.currency.toUpperCase(),
@@ -113,6 +126,12 @@ async function disconnect() {
                         <div class="hint">Stripe Dashboard → Developers → API keys. Start with a <b>test</b> key, switch to live when you're ready.</div>
                     </div>
                     <div>
+                        <label class="label">Publishable key {{ stripe.publishable ? `— saved (${stripe.publishable}), leave empty to keep` : '* (for card payments on your own invoice page)' }}</label>
+                        <input v-model="stripeForm.stripe_publishable" autocomplete="off" class="input font-mono" placeholder="pk_test_… or pk_live_…" />
+                        <div v-if="stripeForm.errors.stripe_publishable" class="error">{{ stripeForm.errors.stripe_publishable }}</div>
+                        <div class="hint">Same page in Stripe as the secret key. It's meant to be public: it only lets the card box appear on your page.</div>
+                    </div>
+                    <div>
                         <label class="label">Webhook signing secret {{ stripe.hasWebhookSecret ? '— saved, leave empty to keep' : '(recommended)' }}</label>
                         <input v-model="stripeForm.stripe_webhook_secret" type="password" autocomplete="off" class="input font-mono" placeholder="whsec_…" />
                         <div v-if="stripeForm.errors.stripe_webhook_secret" class="error">{{ stripeForm.errors.stripe_webhook_secret }}</div>
@@ -135,12 +154,77 @@ async function disconnect() {
                     </div>
 
                     <div class="flex justify-end">
-                        <button class="btn-primary" :disabled="stripeForm.processing || (!stripeForm.stripe_secret && !stripeForm.stripe_webhook_secret)">
+                        <button class="btn-primary" :disabled="stripeForm.processing || (!stripeForm.stripe_secret && !stripeForm.stripe_webhook_secret && !stripeForm.stripe_publishable)">
                             {{ stripeForm.processing ? 'Verifying key with Stripe…' : 'Save Stripe settings' }}
                         </button>
                     </div>
                 </form>
             </div>
+
+            <div class="border-t border-line pt-6 lg:col-span-3"></div>
+
+            <div class="lg:pt-1">
+                <h2 class="text-base font-bold text-ink-900">Email</h2>
+                <p class="mt-1 text-sm text-ink-500">Invoices and receipts are emailed from your own address with the PDF attached. Clients never get Stripe's emails.</p>
+                <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    <b>Also switch off Stripe's emails</b> in Stripe Dashboard → Settings → <b>Customer emails</b>:
+                    turn off "Successful payments", "Refunds" and "Send finalized invoices…", and under Subscriptions turn off "Send emails about upcoming renewals".
+                </div>
+            </div>
+            <form class="card lg:col-span-2" @submit.prevent="mailForm.post(route('settings.email'), { preserveScroll: true, onSuccess: () => mailForm.reset('password') })">
+                <div class="flex items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
+                    <div class="flex items-center gap-2 text-sm font-semibold" :class="mail.configured ? 'text-emerald-700' : 'text-ink-500'">
+                        <Icon :name="mail.configured ? 'check' : 'send'" :size="16" />
+                        {{ mail.configured ? `Sending as ${mail.from_name} <${mail.from_address}>` : 'Not set up yet' }}
+                    </div>
+                    <button v-if="mail.configured" type="button" class="btn-secondary btn-sm" :disabled="testing" @click="sendTest"><Icon name="send" :size="14" /> {{ testing ? 'Sending…' : 'Send test email' }}</button>
+                </div>
+                <div class="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
+                    <div>
+                        <label class="label">From name</label>
+                        <input v-model="mailForm.from_name" class="input" />
+                    </div>
+                    <div>
+                        <label class="label">From address</label>
+                        <input v-model="mailForm.from_address" type="email" class="input" />
+                        <div v-if="mailForm.errors.from_address" class="error">{{ mailForm.errors.from_address }}</div>
+                    </div>
+                    <div>
+                        <label class="label">SMTP server</label>
+                        <input v-model="mailForm.host" class="input font-mono" />
+                        <div class="hint">Hostinger: smtp.hostinger.com</div>
+                    </div>
+                    <div>
+                        <label class="label">Port</label>
+                        <select v-model="mailForm.port" class="input">
+                            <option :value="465">465 (SSL — Hostinger)</option>
+                            <option :value="587">587 (STARTTLS)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="label">Mailbox username</label>
+                        <input v-model="mailForm.username" class="input font-mono" autocomplete="off" />
+                        <div v-if="mailForm.errors.username" class="error">{{ mailForm.errors.username }}</div>
+                    </div>
+                    <div>
+                        <label class="label">Mailbox password {{ mail.has_password ? '— saved, leave empty to keep' : '*' }}</label>
+                        <input v-model="mailForm.password" type="password" class="input" autocomplete="new-password" />
+                        <div v-if="mailForm.errors.password" class="error">{{ mailForm.errors.password }}</div>
+                        <div class="hint">Stored encrypted.</div>
+                    </div>
+                    <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3.5 text-sm sm:col-span-2">
+                        <input v-model="mailForm.auto_receipts" type="checkbox" class="checkbox mt-0.5" />
+                        <span><b class="text-ink-900">Email a receipt automatically</b> whenever an invoice is paid (card, auto-charge or Charge now).</span>
+                    </label>
+                    <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3.5 text-sm sm:col-span-2">
+                        <input v-model="mailForm.auto_invoices" type="checkbox" class="checkbox mt-0.5" />
+                        <span><b class="text-ink-900">Email each new recurring invoice automatically</b> (plans set to "Email an invoice").</span>
+                    </label>
+                </div>
+                <div class="flex justify-end border-t border-line bg-ink-50/60 px-6 py-4">
+                    <button class="btn-primary" :disabled="mailForm.processing">Save</button>
+                </div>
+            </form>
 
             <div class="border-t border-line pt-6 lg:col-span-3"></div>
 

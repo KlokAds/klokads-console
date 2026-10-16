@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\Invoice;
+use App\Services\InvoiceMailer;
 use App\Services\StripeService;
 use App\Support\Business;
 use App\Support\Catalog;
@@ -12,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class InvoiceController extends Controller
 {
@@ -107,8 +109,16 @@ class InvoiceController extends Controller
         $data['budget_label'] = (Catalog::SERVICES[$data['service'] ?? ''] ?? 'Ads').' budget';
 
         return $this->stripeAction(
-            function () use ($stripe, $data, $items, $client) {
-                $stripe->createInvoice($client, $items, $data);
+            function () use ($stripe, $data, $items, $client, $request) {
+                $invoice = $stripe->createInvoice($client, $items, $data);
+
+                if ($request->boolean('send')) {
+                    try {
+                        app(InvoiceMailer::class)->sendInvoice($invoice);
+                    } catch (Throwable $e) {
+                        return redirect()->route('invoices.index')->with('error', 'Invoice created, but the email failed: '.$e->getMessage());
+                    }
+                }
 
                 return redirect()->route('invoices.index');
             },
@@ -116,9 +126,14 @@ class InvoiceController extends Controller
         );
     }
 
-    public function send(Invoice $invoice, StripeService $stripe): RedirectResponse
+    public function send(Invoice $invoice, InvoiceMailer $mailer): RedirectResponse
     {
-        return $this->stripeAction(fn () => $stripe->sendInvoice($invoice), 'Invoice emailed to the client.');
+        $kind = $invoice->status === 'paid' ? 'receipt' : 'invoice';
+
+        return $this->stripeAction(
+            fn () => $kind === 'receipt' ? $mailer->sendReceipt($invoice) : $mailer->sendInvoice($invoice),
+            ($kind === 'receipt' ? 'Receipt' : 'Invoice')." emailed to {$invoice->client?->email}."
+        );
     }
 
     public function void(Invoice $invoice, StripeService $stripe): RedirectResponse
