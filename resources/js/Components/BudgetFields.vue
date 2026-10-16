@@ -56,6 +56,7 @@ const m = (v) => money(v, props.currency);
 
             <div v-if="b" class="rounded-xl border border-line bg-ink-50/60 p-4 text-sm" :class="{ 'text-xs': compact }">
                 <div class="flex justify-between font-semibold text-ink-900"><span>Client pays</span><span class="tabular-nums">{{ m(b.charge) }}</span></div>
+                <div v-if="b.tax" class="mt-1.5 flex justify-between text-ink-500"><span>− GST {{ b.tax_rate }}% (to IRAS)</span><span class="tabular-nums">{{ m(-b.tax) }}</span></div>
                 <div class="mt-1.5 flex justify-between text-ink-500"><span>− Card fee (est.)</span><span class="tabular-nums">{{ m(-b.card_fee) }}</span></div>
                 <div class="flex justify-between text-ink-500"><span>− Payout / bank fee (est.)</span><span class="tabular-nums">{{ m(-b.payout_fee) }}</span></div>
                 <div class="mt-1.5 flex justify-between border-t border-line pt-1.5 font-semibold text-ink-900"><span>You receive</span><span class="tabular-nums">{{ m(b.net) }}</span></div>

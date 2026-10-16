@@ -1,6 +1,7 @@
 <script setup>
 import Avatar from '@/Components/Avatar.vue';
 import BudgetFields from '@/Components/BudgetFields.vue';
+import StatementField from '@/Components/StatementField.vue';
 import CopyButton from '@/Components/CopyButton.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import Icon from '@/Components/Icon.vue';
@@ -8,6 +9,7 @@ import Modal from '@/Components/Modal.vue';
 import StatCard from '@/Components/StatCard.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { confirmDialog } from '@/confirm';
 import { clientName, date, money, wantsNew } from '@/money';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
@@ -28,6 +30,7 @@ const form = useForm({
     billing: 'budget',
     pass_fees: true,
     commission_rate: 20,
+    statement_descriptor: '',
 });
 const selectedClient = computed(() => props.clients.find((c) => c.id === Number(form.client_id)));
 
@@ -46,10 +49,15 @@ function submit() {
     });
 }
 
-function cancel(plan) {
-    if (confirm(`Cancel "${plan.description}"? No further invoices or charges will be made.`)) {
-        router.post(route('recurring.cancel', plan.id), {}, { preserveScroll: true });
-    }
+async function cancel(plan) {
+    const ok = await confirmDialog({
+        title: `Cancel "${plan.description}"?`,
+        message: `${clientName(plan.client)} won't be invoiced or charged again for this plan. This cannot be undone — you'd create a new plan to restart.`,
+        confirmLabel: 'Cancel plan',
+        cancelLabel: 'Keep plan',
+        tone: 'danger',
+    });
+    if (ok) router.post(route('recurring.cancel', plan.id), {}, { preserveScroll: true });
 }
 </script>
 
@@ -164,6 +172,10 @@ function cancel(plan) {
                     </div>
                     <div class="col-span-2">
                         <BudgetFields :form="form" :amount="form.amount" :currency="currency" :client-rate="selectedClient?.commission_rate ?? null" compact />
+                    </div>
+                    <div class="col-span-2">
+                        <!-- One text for every cycle, so no month here. -->
+                        <StatementField :form="form" :service="form.service" :with-month="false" />
                     </div>
                     <div>
                         <label class="label">Bill every</label>

@@ -9,6 +9,8 @@ use App\Models\Payout;
 use App\Models\RecurringPlan;
 use App\Models\Setting;
 use App\Models\Transaction;
+use App\Support\Business;
+use App\Support\Pricing;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use RuntimeException;
@@ -185,7 +187,7 @@ class StripeService
      * Charge a saved card right away for any amount. Creates a finalized invoice so the
      * charge has a number, a receipt and shows up in every total.
      */
-    public function chargeNow(Client $client, int $amount, string $description, ?string $service = null, ?string $paymentMethodId = null, ?array $budget = null): Invoice
+    public function chargeNow(Client $client, int $amount, string $description, ?string $service = null, ?string $paymentMethodId = null, ?array $budget = null, ?string $statementText = null): Invoice
     {
         $items = $budget
             ? self::budgetItems($budget, $description)
@@ -208,8 +210,8 @@ class StripeService
             'description' => $description,
             'pending_invoice_items_behavior' => 'exclude',
             'metadata' => ['klok_client_id' => $client->id, 'service' => $service ?? '', 'charged_from' => 'klokads-console'] + self::budgetMetadata($budget),
-            'statement_descriptor' => self::descriptorFor($service),
-        ]);
+            'statement_descriptor' => self::cleanDescriptor($statementText) ?? self::descriptorFor($service, now()),
+        ] + $this->taxParams());
 
         foreach ($items as $item) {
             $stripe->invoiceItems->create([
@@ -248,6 +250,44 @@ class StripeService
         }
     }
 
+    // ---------------------------------------------------------------- GST
+
+    /**
+     * The Stripe tax rate for GST, created once per mode and rate. Null while GST is off.
+     */
+    public function gstTaxRateId(): ?string
+    {
+        if (! Business::gstEnabled()) {
+            return null;
+        }
+
+        $gst = Business::gst();
+        $key = 'stripe_tax_rate_'.(self::isLive() ? 'live' : 'test').'_'.str_replace('.', '_', (string) $gst['rate']);
+
+        if ($id = Setting::get($key)) {
+            return $id;
+        }
+
+        $rate = $this->stripe()->taxRates->create([
+            'display_name' => $gst['label'],
+            'percentage' => $gst['rate'],
+            'inclusive' => false,
+            'country' => 'SG',
+            'jurisdiction' => 'SG',
+            'tax_type' => 'gst',
+            'description' => $gst['label'].' '.$gst['rate'].'%'.($gst['reg_no'] ? ' · Reg No '.$gst['reg_no'] : ''),
+        ]);
+        Setting::put($key, $rate->id);
+
+        return $rate->id;
+    }
+
+    /** Invoice params that add GST when it is switched on. */
+    private function taxParams(): array
+    {
+        return ($id = $this->gstTaxRateId()) ? ['default_tax_rates' => [$id]] : [];
+    }
+
     // ---------------------------------------------------------------- bank statement text
 
     /** What the client's bank statement shows after the account prefix, per service. */
@@ -269,13 +309,30 @@ class StripeService
         return max(5, 22 - strlen($prefix) - 2);
     }
 
-    /** Statement suffix for a service, e.g. "META ADS" → bank shows "KLOKADS* META ADS". */
-    public static function descriptorFor(?string $service): ?string
+    /**
+     * Statement suffix for a service, e.g. "META ADS" → bank shows "KLOKADS* META ADS".
+     * With a month (and the setting on) it becomes "KLOKADS* META ADS SEP"; the service
+     * text is shortened if needed so the month always fits.
+     */
+    public static function descriptorFor(?string $service, ?\DateTimeInterface $month = null): ?string
     {
         $key = $service && array_key_exists($service, self::DEFAULT_DESCRIPTORS) ? $service : 'other';
-        $text = Setting::get("descriptor_{$key}") ?: self::DEFAULT_DESCRIPTORS[$key];
+        $text = self::cleanDescriptor(Setting::get("descriptor_{$key}") ?: self::DEFAULT_DESCRIPTORS[$key]);
 
-        return self::cleanDescriptor($text);
+        if (! $text || ! $month || Setting::get('descriptor_with_month', '1') !== '1') {
+            return $text;
+        }
+
+        $suffix = ' '.strtoupper($month->format('M'));
+        $room = self::descriptorMaxLength() - strlen($suffix);
+        $words = explode(' ', $text);
+
+        // Drop trailing words ("GOOGLE ADS" → "GOOGLE") rather than cutting a word in half.
+        while (count($words) > 1 && strlen(implode(' ', $words)) > $room) {
+            array_pop($words);
+        }
+
+        return self::cleanDescriptor(substr(implode(' ', $words), 0, $room).$suffix);
     }
 
     /** Uppercase, only characters card networks accept, within the length limit. */
@@ -365,8 +422,11 @@ class StripeService
             'description' => $opts['memo'] ?? null,
             'pending_invoice_items_behavior' => 'exclude',
             'metadata' => ['klok_client_id' => $client->id, 'service' => $opts['service'] ?? ''] + self::budgetMetadata($opts['budget'] ?? null),
-            'statement_descriptor' => self::descriptorFor($opts['service'] ?? null),
-        ]);
+            'statement_descriptor' => self::cleanDescriptor($opts['statement_descriptor'] ?? null) ?? self::descriptorFor(
+                $opts['service'] ?? null,
+                isset($opts['details']['period_start']) ? Carbon::parse($opts['details']['period_start']) : now(),
+            ),
+        ] + $this->taxParams());
 
         if (! empty($opts['budget'])) {
             $items = self::budgetItems($opts['budget'], $opts['budget_label'] ?? 'Ads budget');
@@ -374,12 +434,19 @@ class StripeService
 
         foreach ($items as $item) {
             $qty = max(1, (int) $item['quantity']);
+            $unit = $item['unit'] ?? null;
+
+            // With a unit (Clicks, Impressions…) the quantity is usage and the amount is the line total.
             $stripe->invoiceItems->create([
                 'customer' => $client->stripeCustomerId(),
                 'invoice' => $invoice->id,
                 'currency' => $currency,
-                'amount' => $item['amount'] * $qty,
-                'description' => $qty > 1 ? "{$item['description']} × {$qty}" : $item['description'],
+                'amount' => $unit ? $item['amount'] : $item['amount'] * $qty,
+                'description' => match (true) {
+                    (bool) $unit => "{$item['description']} — ".number_format($qty)." {$unit}",
+                    $qty > 1 => "{$item['description']} × {$qty}",
+                    default => $item['description'],
+                },
             ]);
         }
 
@@ -389,7 +456,42 @@ class StripeService
             $invoice = $stripe->invoices->sendInvoice($invoice->id);
         }
 
-        return $this->upsertInvoice($invoice);
+        $local = $this->upsertInvoice($invoice);
+        $local->update([
+            'template' => $opts['template'] ?? Business::templateFor($opts['service'] ?? null),
+            'details' => $opts['details'] ?? null,
+        ]);
+
+        return $local;
+    }
+
+    /**
+     * Card and charge behind a paid invoice, for receipts. Cached on the invoice.
+     *
+     * @return array{paid_with: ?string, charge_id: ?string}
+     */
+    public function paymentInfo(Invoice $invoice): array
+    {
+        if ($invoice->paid_with || $invoice->status !== 'paid' || ! self::configured()) {
+            return ['paid_with' => $invoice->paid_with, 'charge_id' => $invoice->charge_id];
+        }
+
+        $si = $this->stripe()->invoices->retrieve($invoice->stripe_invoice_id, ['expand' => ['payments.data.payment.payment_intent']]);
+        $pi = $si->payments->data[0]->payment->payment_intent ?? null;
+
+        if (! $pi || ! $pi->latest_charge) {
+            return ['paid_with' => $invoice->amount_paid && ! $pi ? 'bank transfer' : null, 'charge_id' => null];
+        }
+
+        $charge = $this->stripe()->charges->retrieve(is_string($pi->latest_charge) ? $pi->latest_charge : $pi->latest_charge->id);
+        $card = $charge->payment_method_details?->card;
+        $info = [
+            'paid_with' => $card ? ucfirst($card->brand).' ···· '.$card->last4 : ($charge->payment_method_details?->type ?? null),
+            'charge_id' => $charge->id,
+        ];
+        $invoice->update($info);
+
+        return $info;
     }
 
     public function sendInvoice(Invoice $invoice): Invoice
@@ -456,6 +558,15 @@ class StripeService
             'collection_method' => $si->collection_method,
             'hosted_invoice_url' => $si->hosted_invoice_url,
             'invoice_pdf' => $si->invoice_pdf,
+            'subtotal' => $si->subtotal,
+            'tax_amount' => (int) collect($si->total_taxes ?? [])->sum('amount'),
+            'lines' => collect($si->lines->data ?? [])->map(fn ($line) => [
+                'description' => $line->description,
+                'amount' => $line->amount,
+                'quantity' => $line->quantity ?? 1,
+                'period_start' => $line->period?->start,
+                'period_end' => $line->period?->end,
+            ])->values()->all(),
             'issued_at' => $this->ts($si->status_transitions->finalized_at ?? null) ?? $this->ts($si->created),
             'due_at' => $this->ts($si->due_date),
             'paid_at' => $this->ts($si->status_transitions->paid_at ?? null),
@@ -484,7 +595,7 @@ class StripeService
             $product = $stripe->products->create(array_filter([
                 'name' => $line['description'],
                 'metadata' => ['service' => $data['service'] ?? ''],
-                'statement_descriptor' => self::descriptorFor($data['service'] ?? null),
+                'statement_descriptor' => self::cleanDescriptor($data['statement_descriptor'] ?? null) ?? self::descriptorFor($data['service'] ?? null),
             ]));
 
             return ['price_data' => [
@@ -501,7 +612,7 @@ class StripeService
             'description' => $data['description'],
             'metadata' => ['klok_client_id' => $client->id, 'service' => $data['service'] ?? ''] + self::budgetMetadata($budget),
             'expand' => ['latest_invoice'],
-        ];
+        ] + $this->taxParams();
 
         if (! empty($data['start_date'])) {
             $start = Carbon::parse($data['start_date'])->startOfDay();
@@ -577,6 +688,14 @@ class StripeService
             ? self::budgetItems($budget, $data['description'])
             : [['description' => $data['description'], 'amount' => $data['amount'], 'quantity' => 1]];
 
+        // Payment links can't carry a Stripe tax rate, so GST is its own line.
+        if (Business::gstEnabled()) {
+            $gst = Business::gst();
+            $pricing = Pricing::forClient($client);
+            $tax = $budget['tax'] ?? collect($lines)->sum(fn ($l) => $pricing->taxOn($l['amount']));
+            $lines[] = ['description' => "{$gst['label']} {$gst['rate']}%", 'amount' => $tax, 'quantity' => 1];
+        }
+
         $lineItems = collect($lines)->map(fn ($line) => [
             'price' => $stripe->prices->create([
                 'currency' => $currency,
@@ -594,7 +713,7 @@ class StripeService
             'payment_intent_data' => array_filter([
                 'metadata' => $meta,
                 'description' => $data['description'],
-                'statement_descriptor_suffix' => self::descriptorFor($data['service'] ?? null),
+                'statement_descriptor_suffix' => self::cleanDescriptor($data['statement_descriptor'] ?? null) ?? self::descriptorFor($data['service'] ?? null),
             ]),
             'customer_creation' => 'always',
         ]);

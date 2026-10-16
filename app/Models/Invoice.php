@@ -16,6 +16,8 @@ class Invoice extends Model
         'issued_at' => 'datetime',
         'due_at' => 'datetime',
         'paid_at' => 'datetime',
+        'lines' => 'array',
+        'details' => 'array',
     ];
 
     public function client(): BelongsTo

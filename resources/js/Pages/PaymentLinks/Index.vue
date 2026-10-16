@@ -6,12 +6,13 @@ import Icon from '@/Components/Icon.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { clientName, date, money } from '@/money';
 import BudgetFields from '@/Components/BudgetFields.vue';
+import StatementField from '@/Components/StatementField.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
 const props = defineProps({ links: Array, clients: Array, services: Array, serviceLabels: Object, currency: String });
 
-const form = useForm({ client_id: '', description: '', service: 'meta_ads', amount: '', billing: 'budget', pass_fees: true, commission_rate: 20 });
+const form = useForm({ client_id: '', description: '', service: 'meta_ads', amount: '', billing: 'budget', pass_fees: true, commission_rate: 20, statement_descriptor: '' });
 const selectedClient = computed(() => props.clients.find((c) => c.id === Number(form.client_id)));
 
 function submit() {
@@ -67,6 +68,7 @@ const whatsapp = (link) => `https://wa.me/?text=${encodeURIComponent(`${link.des
                         </select>
                         <div class="hint">Payments are credited to this client in reports.</div>
                     </div>
+                    <StatementField :form="form" :service="form.service" />
                     <button class="btn-primary w-full py-3" :disabled="form.processing"><Icon name="link" :size="16" /> {{ form.processing ? 'Creating…' : 'Create payment link' }}</button>
                 </div>
             </form>

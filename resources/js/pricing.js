@@ -16,19 +16,39 @@ export function grossUp(net, p) {
     return charge;
 }
 
-/** @returns {{net:number, charge:number, processing_fee:number, card_fee:number, payout_fee:number, commission_rate:number, commission:number, ad_budget:number}} */
+const taxOn = (amount, p) => Math.round((amount * (p.tax_rate || 0)) / 100);
+
+function processingFeeFor(net, p) {
+    if (!p.tax_rate) return grossUp(net, p) - net;
+    const leaves = (fee) => {
+        const tax = taxOn(net, p) + taxOn(fee, p);
+        return netOf(net + fee + tax, p) - tax >= net;
+    };
+    const r = 1 + p.tax_rate / 100;
+    let fee = Math.max(0, Math.floor((grossUp(Math.round(net * r), p) - net * r) / r) - 5);
+    while (!leaves(fee)) fee++;
+    while (fee > 0 && leaves(fee - 1)) fee--;
+    return fee;
+}
+
+/** @returns {{net:number, charge:number, processing_fee:number, card_fee:number, payout_fee:number, tax:number, tax_rate:number, subtotal:number, commission_rate:number, commission:number, ad_budget:number}} */
 export function breakdown(net, p, passFees = true) {
-    const charge = passFees ? grossUp(net, p) : net;
+    const fee = passFees ? processingFeeFor(net, p) : 0;
+    const tax = taxOn(net, p) + taxOn(fee, p);
+    const charge = net + fee + tax;
     const cardFee = Math.round((charge * p.card_fee_percent) / 100) + p.card_fee_fixed;
-    const received = passFees ? net : netOf(charge, p);
+    const received = passFees ? net : netOf(charge, p) - tax;
     const commission = Math.round((received * p.commission_rate) / 100);
 
     return {
         net: received,
         charge,
-        processing_fee: charge - net,
+        processing_fee: fee,
         card_fee: cardFee,
-        payout_fee: charge - cardFee - received,
+        payout_fee: passFees ? charge - cardFee - received - tax : charge - cardFee - netOf(charge, p),
+        tax,
+        tax_rate: p.tax_rate || 0,
+        subtotal: net + fee,
         commission_rate: p.commission_rate,
         commission,
         ad_budget: received - commission,

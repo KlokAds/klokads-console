@@ -1,5 +1,6 @@
 <script setup>
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
+import ConfirmDialog from '@/Components/ConfirmDialog.vue';
 import Icon from '@/Components/Icon.vue';
 import { date } from '@/money';
 import { Link, router, usePage } from '@inertiajs/vue3';
@@ -229,6 +230,8 @@ router.on('navigate', () => {
                 <slot />
             </main>
         </div>
+
+        <ConfirmDialog />
 
         <!-- Toast -->
         <transition enter-from-class="opacity-0 translate-y-3" leave-to-class="opacity-0 translate-y-3" enter-active-class="transition duration-200" leave-active-class="transition duration-200">

@@ -58,7 +58,7 @@ class ClientCardController extends Controller
         $charged = $budget['charge'] ?? $amount;
 
         return $this->stripeAction(
-            fn () => $stripe->chargeNow($client, $amount, $data['description'], $data['service'] ?? null, $data['payment_method'] ?? null, $budget),
+            fn () => $stripe->chargeNow($client, $amount, $data['description'], $data['service'] ?? null, $data['payment_method'] ?? null, $budget, $data['statement_descriptor'] ?? null),
             'Charged '.number_format($charged / 100, 2).' '.strtoupper($stripe->currency()).' — invoice and receipt created.'
         );
     }

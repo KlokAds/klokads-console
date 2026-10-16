@@ -28,6 +28,28 @@ class Catalog
         'other' => 'Other',
     ];
 
+    /** Invoice / receipt PDF designs. "Classic" layouts follow the familiar ad-platform format, with Klok Ads as issuer. */
+    public const TEMPLATES = [
+        'classic_meta' => 'Classic — Meta ads layout',
+        'pro_meta' => 'Klok Professional — Meta',
+        'classic_google' => 'Classic — Google ads layout',
+        'pro_google' => 'Klok Professional — Google',
+    ];
+
+    /** Default template per service. */
+    public const DEFAULT_TEMPLATE_FOR = [
+        'meta_ads' => 'classic_meta',
+        'tiktok_ads' => 'classic_meta',
+        'google_ads' => 'classic_google',
+        'seo' => 'pro_google',
+        'web' => 'pro_google',
+        'retainer' => 'pro_google',
+        'other' => 'pro_google',
+    ];
+
+    /** Units for campaign lines (Google-style "Quantity / Units"). */
+    public const UNITS = ['Clicks', 'Impressions', 'Reach', 'Leads', 'Conversions', 'Days', 'Hours', 'Months'];
+
     public const PAID_VIA = [
         'card' => 'Card',
         'bank' => 'Bank transfer',

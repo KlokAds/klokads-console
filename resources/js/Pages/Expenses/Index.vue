@@ -5,6 +5,7 @@ import Modal from '@/Components/Modal.vue';
 import Pagination from '@/Components/Pagination.vue';
 import RowMenu from '@/Components/RowMenu.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { confirmDialog } from '@/confirm';
 import { clientName, date, methodLabel, money, wantsNew } from '@/money';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
@@ -73,7 +74,12 @@ function submit() {
 }
 
 function destroy(expense) {
-    if (confirm('Delete this expense?')) router.delete(route('expenses.destroy', expense.id), { preserveScroll: true });
+    confirmDialog({
+        title: 'Delete this expense?',
+        message: `${expense.vendor || label(props.categories, expense.category)} — ${money(expense.amount, props.currency)} on ${date(expense.spent_on)}.`,
+        confirmLabel: 'Delete expense',
+        tone: 'danger',
+    }).then((ok) => ok && router.delete(route('expenses.destroy', expense.id), { preserveScroll: true }));
 }
 
 const categoryTotals = computed(() =>

@@ -3,12 +3,13 @@ import Avatar from '@/Components/Avatar.vue';
 import Icon from '@/Components/Icon.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BudgetFields from '@/Components/BudgetFields.vue';
+import StatementField from '@/Components/StatementField.vue';
 import { clientName, money } from '@/money';
 import { breakdown } from '@/pricing';
 import { Head, Link, usePage, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
-const props = defineProps({ clients: Array, services: Array, currency: String, clientId: Number });
+const props = defineProps({ clients: Array, services: Array, templates: Array, templateFor: Object, units: Array, currency: String, clientId: Number });
 
 const form = useForm({
     client_id: props.clientId ?? '',
@@ -20,8 +21,20 @@ const form = useForm({
     pass_fees: true,
     commission_rate: 20,
     budget_amount: '',
-    items: [{ description: '', amount: '', quantity: 1 }],
+    items: [{ description: '', amount: '', quantity: 1, unit: '' }],
+    template: props.templateFor?.meta_ads ?? 'classic_meta',
+    ad_account_id: '',
+    period_start: '',
+    period_end: '',
+    campaigns: [],
+    statement_descriptor: '',
 });
+
+const showDetails = ref(false);
+const addCampaign = () => form.campaigns.push({ name: '', detail: '', quantity: '', unit: 'Impressions', amount: '' });
+const removeCampaign = (i) => form.campaigns.splice(i, 1);
+const campaignTotal = computed(() => form.campaigns.reduce((s, c) => s + Math.round((Number(c.amount) || 0) * 100), 0));
+const previewUrl = computed(() => route('settings.templates.preview', { template: form.template, type: 'invoice' }));
 
 const isBudget = computed(() => form.billing === 'budget');
 const pricing = computed(() => usePage().props.pricing);
@@ -50,11 +63,12 @@ const dueDate = computed(() => {
 });
 const business = computed(() => usePage().props.appName);
 
-const addItem = () => form.items.push({ description: '', amount: '', quantity: 1 });
+const addItem = () => form.items.push({ description: '', amount: '', quantity: 1, unit: '' });
 const removeItem = (i) => form.items.length > 1 && form.items.splice(i, 1);
 
 function setService(value) {
     form.service = value;
+    if (props.templateFor?.[value]) form.template = props.templateFor[value];
     const label = props.services.find((s) => s.value === value)?.label;
     if (label && !form.items[0].description) {
         form.items[0].description = `${label} management — ${new Date().toLocaleDateString('en-SG', { month: 'long', year: 'numeric' })}`;
@@ -124,6 +138,10 @@ function setService(value) {
                                 </div>
                                 <div class="col-span-4 sm:col-span-2">
                                     <input v-model="item.quantity" type="number" min="1" class="input" />
+                                    <select v-model="item.unit" class="input input-sm mt-1" title="With a unit, the price is the line total and the quantity is just shown (e.g. 1,151 Clicks)">
+                                        <option value="">× price</option>
+                                        <option v-for="u in units" :key="u" :value="u">{{ u }}</option>
+                                    </select>
                                 </div>
                                 <div class="col-span-6 sm:col-span-3">
                                     <input v-model="item.amount" type="number" step="0.01" min="0.5" class="input" placeholder="0.00" required />
@@ -139,6 +157,63 @@ function setService(value) {
                 </div>
 
                 <div class="card">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Template & ad details</div>
+                            <div class="card-sub">How the invoice and receipt look, plus the ad account and campaign breakdown shown on them.</div>
+                        </div>
+                        <a :href="previewUrl" target="_blank" class="btn-secondary btn-sm"><Icon name="external" :size="14" /> Preview</a>
+                    </div>
+                    <div class="space-y-4 p-5 sm:p-6">
+                        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            <label v-for="t in templates" :key="t.value" class="flex cursor-pointer flex-col rounded-xl border p-3 text-xs transition"
+                                :class="form.template === t.value ? 'border-brand-400 bg-brand-50/60 ring-4 ring-brand-500/10' : 'border-line hover:border-ink-200'">
+                                <input v-model="form.template" type="radio" :value="t.value" class="sr-only" />
+                                <span class="font-semibold text-ink-900">{{ t.label.split(' — ')[0] }}</span>
+                                <span class="text-ink-500">{{ t.label.split(' — ')[1] }}</span>
+                            </label>
+                        </div>
+                        <button type="button" class="btn-link text-xs" @click="showDetails = !showDetails">{{ showDetails ? '− Hide' : '+ Add' }} ad account, period & campaigns</button>
+                        <div v-if="showDetails" class="space-y-4">
+                            <div class="grid gap-3 sm:grid-cols-3">
+                                <div>
+                                    <label class="label">Ad account ID</label>
+                                    <input v-model="form.ad_account_id" class="input font-mono" placeholder="837982438493101" />
+                                </div>
+                                <div>
+                                    <label class="label">Period from</label>
+                                    <input v-model="form.period_start" type="date" class="input" />
+                                </div>
+                                <div>
+                                    <label class="label">Period to</label>
+                                    <input v-model="form.period_end" type="date" class="input" />
+                                    <div v-if="form.errors.period_end" class="error">{{ form.errors.period_end }}</div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="mb-2 flex items-center justify-between">
+                                    <span class="label mb-0">Campaigns (shown as a breakdown)</span>
+                                    <span v-if="form.campaigns.length" class="text-xs text-ink-500">Total {{ money(campaignTotal, currency) }}</span>
+                                </div>
+                                <div class="space-y-2">
+                                    <div v-for="(c, i) in form.campaigns" :key="i" class="grid grid-cols-12 gap-2">
+                                        <input v-model="c.name" class="input input-sm col-span-12 sm:col-span-4" placeholder="Campaign name" required />
+                                        <input v-model="c.detail" class="input input-sm col-span-6 sm:col-span-3" placeholder="Ad set (optional)" />
+                                        <input v-model="c.quantity" type="number" min="0" class="input input-sm col-span-3 sm:col-span-1" placeholder="Qty" />
+                                        <select v-model="c.unit" class="input input-sm col-span-3 sm:col-span-2">
+                                            <option v-for="u in units" :key="u" :value="u">{{ u }}</option>
+                                        </select>
+                                        <input v-model="c.amount" type="number" step="0.01" min="0" class="input input-sm col-span-10 sm:col-span-1" placeholder="0.00" required />
+                                        <button type="button" class="icon-btn col-span-2 sm:col-span-1 hover:text-rose-600" @click="removeCampaign(i)"><Icon name="trash" :size="15" /></button>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-secondary btn-sm mt-2" @click="addCampaign"><Icon name="plus" :size="14" /> Add campaign</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
                     <div class="card-head"><div class="card-title">Payment terms</div></div>
                     <div class="grid gap-4 p-5 sm:grid-cols-3 sm:p-6">
                         <div>
@@ -149,6 +224,9 @@ function setService(value) {
                         <div class="sm:col-span-2">
                             <label class="label">Memo on invoice</label>
                             <textarea v-model="form.memo" rows="2" class="input" placeholder="Thank you! Pay by card or PayNow using the secure link."></textarea>
+                        </div>
+                        <div class="sm:col-span-3">
+                            <StatementField :form="form" :service="form.service" :month="form.period_start || null" />
                         </div>
                     </div>
                 </div>

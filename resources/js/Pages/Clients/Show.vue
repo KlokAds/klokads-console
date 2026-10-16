@@ -8,6 +8,7 @@ import Icon from '@/Components/Icon.vue';
 import StatCard from '@/Components/StatCard.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { confirmDialog } from '@/confirm';
 import { date, invoiceStatus, money } from '@/money';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
@@ -31,21 +32,30 @@ const props = defineProps({
 
 const defaultCard = computed(() => props.cards?.items?.find((c) => c.is_default));
 
-function charge(inv) {
+async function charge(inv) {
     const card = defaultCard.value;
-    if (card && confirm(`Charge ${money(inv.amount_remaining, inv.currency)} to •••• ${card.last4} now?`)) {
-        router.post(route('invoices.charge', inv.id), {}, { preserveScroll: true });
-    }
+    if (!card) return;
+    const ok = await confirmDialog({
+        title: `Charge ${money(inv.amount_remaining, inv.currency)}?`,
+        message: `Invoice ${inv.number} will be paid with ${card.brand.toUpperCase()} •••• ${card.last4} right now.`,
+        confirmLabel: `Charge ${money(inv.amount_remaining, inv.currency)}`,
+        tone: 'money',
+    });
+    if (ok) router.post(route('invoices.charge', inv.id), {}, { preserveScroll: true });
 }
 
 const m = (v) => money(v, props.currency);
 const editing = ref(false);
 const tab = ref('invoices');
 
-function destroy() {
-    if (confirm('Remove this client from the dashboard? The Stripe customer and its invoices in Stripe are kept.')) {
-        router.delete(route('clients.destroy', props.client.id));
-    }
+async function destroy() {
+    const ok = await confirmDialog({
+        title: `Remove ${props.client.company || props.client.name}?`,
+        message: 'The client is removed from this dashboard. Their Stripe customer, cards and invoices stay in Stripe.',
+        confirmLabel: 'Remove client',
+        tone: 'danger',
+    });
+    if (ok) router.delete(route('clients.destroy', props.client.id));
 }
 </script>
 
@@ -113,7 +123,7 @@ function destroy() {
                                 <td>
                                     <div class="flex justify-end gap-1.5">
                                         <button v-if="inv.status === 'open' && defaultCard" class="btn-dark btn-sm" @click="charge(inv)"><Icon name="card" :size="14" /> Charge •••• {{ defaultCard.last4 }}</button>
-                                        <a v-if="inv.hosted_invoice_url" :href="inv.hosted_invoice_url" target="_blank" class="btn-secondary btn-sm"><Icon name="external" :size="14" /> Open</a>
+                                        <a :href="route('invoices.document', inv.id)" target="_blank" class="btn-secondary btn-sm"><Icon name="invoice" :size="14" /> {{ inv.status === 'paid' ? 'Receipt' : 'Open' }}</a>
                                     </div>
                                 </td>
                             </tr>

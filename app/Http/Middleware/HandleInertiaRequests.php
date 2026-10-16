@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Setting;
+use App\Services\StripeService;
 use App\Support\Installer;
 use App\Support\Pricing;
 use Illuminate\Http\Request;
@@ -47,6 +48,13 @@ class HandleInertiaRequests extends Middleware
             ],
             // Fee and commission rates, for live "client pays / you receive" previews in forms.
             'pricing' => fn () => $installed ? Pricing::forClient()->toArray() : null,
+            // Bank statement text defaults per service, for the editable statement box in forms.
+            'descriptor' => fn () => $installed ? [
+                'prefix' => Setting::get('descriptor_prefix') ?: 'KLOKADS',
+                'max' => StripeService::descriptorMaxLength(),
+                'with_month' => Setting::get('descriptor_with_month', '1') === '1',
+                'defaults' => collect(StripeService::DEFAULT_DESCRIPTORS)->keys()->mapWithKeys(fn ($k) => [$k => StripeService::descriptorFor($k)]),
+            ] : null,
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),

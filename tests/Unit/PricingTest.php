@@ -45,6 +45,27 @@ class PricingTest extends TestCase
         $this->assertSame(9675, $b['commission']);
     }
 
+    public function test_with_gst_we_still_net_the_budget_after_setting_tax_aside(): void
+    {
+        foreach ([[2.9, 30, 0.3], [3.4, 50, 0.3], [3.4, 50, 0.0]] as [$p, $f, $q]) {
+            $pricing = new Pricing($p, $f, $q, 20, 9);
+            foreach ([1000, 50000, 189029, 1000000] as $net) {
+                $b = $pricing->breakdown($net);
+
+                $this->assertSame($pricing->taxOn($net) + $pricing->taxOn($b['processing_fee']), $b['tax']);
+                $this->assertSame($net + $b['processing_fee'] + $b['tax'], $b['charge']);
+                $this->assertGreaterThanOrEqual($net, $pricing->netOf($b['charge']) - $b['tax'], "net {$net}");
+
+                // One cent less fee would leave us short.
+                $less = $b['processing_fee'] - 1;
+                $lessTax = $pricing->taxOn($net) + $pricing->taxOn($less);
+                $this->assertLessThan($net, $pricing->netOf($net + $less + $lessTax) - $lessTax, "fee for {$net} is not the smallest");
+
+                $this->assertSame((int) round($net * 0.2), $b['commission']);
+            }
+        }
+    }
+
     public function test_commission_rate_can_differ(): void
     {
         $b = (new Pricing(2.9, 30, 0.3, 15))->breakdown(100000);

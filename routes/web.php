@@ -4,6 +4,7 @@ use App\Http\Controllers\CashflowController;
 use App\Http\Controllers\ClientCardController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\InvoiceController;
@@ -47,6 +48,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/invoices/{invoice}/void', [InvoiceController::class, 'void'])->name('invoices.void');
     Route::post('/invoices/{invoice}/mark-paid', [InvoiceController::class, 'markPaid'])->name('invoices.mark-paid');
     Route::post('/invoices/{invoice}/refresh', [InvoiceController::class, 'refresh'])->name('invoices.refresh');
+    Route::get('/invoices/{invoice}/document', [DocumentController::class, 'show'])->name('invoices.document');
+    Route::post('/invoices/{invoice}/template', [DocumentController::class, 'setTemplate'])->name('invoices.template');
+    Route::get('/settings/templates/{template}/preview', [DocumentController::class, 'preview'])->name('settings.templates.preview');
 
     Route::get('/recurring', [RecurringPlanController::class, 'index'])->name('recurring.index');
     Route::post('/recurring', [RecurringPlanController::class, 'store'])->name('recurring.store');
@@ -71,6 +75,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/settings/business', [SettingsController::class, 'updateBusiness'])->name('settings.business');
     Route::post('/settings/pricing', [SettingsController::class, 'updatePricing'])->name('settings.pricing');
     Route::post('/settings/descriptors', [SettingsController::class, 'updateDescriptors'])->name('settings.descriptors');
+    Route::post('/settings/gst', [SettingsController::class, 'updateGst'])->name('settings.gst');
+    Route::post('/settings/templates', [SettingsController::class, 'updateTemplates'])->name('settings.templates');
     Route::post('/settings/sync', [SettingsController::class, 'sync'])->name('settings.sync');
     Route::post('/settings/auto-sync', [SettingsController::class, 'autoSync'])->name('settings.auto-sync');
 

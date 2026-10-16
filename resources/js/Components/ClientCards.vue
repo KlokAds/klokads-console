@@ -3,6 +3,8 @@ import CopyButton from '@/Components/CopyButton.vue';
 import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
 import BudgetFields from '@/Components/BudgetFields.vue';
+import StatementField from '@/Components/StatementField.vue';
+import { confirmDialog } from '@/confirm';
 import { money } from '@/money';
 import { breakdown } from '@/pricing';
 import { router, useForm, usePage } from '@inertiajs/vue3';
@@ -28,16 +30,22 @@ const opts = (id) => ({ preserveScroll: true, onStart: () => (busy.value = id), 
 const sendLink = () => router.post(route('clients.cards.link', props.client.id), {}, opts('link'));
 const enterNow = () => router.post(route('clients.cards.enter', props.client.id), {}, opts('enter'));
 const makeDefault = (card) => router.post(route('clients.cards.default', [props.client.id, card.id]), {}, opts(card.id));
-function remove(card) {
-    if (confirm(`Remove ${label(card)} from this client?`)) {
-        router.delete(route('clients.cards.destroy', [props.client.id, card.id]), opts(card.id));
-    }
+async function remove(card) {
+    const ok = await confirmDialog({
+        title: `Remove ${label(card)}?`,
+        message: card.is_default
+            ? 'This is the default card. Another saved card becomes the default, and recurring plans will charge that one.'
+            : 'The client will need to add it again to pay with it.',
+        confirmLabel: 'Remove card',
+        tone: 'danger',
+    });
+    if (ok) router.delete(route('clients.cards.destroy', [props.client.id, card.id]), opts(card.id));
 }
 const expired = (c) => new Date(c.exp_year, c.exp_month) < new Date();
 
 // Charge now
 const showCharge = ref(false);
-const chargeForm = useForm({ amount: '', description: '', service: '', payment_method: '', confirm: false, billing: 'budget', pass_fees: true, commission_rate: 20 });
+const chargeForm = useForm({ amount: '', description: '', service: 'meta_ads', payment_method: '', confirm: false, billing: 'budget', pass_fees: true, commission_rate: 20, statement_descriptor: '' });
 const pricing = computed(() => usePage().props.pricing);
 const chargeCents = computed(() => {
     const cents = Math.round((Number(chargeForm.amount) || 0) * 100);
@@ -156,6 +164,9 @@ function submitCharge() {
                             <option value="">—</option>
                             <option v-for="(name, key) in serviceLabels" :key="key" :value="key">{{ name }}</option>
                         </select>
+                    </div>
+                    <div class="col-span-2">
+                        <StatementField :form="chargeForm" :service="chargeForm.service" />
                     </div>
                     <label class="col-span-2 flex cursor-pointer items-start gap-3 rounded-xl border p-3.5" :class="chargeForm.confirm ? 'border-brand-300 bg-brand-50/60' : 'border-line'">
                         <input v-model="chargeForm.confirm" type="checkbox" class="checkbox mt-0.5" />

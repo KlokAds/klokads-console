@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Setting;
 use App\Services\StripeService;
+use App\Support\Business;
 use App\Support\Catalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Stripe\Exception\ApiErrorException;
@@ -34,12 +36,21 @@ class SettingsController extends Controller
                 'webhookUrl' => route('stripe.webhook'),
                 'lastSyncAt' => Setting::get('last_sync_at'),
             ],
-            'business' => [
-                'name' => Setting::get('business_name', 'Klok Ads'),
+            'business' => Business::profile() + [
                 'currency' => Setting::get('currency', 'sgd'),
                 'currencyFromStripe' => (bool) $secret,
             ],
+            'gst' => Business::gst(),
+            'templates' => [
+                'options' => Catalog::options(Catalog::TEMPLATES),
+                'defaults' => collect(Catalog::DEFAULT_TEMPLATE_FOR)->map(fn ($t, $service) => [
+                    'service' => $service,
+                    'label' => Catalog::SERVICES[$service] ?? $service,
+                    'template' => Business::templateFor($service),
+                ])->values(),
+            ],
             'descriptors' => [
+                'with_month' => Setting::get('descriptor_with_month', '1') === '1',
                 'prefix' => Setting::get('descriptor_prefix'),
                 'max' => StripeService::descriptorMaxLength(),
                 'items' => collect(StripeService::DEFAULT_DESCRIPTORS)->map(fn ($default, $key) => [
@@ -57,6 +68,39 @@ class SettingsController extends Controller
         ]);
     }
 
+    public function updateGst(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'enabled' => ['boolean'],
+            'rate' => ['required', 'numeric', 'between:0,30'],
+            'reg_no' => ['nullable', 'required_if:enabled,true', 'string', 'max:30'],
+            'label' => ['required', 'string', 'max:10'],
+        ], ['reg_no.required_if' => 'Add your GST registration number before switching GST on.']);
+
+        Setting::put('gst_enabled', $request->boolean('enabled') ? '1' : '0');
+        Setting::put('gst_rate', (string) (float) $data['rate']);
+        Setting::put('gst_reg_no', $data['reg_no'] ?? null);
+        Setting::put('gst_label', $data['label']);
+
+        return back()->with('success', $request->boolean('enabled')
+            ? "{$data['label']} {$data['rate']}% is on — new invoices and charges include it."
+            : "{$data['label']} is off — invoices won't include tax.");
+    }
+
+    public function updateTemplates(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'defaults' => ['required', 'array'],
+            'defaults.*' => ['required', Rule::in(array_keys(Catalog::TEMPLATES))],
+        ]);
+
+        foreach (array_intersect_key($data['defaults'], Catalog::DEFAULT_TEMPLATE_FOR) as $service => $template) {
+            Setting::put("template_for_{$service}", $template);
+        }
+
+        return back()->with('success', 'Default templates saved.');
+    }
+
     public function updateDescriptors(Request $request): RedirectResponse
     {
         $max = StripeService::descriptorMaxLength();
@@ -72,6 +116,7 @@ class SettingsController extends Controller
         foreach ($data['descriptors'] as $key => $text) {
             Setting::put("descriptor_{$key}", StripeService::cleanDescriptor($text));
         }
+        Setting::put('descriptor_with_month', $request->boolean('with_month') ? '1' : '0');
 
         return back()->with('success', 'Bank statement text saved — new charges will use it.');
     }
@@ -142,9 +187,18 @@ class SettingsController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'currency' => [$connected ? 'nullable' : 'required', 'string', 'size:3'],
+            'legal_name' => ['nullable', 'string', 'max:150'],
+            'uen' => ['nullable', 'string', 'max:30'],
+            'address' => ['nullable', 'string', 'max:500'],
+            'email' => ['nullable', 'email', 'max:150'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'website' => ['nullable', 'string', 'max:150'],
         ]);
 
         Setting::put('business_name', $data['name']);
+        foreach (['legal_name', 'uen', 'address', 'email', 'phone', 'website'] as $field) {
+            Setting::put("business_{$field}", $data[$field] ?? null);
+        }
 
         // While Stripe is connected the currency comes from the Stripe account.
         if (! $connected) {

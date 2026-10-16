@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Services\StripeService;
 use App\Support\Pricing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,6 +23,7 @@ abstract class Controller
             'billing' => ['nullable', 'in:standard,budget'],
             'pass_fees' => ['boolean'],
             'commission_rate' => ['nullable', 'numeric', 'between:0,100'],
+            'statement_descriptor' => ['nullable', 'string', 'max:'.StripeService::descriptorMaxLength(), 'regex:/^[A-Za-z0-9 .\-&]*[A-Za-z][A-Za-z0-9 .\-&]*$/'],
         ];
     }
 

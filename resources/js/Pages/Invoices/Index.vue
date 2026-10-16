@@ -9,10 +9,11 @@ import StatCard from '@/Components/StatCard.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { clientName, date, invoiceStatus, money } from '@/money';
+import { confirmDialog } from '@/confirm';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 
-const props = defineProps({ invoices: Object, filters: Object, clients: Array, serviceLabels: Object, currency: String, totals: Object });
+const props = defineProps({ invoices: Object, filters: Object, clients: Array, serviceLabels: Object, currency: String, totals: Object, templates: Object });
 
 const f = reactive({ status: props.filters.status ?? '', client_id: props.filters.client_id ?? '', type: props.filters.type ?? '' });
 const apply = () => router.get(route('invoices.index'), Object.fromEntries(Object.entries(f).filter(([, v]) => v)), { preserveState: true });
@@ -29,10 +30,30 @@ const statuses = [
     { value: 'void', label: 'Void' },
 ];
 
-function act(inv, action, message) {
-    if (message && !confirm(message)) return;
+const templates = computed(() => props.templates ?? {});
+
+const confirmations = {
+    'mark-paid': (inv) => ({
+        title: `Mark ${inv.number} as paid?`,
+        message: `Use this when the client paid ${money(inv.amount_remaining, inv.currency)} outside Stripe — bank transfer or PayNow. No card is charged.`,
+        confirmLabel: 'Mark as paid',
+        tone: 'money',
+    }),
+    void: (inv) => ({
+        title: `Void ${inv.number}?`,
+        message: 'The client will no longer be able to pay this invoice. This cannot be undone.',
+        confirmLabel: 'Void invoice',
+        tone: 'danger',
+    }),
+};
+
+async function act(inv, action) {
+    if (confirmations[action] && !(await confirmDialog(confirmations[action](inv)))) return;
     router.post(route(`invoices.${action}`, inv.id), {}, { preserveScroll: true });
 }
+
+const setTemplate = (inv, template) => router.post(route('invoices.template', inv.id), { template }, { preserveScroll: true });
+const copyLink = (url) => navigator.clipboard?.writeText(url);
 </script>
 
 <template>
@@ -97,16 +118,23 @@ function act(inv, action, message) {
                             <td><StatusBadge :status="invoiceStatus(inv)" /></td>
                             <td>
                                 <div class="flex items-center justify-end gap-1.5">
-                                    <CopyButton v-if="inv.hosted_invoice_url && inv.status === 'open'" :text="inv.hosted_invoice_url" label="Pay link" />
+                                    <a :href="route('invoices.document', inv.id)" target="_blank" class="btn-secondary btn-sm"><Icon name="invoice" :size="14" /> {{ inv.status === 'paid' ? 'Receipt' : 'View' }}</a>
                                     <RowMenu>
-                                        <a v-if="inv.hosted_invoice_url" :href="inv.hosted_invoice_url" target="_blank" class="menu-item"><Icon name="external" :size="15" /> View invoice page</a>
-                                        <a v-if="inv.invoice_pdf" :href="inv.invoice_pdf" target="_blank" class="menu-item"><Icon name="download" :size="15" /> Download PDF</a>
+                                        <a :href="route('invoices.document', { invoice: inv.id, download: 1 })" class="menu-item"><Icon name="download" :size="15" /> Download PDF</a>
+                                        <a v-if="inv.status === 'paid'" :href="route('invoices.document', { invoice: inv.id, type: 'invoice' })" target="_blank" class="menu-item"><Icon name="invoice" :size="15" /> View as invoice</a>
+                                        <div class="my-1 border-t border-line"></div>
+                                        <div class="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">Template</div>
+                                        <button v-for="(name, key) in templates" :key="key" class="menu-item" @click="setTemplate(inv, key)">
+                                            <Icon :name="inv.template === key ? 'check' : 'invoice'" :size="15" :class="inv.template === key ? 'text-brand-600' : 'text-ink-300'" /> {{ name }}
+                                        </button>
+                                        <div class="my-1 border-t border-line"></div>
+                                        <button v-if="inv.hosted_invoice_url && inv.status === 'open'" class="menu-item" @click="copyLink(inv.hosted_invoice_url)"><Icon name="copy" :size="15" /> Copy pay link</button>
                                         <template v-if="inv.status === 'open'">
                                             <button class="menu-item" @click="act(inv, 'send')"><Icon name="send" :size="15" /> Email to client</button>
-                                            <button class="menu-item" @click="act(inv, 'mark-paid', 'Mark this invoice as paid outside Stripe (bank transfer / PayNow)?')"><Icon name="check" :size="15" /> Mark paid (bank / PayNow)</button>
+                                            <button class="menu-item" @click="act(inv, 'mark-paid')"><Icon name="check" :size="15" /> Mark paid (bank / PayNow)</button>
                                         </template>
                                         <button class="menu-item" @click="act(inv, 'refresh')"><Icon name="sync" :size="15" /> Refresh from Stripe</button>
-                                        <button v-if="inv.status === 'open'" class="menu-item text-rose-600 hover:bg-rose-50 hover:text-rose-700" @click="act(inv, 'void', 'Void this invoice? The client will no longer be able to pay it.')"><Icon name="close" :size="15" /> Void invoice</button>
+                                        <button v-if="inv.status === 'open'" class="menu-item text-rose-600 hover:bg-rose-50 hover:text-rose-700" @click="act(inv, 'void')"><Icon name="close" :size="15" /> Void invoice</button>
                                     </RowMenu>
                                 </div>
                             </td>

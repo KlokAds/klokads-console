@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\Invoice;
 use App\Services\StripeService;
+use App\Support\Business;
 use App\Support\Catalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,6 +32,7 @@ class InvoiceController extends Controller
             'filters' => $request->only('status', 'client_id', 'type'),
             'clients' => Client::orderBy('name')->get(['id', 'name', 'company']),
             'serviceLabels' => Catalog::SERVICES,
+            'templates' => Catalog::TEMPLATES,
             'currency' => $stripe->currency(),
             'totals' => [
                 'open' => (int) Invoice::where('status', 'open')->sum('amount_remaining'),
@@ -45,6 +47,9 @@ class InvoiceController extends Controller
         return Inertia::render('Invoices/Create', [
             'clients' => Client::orderBy('name')->get(['id', 'name', 'company', 'email', 'commission_rate']),
             'services' => Catalog::options(Catalog::SERVICES),
+            'templates' => Catalog::options(Catalog::TEMPLATES),
+            'templateFor' => collect(Catalog::DEFAULT_TEMPLATE_FOR)->map(fn ($t, $service) => Business::templateFor($service)),
+            'units' => Catalog::UNITS,
             'currency' => $stripe->currency(),
             'clientId' => $request->integer('client_id') ?: null,
         ]);
@@ -64,13 +69,38 @@ class InvoiceController extends Controller
             'items.*.description' => ['exclude_if:billing,budget', 'required', 'string', 'max:250'],
             'items.*.amount' => ['exclude_if:billing,budget', 'required', 'numeric', 'min:0.5'],
             'items.*.quantity' => ['exclude_if:billing,budget', 'required', 'integer', 'min:1'],
+            'items.*.unit' => ['exclude_if:billing,budget', 'nullable', Rule::in(Catalog::UNITS)],
+            'template' => ['nullable', Rule::in(array_keys(Catalog::TEMPLATES))],
+            'ad_account_id' => ['nullable', 'string', 'max:40'],
+            'period_start' => ['nullable', 'date'],
+            'period_end' => ['nullable', 'date', 'after_or_equal:period_start'],
+            'campaigns' => ['nullable', 'array', 'max:50'],
+            'campaigns.*.name' => ['required', 'string', 'max:150'],
+            'campaigns.*.detail' => ['nullable', 'string', 'max:150'],
+            'campaigns.*.quantity' => ['nullable', 'integer', 'min:0'],
+            'campaigns.*.unit' => ['nullable', Rule::in(Catalog::UNITS)],
+            'campaigns.*.amount' => ['required', 'numeric', 'min:0'],
         ]);
+
+        $data['details'] = array_filter([
+            'ad_account_id' => $data['ad_account_id'] ?? null,
+            'period_start' => $data['period_start'] ?? null,
+            'period_end' => $data['period_end'] ?? null,
+            'campaigns' => collect($data['campaigns'] ?? [])->map(fn ($c) => [
+                'name' => $c['name'],
+                'detail' => $c['detail'] ?? null,
+                'quantity' => isset($c['quantity']) ? (int) $c['quantity'] : null,
+                'unit' => $c['unit'] ?? null,
+                'amount' => $this->toCents($c['amount']),
+            ])->values()->all(),
+        ]) ?: null;
 
         $client = Client::findOrFail($data['client_id']);
         $items = collect($data['items'] ?? [])->map(fn ($i) => [
             'description' => $i['description'],
             'amount' => $this->toCents($i['amount']),
             'quantity' => (int) $i['quantity'],
+            'unit' => $i['unit'] ?? null,
         ])->all();
 
         $data['budget'] = $this->budgetFromRequest($request, $this->toCents($data['budget_amount'] ?? 0), $client);

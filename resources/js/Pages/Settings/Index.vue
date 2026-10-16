@@ -2,19 +2,35 @@
 import CopyButton from '@/Components/CopyButton.vue';
 import Icon from '@/Components/Icon.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { confirmDialog } from '@/confirm';
 import { date, money } from '@/money';
 import { breakdown } from '@/pricing';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
-const props = defineProps({ stripe: Object, business: Object, pricing: Object, descriptors: Object });
+const props = defineProps({ stripe: Object, business: Object, pricing: Object, descriptors: Object, gst: Object, templates: Object });
 
-const descriptorForm = useForm({ descriptors: Object.fromEntries(props.descriptors.items.map((d) => [d.key, d.value])) });
+const descriptorForm = useForm({
+    descriptors: Object.fromEntries(props.descriptors.items.map((d) => [d.key, d.value])),
+    with_month: props.descriptors.with_month,
+});
+const gstForm = useForm({ enabled: props.gst.enabled, rate: props.gst.rate, reg_no: props.gst.reg_no ?? '', label: props.gst.label });
+const templateForm = useForm({ defaults: Object.fromEntries(props.templates.defaults.map((d) => [d.service, d.template])) });
+const previewUrl = (template, type) => route('settings.templates.preview', { template, type });
 const prefix = computed(() => props.descriptors.prefix || 'KLOKADS');
 const preview = (text) => `${prefix.value}* ${(text || '').toUpperCase()}`;
 
 const stripeForm = useForm({ stripe_secret: '', stripe_webhook_secret: '' });
-const businessForm = useForm({ name: props.business.name, currency: props.business.currency.toUpperCase() });
+const businessForm = useForm({
+    name: props.business.name,
+    currency: props.business.currency.toUpperCase(),
+    legal_name: props.business.legal_name === props.business.name ? '' : props.business.legal_name,
+    uen: props.business.uen ?? '',
+    address: props.business.address ?? '',
+    email: props.business.email ?? '',
+    phone: props.business.phone ?? '',
+    website: props.business.website ?? '',
+});
 const pricingForm = useForm({
     commission_rate: props.pricing.commission_rate,
     card_fee_percent: props.pricing.card_fee_percent,
@@ -43,10 +59,14 @@ function sync(full = false) {
     router.post(route('settings.sync'), { full }, { preserveScroll: true, onFinish: () => (syncing.value = false) });
 }
 
-function disconnect() {
-    if (confirm('Disconnect Stripe? Synced history stays in the dashboard.')) {
-        router.delete(route('settings.stripe.disconnect'), { preserveScroll: true });
-    }
+async function disconnect() {
+    const ok = await confirmDialog({
+        title: 'Disconnect Stripe?',
+        message: 'The console stops syncing and can no longer create invoices or charge cards. Everything already synced stays here.',
+        confirmLabel: 'Disconnect',
+        tone: 'danger',
+    });
+    if (ok) router.delete(route('settings.stripe.disconnect'), { preserveScroll: true });
 }
 </script>
 
@@ -126,13 +146,38 @@ function disconnect() {
 
             <div class="lg:pt-1">
                 <h2 class="text-base font-bold text-ink-900">Business</h2>
-                <p class="mt-1 text-sm text-ink-500">Shown in the app and on invoice previews.</p>
+                <p class="mt-1 text-sm text-ink-500">Printed as the issuer on every invoice and receipt.</p>
             </div>
             <form class="card lg:col-span-2" @submit.prevent="businessForm.post(route('settings.business'), { preserveScroll: true })">
                 <div class="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
                     <div>
                         <label class="label">Business name</label>
                         <input v-model="businessForm.name" class="input" />
+                    </div>
+                    <div>
+                        <label class="label">Registered (legal) name</label>
+                        <input v-model="businessForm.legal_name" class="input" placeholder="Klok Ads Pte. Ltd." />
+                    </div>
+                    <div>
+                        <label class="label">UEN / company reg. no.</label>
+                        <input v-model="businessForm.uen" class="input" placeholder="202612345K" />
+                    </div>
+                    <div>
+                        <label class="label">Billing email</label>
+                        <input v-model="businessForm.email" type="email" class="input" placeholder="billing@klokads.com" />
+                        <div v-if="businessForm.errors.email" class="error">{{ businessForm.errors.email }}</div>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="label">Address</label>
+                        <textarea v-model="businessForm.address" rows="3" class="input" placeholder="Street&#10;#Unit&#10;Singapore 123456"></textarea>
+                    </div>
+                    <div>
+                        <label class="label">Phone</label>
+                        <input v-model="businessForm.phone" class="input" />
+                    </div>
+                    <div>
+                        <label class="label">Website</label>
+                        <input v-model="businessForm.website" class="input" placeholder="klokads.com" />
                     </div>
                     <div>
                         <label class="label">Reporting currency</label>
@@ -169,9 +214,80 @@ function disconnect() {
                         <code class="rounded-md bg-ink-50 px-2 py-1 font-mono text-xs text-ink-700 ring-1 ring-line">{{ preview(descriptorForm.descriptors[d.key]) }}</code>
                     </div>
                 </div>
+                <label class="flex cursor-pointer items-center gap-3 border-t border-line px-6 py-3.5 text-sm text-ink-700">
+                    <input v-model="descriptorForm.with_month" type="checkbox" class="checkbox" />
+                    Add the month automatically, e.g. <code class="font-mono text-xs">{{ prefix }}* META ADS SEP</code>
+                    <span class="text-xs text-ink-500">(every form lets you edit the text before charging)</span>
+                </label>
                 <div class="flex items-center justify-between gap-3 border-t border-line bg-ink-50/60 px-6 py-4">
                     <span class="text-xs text-ink-500">Max {{ descriptors.max }} characters (card statements allow 22 in total).</span>
                     <button class="btn-primary" :disabled="descriptorForm.processing">Save</button>
+                </div>
+            </form>
+
+            <div class="border-t border-line pt-6 lg:col-span-3"></div>
+
+            <div class="lg:pt-1">
+                <h2 class="text-base font-bold text-ink-900">GST</h2>
+                <p class="mt-1 text-sm text-ink-500">Off until you're GST-registered. When on, every new invoice, charge and plan adds GST, and invoices say "Tax Invoice" with your Reg No.</p>
+            </div>
+            <form class="card lg:col-span-2" @submit.prevent="gstForm.post(route('settings.gst'), { preserveScroll: true })">
+                <div class="space-y-4 p-5 sm:p-6">
+                    <label class="flex cursor-pointer items-center justify-between gap-4 rounded-xl border p-4" :class="gstForm.enabled ? 'border-emerald-300 bg-emerald-50/60' : 'border-line'">
+                        <span>
+                            <span class="block font-semibold text-ink-900">Charge {{ gstForm.label }}</span>
+                            <span class="block text-xs text-ink-500">{{ gstForm.enabled ? `On — ${gstForm.rate}% is added on top and set aside for IRAS; you still net the full budget.` : 'Off — invoices show no tax.' }}</span>
+                        </span>
+                        <input v-model="gstForm.enabled" type="checkbox" class="checkbox h-5 w-5" />
+                    </label>
+                    <div class="grid gap-4 sm:grid-cols-3">
+                        <div>
+                            <label class="label">Name</label>
+                            <input v-model="gstForm.label" maxlength="10" class="input" />
+                        </div>
+                        <div>
+                            <label class="label">Rate (%)</label>
+                            <input v-model="gstForm.rate" type="number" step="0.01" min="0" max="30" class="input" />
+                        </div>
+                        <div>
+                            <label class="label">GST Reg No</label>
+                            <input v-model="gstForm.reg_no" class="input font-mono" placeholder="M90012345X" />
+                            <div v-if="gstForm.errors.reg_no" class="error">{{ gstForm.errors.reg_no }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-end border-t border-line bg-ink-50/60 px-6 py-4">
+                    <button class="btn-primary" :disabled="gstForm.processing">Save</button>
+                </div>
+            </form>
+
+            <div class="border-t border-line pt-6 lg:col-span-3"></div>
+
+            <div class="lg:pt-1">
+                <h2 class="text-base font-bold text-ink-900">Invoice & receipt templates</h2>
+                <p class="mt-1 text-sm text-ink-500">The default design for each service. You can still pick another template on any invoice.</p>
+                <div class="mt-3 space-y-1.5">
+                    <div v-for="t in templates.options" :key="t.value" class="flex items-center justify-between gap-2 text-xs">
+                        <span class="text-ink-700">{{ t.label }}</span>
+                        <span class="flex gap-2">
+                            <a :href="previewUrl(t.value, 'invoice')" target="_blank" class="btn-link text-xs">Invoice</a>
+                            <a :href="previewUrl(t.value, 'receipt')" target="_blank" class="btn-link text-xs">Receipt</a>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <form class="card lg:col-span-2" @submit.prevent="templateForm.post(route('settings.templates'), { preserveScroll: true })">
+                <div class="divide-y divide-line/70">
+                    <div v-for="d in templates.defaults" :key="d.service" class="grid items-center gap-3 px-5 py-3 sm:grid-cols-[10rem_1fr_auto] sm:px-6">
+                        <span class="text-sm font-semibold text-ink-900">{{ d.label }}</span>
+                        <select v-model="templateForm.defaults[d.service]" class="input input-sm">
+                            <option v-for="t in templates.options" :key="t.value" :value="t.value">{{ t.label }}</option>
+                        </select>
+                        <a :href="previewUrl(templateForm.defaults[d.service], 'invoice')" target="_blank" class="btn-secondary btn-sm"><Icon name="external" :size="14" /> Preview</a>
+                    </div>
+                </div>
+                <div class="flex justify-end border-t border-line bg-ink-50/60 px-6 py-4">
+                    <button class="btn-primary" :disabled="templateForm.processing">Save</button>
                 </div>
             </form>
 
