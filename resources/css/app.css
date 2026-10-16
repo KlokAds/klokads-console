@@ -17,12 +17,6 @@
     ::selection { background: theme('colors.brand.200'); }
 }
 
-@layer utilities {
-    /* Sideways-scrolling bars (tabs on phones) without a visible scrollbar. */
-    .no-scrollbar { scrollbar-width: none; }
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-}
-
 @layer components {
     /* Surfaces */
     /* min-w-0 lets cards inside grids shrink so their tables scroll instead of widening the page. */

@@ -6,7 +6,7 @@ import { confirmDialog } from '@/confirm';
 import { date, money } from '@/money';
 import { breakdown } from '@/pricing';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({ stripe: Object, business: Object, pricing: Object, descriptors: Object, gst: Object, templates: Object, mail: Object });
 
@@ -90,12 +90,12 @@ async function disconnect() {
 
 // ---------------------------------------------------------------- tabs & setup checklist
 const tabs = computed(() => [
-    { key: 'business', label: 'Business', icon: 'home', status: props.business.legal_name && props.business.address ? 'Complete' : 'Add details', ok: !!(props.business.address) },
-    { key: 'stripe', label: 'Stripe & payments', icon: 'card', status: props.stripe.connected ? (props.stripe.mode === 'live' ? 'Live' : 'Test mode') : 'Not connected', ok: props.stripe.connected && !!props.stripe.publishable },
-    { key: 'email', label: 'Email', icon: 'send', status: props.mail.configured ? 'Active' : 'Not set up', ok: props.mail.configured },
-    { key: 'invoices', label: 'Invoices & GST', icon: 'invoice', status: props.gst.enabled ? `GST ${props.gst.rate}%` : 'GST off', ok: true },
-    { key: 'pricing', label: 'Commission & fees', icon: 'chart', status: `${props.pricing.commission_rate}% commission`, ok: true },
-    { key: 'statement', label: 'Bank statement', icon: 'receipt', status: props.descriptors.prefix ? `${props.descriptors.prefix}* …` : 'Prefix not set', ok: !!props.descriptors.prefix },
+    { key: 'business', label: 'Business', short: 'Business', icon: 'home', status: props.business.legal_name && props.business.address ? 'Complete' : 'Add details', ok: !!(props.business.address) },
+    { key: 'stripe', label: 'Stripe & payments', short: 'Stripe', icon: 'card', status: props.stripe.connected ? (props.stripe.mode === 'live' ? 'Live' : 'Test mode') : 'Not connected', ok: props.stripe.connected && !!props.stripe.publishable },
+    { key: 'email', label: 'Email', short: 'Email', icon: 'send', status: props.mail.configured ? 'Active' : 'Not set up', ok: props.mail.configured },
+    { key: 'invoices', label: 'Invoices & GST', short: 'Invoices', icon: 'invoice', status: props.gst.enabled ? `GST ${props.gst.rate}%` : 'GST off', ok: true },
+    { key: 'pricing', label: 'Commission & fees', short: 'Fees', icon: 'chart', status: `${props.pricing.commission_rate}% commission`, ok: true },
+    { key: 'statement', label: 'Bank statement', short: 'Statement', icon: 'receipt', status: props.descriptors.prefix ? `${props.descriptors.prefix}* …` : 'Prefix not set', ok: !!props.descriptors.prefix },
 ]);
 
 const checklist = computed(() => [
@@ -110,20 +110,12 @@ const doneCount = computed(() => checklist.value.filter((c) => c.done).length);
 const initialTab = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tab') : null;
 const tab = ref(tabs.value.some((t) => t.key === initialTab) ? initialTab : 'business');
 const showChecklist = ref(false);
-const navEl = ref(null);
-
-/** On phones the tab bar scrolls sideways — keep the open tab in view. */
-function revealTab(key) {
-    nextTick(() => navEl.value?.querySelector(`[data-tab="${key}"]`)?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }));
-}
 
 watch(tab, (key) => {
     const url = new URL(window.location.href);
     url.searchParams.set('tab', key);
     window.history.replaceState(window.history.state, '', url);
-    revealTab(key);
 });
-onMounted(() => revealTab(tab.value));
 const current = computed(() => tabs.value.find((t) => t.key === tab.value));
 </script>
 
@@ -156,21 +148,24 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                     </ul>
                 </div>
 
-                <nav ref="navEl" class="no-scrollbar card flex gap-1 overflow-x-auto p-1.5 lg:flex-col lg:overflow-visible">
+                <!-- Phones: all six tabs visible as a 3×2 grid (no sideways scrolling). Desktop: vertical menu. -->
+                <nav class="card grid grid-cols-3 gap-1 p-1.5 lg:flex lg:flex-col">
                     <button
                         v-for="t in tabs"
                         :key="t.key"
-                        :data-tab="t.key"
                         type="button"
-                        class="flex shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition lg:w-full"
+                        class="relative flex flex-col items-center gap-1 rounded-xl px-1.5 py-2.5 text-center transition lg:w-full lg:flex-row lg:gap-3 lg:px-3 lg:text-left"
                         :class="tab === t.key ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-50 hover:text-ink-900'"
                         @click="tab = t.key"
                     >
                         <Icon :name="t.icon" :size="17" :class="tab === t.key ? 'text-brand-300' : 'text-ink-400'" />
-                        <span class="min-w-0 flex-1">
-                            <span class="block whitespace-nowrap text-sm font-semibold">{{ t.label }}</span>
+                        <span class="min-w-0 lg:flex-1">
+                            <span class="block text-[12px] font-semibold leading-tight lg:hidden">{{ t.short }}</span>
+                            <span class="hidden text-sm font-semibold lg:block">{{ t.label }}</span>
                             <span class="hidden truncate text-[11px] lg:block" :class="tab === t.key ? 'text-ink-300' : t.ok ? 'text-ink-400' : 'text-amber-600'">{{ t.status }}</span>
                         </span>
+                        <!-- Needs attention (phones show a dot instead of the status line) -->
+                        <span v-if="!t.ok" class="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-amber-500 lg:hidden"></span>
                     </button>
                 </nav>
             </aside>
