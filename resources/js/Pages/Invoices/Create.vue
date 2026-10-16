@@ -1,0 +1,177 @@
+<script setup>
+import Avatar from '@/Components/Avatar.vue';
+import Icon from '@/Components/Icon.vue';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { clientName, money } from '@/money';
+import { Head, Link, usePage, useForm } from '@inertiajs/vue3';
+import { computed } from 'vue';
+
+const props = defineProps({ clients: Array, services: Array, currency: String, clientId: Number });
+
+const form = useForm({
+    client_id: props.clientId ?? '',
+    service: '',
+    memo: '',
+    days_until_due: 7,
+    send: true,
+    items: [{ description: '', amount: '', quantity: 1 }],
+});
+
+const lineTotal = (i) => Math.round((Number(i.amount) || 0) * 100) * (Number(i.quantity) || 0);
+const total = computed(() => form.items.reduce((sum, i) => sum + lineTotal(i), 0));
+const client = computed(() => props.clients.find((c) => c.id === Number(form.client_id)));
+const dueDate = computed(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + Number(form.days_until_due || 0));
+    return d.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
+});
+const business = computed(() => usePage().props.appName);
+
+const addItem = () => form.items.push({ description: '', amount: '', quantity: 1 });
+const removeItem = (i) => form.items.length > 1 && form.items.splice(i, 1);
+
+function setService(value) {
+    form.service = value;
+    const label = props.services.find((s) => s.value === value)?.label;
+    if (label && !form.items[0].description) {
+        form.items[0].description = `${label} management — ${new Date().toLocaleDateString('en-SG', { month: 'long', year: 'numeric' })}`;
+    }
+}
+</script>
+
+<template>
+    <Head title="New invoice" />
+
+    <AuthenticatedLayout title="New invoice" subtitle="Created and sent through your Stripe account">
+        <template #actions>
+            <Link :href="route('invoices.index')" class="btn-ghost hidden sm:inline-flex">Cancel</Link>
+        </template>
+
+        <form class="grid gap-6 xl:grid-cols-12" @submit.prevent="form.post(route('invoices.store'))">
+            <div class="space-y-5 xl:col-span-7">
+                <div class="card">
+                    <div class="card-head"><div class="card-title">Bill to</div></div>
+                    <div class="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
+                        <div>
+                            <label class="label">Client *</label>
+                            <select v-model="form.client_id" class="input" required>
+                                <option value="" disabled>Select a client…</option>
+                                <option v-for="c in clients" :key="c.id" :value="c.id">{{ clientName(c) }}</option>
+                            </select>
+                            <div v-if="form.errors.client_id" class="error">{{ form.errors.client_id }}</div>
+                            <Link v-if="!clients.length" :href="route('clients.index', { new: 1 })" class="btn-link mt-1.5 inline-block text-xs">Add a client first →</Link>
+                        </div>
+                        <div>
+                            <label class="label">Service</label>
+                            <select :value="form.service" class="input" @change="setService($event.target.value)">
+                                <option value="">—</option>
+                                <option v-for="s in services" :key="s.value" :value="s.value">{{ s.label }}</option>
+                            </select>
+                            <div class="hint">Used for profit-by-service reports.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-head"><div class="card-title">Line items</div></div>
+                    <div class="p-5 sm:p-6">
+                        <div class="mb-2 hidden grid-cols-12 gap-3 text-[11px] font-semibold uppercase tracking-wider text-ink-400 sm:grid">
+                            <div class="col-span-6">Description</div>
+                            <div class="col-span-2">Qty</div>
+                            <div class="col-span-3">Price ({{ currency.toUpperCase() }})</div>
+                        </div>
+                        <div class="space-y-3">
+                            <div v-for="(item, i) in form.items" :key="i" class="grid grid-cols-12 items-start gap-3">
+                                <div class="col-span-12 sm:col-span-6">
+                                    <input v-model="item.description" class="input" placeholder="Meta Ads management — October" required />
+                                    <div v-if="form.errors[`items.${i}.description`]" class="error">{{ form.errors[`items.${i}.description`] }}</div>
+                                </div>
+                                <div class="col-span-4 sm:col-span-2">
+                                    <input v-model="item.quantity" type="number" min="1" class="input" />
+                                </div>
+                                <div class="col-span-6 sm:col-span-3">
+                                    <input v-model="item.amount" type="number" step="0.01" min="0.5" class="input" placeholder="0.00" required />
+                                    <div v-if="form.errors[`items.${i}.amount`]" class="error">{{ form.errors[`items.${i}.amount`] }}</div>
+                                </div>
+                                <button type="button" class="icon-btn col-span-2 mt-1.5 justify-self-end hover:text-rose-600 sm:col-span-1" :disabled="form.items.length === 1" @click="removeItem(i)">
+                                    <Icon name="trash" :size="16" />
+                                </button>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-secondary btn-sm mt-4" @click="addItem"><Icon name="plus" :size="14" /> Add line</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-head"><div class="card-title">Payment terms</div></div>
+                    <div class="grid gap-4 p-5 sm:grid-cols-3 sm:p-6">
+                        <div>
+                            <label class="label">Due in (days)</label>
+                            <input v-model="form.days_until_due" type="number" min="0" max="365" class="input" />
+                            <div class="hint">Due {{ dueDate }}</div>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="label">Memo on invoice</label>
+                            <textarea v-model="form.memo" rows="2" class="input" placeholder="Thank you! Pay by card or PayNow using the secure link."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live preview -->
+            <div class="xl:col-span-5">
+                <div class="sticky top-24 space-y-4">
+                    <div class="card overflow-hidden">
+                        <div class="bg-ink-950 px-6 py-5 text-white">
+                            <div class="flex items-center justify-between">
+                                <span class="font-display text-lg font-bold">{{ business }}</span>
+                                <span class="text-xs uppercase tracking-[0.14em] text-ink-400">Invoice</span>
+                            </div>
+                            <div class="mt-4 text-xs text-ink-400">Amount due</div>
+                            <div class="font-display text-3xl font-extrabold tabular-nums">{{ money(total, currency) }}</div>
+                            <div class="mt-1 text-xs text-ink-400">Due {{ dueDate }}</div>
+                        </div>
+                        <div class="px-6 py-5">
+                            <div class="flex items-center gap-3">
+                                <Avatar v-if="client" :name="clientName(client)" :size="34" />
+                                <div>
+                                    <div class="text-xs text-ink-400">Billed to</div>
+                                    <div class="text-sm font-semibold text-ink-900">{{ client ? clientName(client) : 'Select a client' }}</div>
+                                    <div v-if="client" class="text-xs text-ink-500">{{ client.email }}</div>
+                                </div>
+                            </div>
+                            <div class="mt-5 divide-y divide-line border-y border-line">
+                                <div v-for="(item, i) in form.items" :key="i" class="flex justify-between gap-4 py-2.5 text-sm">
+                                    <span class="text-ink-700">{{ item.description || 'Item description' }}<span v-if="item.quantity > 1" class="text-ink-400"> × {{ item.quantity }}</span></span>
+                                    <span class="tabular-nums text-ink-900">{{ money(lineTotal(item), currency) }}</span>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex justify-between text-sm font-bold text-ink-900">
+                                <span>Total</span><span class="tabular-nums">{{ money(total, currency) }}</span>
+                            </div>
+                            <p v-if="form.memo" class="mt-4 rounded-xl bg-ink-50 p-3 text-xs text-ink-600">{{ form.memo }}</p>
+                        </div>
+                    </div>
+
+                    <div class="card space-y-4 p-5">
+                        <label class="flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition" :class="form.send ? 'border-brand-300 bg-brand-50/60' : 'border-line'">
+                            <input v-model="form.send" type="checkbox" class="checkbox mt-0.5" />
+                            <span class="text-sm">
+                                <span class="block font-semibold text-ink-900">Email it to {{ client?.email || 'the client' }} now</span>
+                                <span class="block text-xs text-ink-500">Otherwise copy the pay link from the invoice list.</span>
+                            </span>
+                        </label>
+                        <button class="btn-primary w-full py-3" :disabled="form.processing || !total">
+                            <Icon :name="form.send ? 'send' : 'invoice'" :size="16" />
+                            {{ form.processing ? 'Creating in Stripe…' : form.send ? 'Create & send invoice' : 'Create invoice' }}
+                        </button>
+                        <p class="flex items-start gap-2 text-xs text-ink-500">
+                            <Icon name="shield" :size="14" class="mt-0.5 text-emerald-500" />
+                            The client pays on Stripe's secure page by card, PayNow or any method enabled in your Stripe account.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </AuthenticatedLayout>
+</template>
