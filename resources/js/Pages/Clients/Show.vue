@@ -1,5 +1,6 @@
 <script setup>
 import Avatar from '@/Components/Avatar.vue';
+import ClientCards from '@/Components/ClientCards.vue';
 import ClientFormModal from '@/Components/ClientFormModal.vue';
 import CopyButton from '@/Components/CopyButton.vue';
 import EmptyState from '@/Components/EmptyState.vue';
@@ -9,7 +10,7 @@ import StatusBadge from '@/Components/StatusBadge.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { date, invoiceStatus, money } from '@/money';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     client: Object,
@@ -22,7 +23,18 @@ const props = defineProps({
     expenses: Array,
     serviceLabels: Object,
     categoryLabels: Object,
+    stripeConnected: Boolean,
+    cards: Object,
 });
+
+const defaultCard = computed(() => props.cards?.items?.find((c) => c.is_default));
+
+function charge(inv) {
+    const card = defaultCard.value;
+    if (card && confirm(`Charge ${money(inv.amount_remaining, inv.currency)} to •••• ${card.last4} now?`)) {
+        router.post(route('invoices.charge', inv.id), {}, { preserveScroll: true });
+    }
+}
 
 const m = (v) => money(v, props.currency);
 const editing = ref(false);
@@ -67,6 +79,10 @@ function destroy() {
             <StatCard label="Outstanding" icon="clock" :tone="totals.outstanding ? 'bad' : 'default'" :value="m(totals.outstanding)" />
         </div>
 
+        <div class="mt-5">
+            <ClientCards :client="client" :cards="cards ?? null" :connected="stripeConnected" />
+        </div>
+
         <div class="card mt-5">
             <div class="card-head">
                 <div class="segmented">
@@ -91,7 +107,12 @@ function destroy() {
                                 <td>{{ date(inv.due_at) }}</td>
                                 <td class="num font-semibold text-ink-900">{{ money(inv.total, inv.currency) }}</td>
                                 <td><StatusBadge :status="invoiceStatus(inv)" /></td>
-                                <td class="text-right"><a v-if="inv.hosted_invoice_url" :href="inv.hosted_invoice_url" target="_blank" class="btn-secondary btn-sm"><Icon name="external" :size="14" /> Open</a></td>
+                                <td>
+                                    <div class="flex justify-end gap-1.5">
+                                        <button v-if="inv.status === 'open' && defaultCard" class="btn-dark btn-sm" @click="charge(inv)"><Icon name="card" :size="14" /> Charge •••• {{ defaultCard.last4 }}</button>
+                                        <a v-if="inv.hosted_invoice_url" :href="inv.hosted_invoice_url" target="_blank" class="btn-secondary btn-sm"><Icon name="external" :size="14" /> Open</a>
+                                    </div>
+                                </td>
                             </tr>
                         </tbody>
                     </table>

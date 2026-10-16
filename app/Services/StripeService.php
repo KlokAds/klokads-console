@@ -102,6 +102,107 @@ class StripeService
         ]);
     }
 
+    // ---------------------------------------------------------------- saved cards
+
+    /**
+     * The client's saved cards, default first. A lone card with no default becomes the default.
+     *
+     * @return array<int, array{id: string, brand: string, last4: string, exp_month: int, exp_year: int, is_default: bool}>
+     */
+    public function paymentMethods(Client $client): array
+    {
+        $customerId = $client->stripeCustomerId();
+        if (! $customerId) {
+            return [];
+        }
+
+        $stripe = $this->stripe();
+        $cards = $stripe->customers->allPaymentMethods($customerId, ['type' => 'card', 'limit' => 20])->data;
+        $default = $stripe->customers->retrieve($customerId)->invoice_settings?->default_payment_method;
+        $default = is_object($default) ? $default->id : $default;
+
+        if (! $default && count($cards) > 0) {
+            $default = $cards[0]->id;
+            $this->setDefaultPaymentMethod($client, $default);
+        }
+
+        return collect($cards)
+            ->map(fn ($pm) => [
+                'id' => $pm->id,
+                'brand' => $pm->card->brand,
+                'last4' => $pm->card->last4,
+                'exp_month' => $pm->card->exp_month,
+                'exp_year' => $pm->card->exp_year,
+                'is_default' => $pm->id === $default,
+            ])
+            ->sortByDesc('is_default')->values()->all();
+    }
+
+    /** Make a card the default for invoices and for the client's active recurring plans. */
+    public function setDefaultPaymentMethod(Client $client, string $paymentMethodId): void
+    {
+        $this->assertOwnsPaymentMethod($client, $paymentMethodId);
+        $stripe = $this->stripe();
+
+        $stripe->customers->update($client->stripeCustomerId(), [
+            'invoice_settings' => ['default_payment_method' => $paymentMethodId],
+        ]);
+
+        $client->plans()->whereIn('status', ['active', 'trialing', 'past_due', 'incomplete'])->each(
+            fn (RecurringPlan $plan) => $stripe->subscriptions->update($plan->stripe_subscription_id, ['default_payment_method' => $paymentMethodId])
+        );
+    }
+
+    public function removePaymentMethod(Client $client, string $paymentMethodId): void
+    {
+        $this->assertOwnsPaymentMethod($client, $paymentMethodId);
+        $wasDefault = collect($this->paymentMethods($client))->firstWhere('id', $paymentMethodId)['is_default'] ?? false;
+
+        $this->stripe()->paymentMethods->detach($paymentMethodId);
+
+        if ($wasDefault && ($next = $this->paymentMethods($client)[0]['id'] ?? null)) {
+            $this->setDefaultPaymentMethod($client, $next);
+        }
+    }
+
+    /** A secure Stripe page where the client saves a new card (valid 24 hours). */
+    public function cardSetupLink(Client $client, string $returnUrl): string
+    {
+        $session = $this->stripe()->checkout->sessions->create([
+            'mode' => 'setup',
+            'customer' => $this->ensureCustomer($client),
+            'currency' => $this->currency(),
+            'payment_method_types' => ['card'],
+            'success_url' => $returnUrl,
+            'cancel_url' => $returnUrl,
+            'metadata' => ['klok_client_id' => $client->id],
+        ]);
+
+        return $session->url;
+    }
+
+    /** Charge an open invoice to a saved card (the default when none is given). */
+    public function chargeInvoice(Invoice $invoice, ?string $paymentMethodId = null): Invoice
+    {
+        if ($paymentMethodId && $invoice->client) {
+            $this->assertOwnsPaymentMethod($invoice->client, $paymentMethodId);
+        }
+
+        $params = $paymentMethodId ? ['payment_method' => $paymentMethodId] : [];
+
+        return $this->upsertInvoice($this->stripe()->invoices->pay($invoice->stripe_invoice_id, $params));
+    }
+
+    private function assertOwnsPaymentMethod(Client $client, string $paymentMethodId): void
+    {
+        $pm = $this->stripe()->paymentMethods->retrieve($paymentMethodId);
+        $owner = is_object($pm->customer) ? $pm->customer->id : $pm->customer;
+
+        if (! $owner || $owner !== $client->stripeCustomerId()) {
+            throw new RuntimeException('That card does not belong to this client.');
+        }
+    }
+
     // ---------------------------------------------------------------- invoices
 
     /**

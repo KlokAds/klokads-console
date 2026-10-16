@@ -10,6 +10,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class ClientController extends Controller
 {
@@ -47,6 +48,19 @@ class ClientController extends Controller
             'expenses' => $client->expenses()->latest('spent_on')->limit(50)->get(),
             'serviceLabels' => Catalog::SERVICES,
             'categoryLabels' => Catalog::EXPENSE_CATEGORIES,
+            'stripeConnected' => StripeService::configured(),
+            // Loaded right after the page renders: listing cards is a Stripe API call.
+            'cards' => Inertia::defer(function () use ($client, $stripe) {
+                if (! StripeService::configured()) {
+                    return ['items' => [], 'error' => null];
+                }
+
+                try {
+                    return ['items' => $stripe->paymentMethods($client), 'error' => null];
+                } catch (Throwable $e) {
+                    return ['items' => [], 'error' => $e->getMessage()];
+                }
+            }),
         ]);
     }
 

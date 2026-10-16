@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CashflowController;
+use App\Http\Controllers\ClientCardController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
@@ -18,6 +19,8 @@ Route::redirect('/', '/dashboard');
 
 Route::post('/stripe/webhook', StripeWebhookController::class)->name('stripe.webhook');
 
+Route::get('/card-saved', [ClientCardController::class, 'saved'])->name('cards.saved');
+
 Route::prefix('install')->name('install.')->group(function () {
     Route::get('/', [InstallController::class, 'show'])->name('show');
     Route::post('/code', [InstallController::class, 'verifyCode'])->middleware('throttle:10,1')->name('code');
@@ -30,6 +33,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
     Route::resource('clients', ClientController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
+    Route::post('/clients/{client}/cards/link', [ClientCardController::class, 'link'])->name('clients.cards.link');
+    Route::post('/clients/{client}/cards/{paymentMethod}/default', [ClientCardController::class, 'makeDefault'])->name('clients.cards.default');
+    Route::delete('/clients/{client}/cards/{paymentMethod}', [ClientCardController::class, 'destroy'])->name('clients.cards.destroy');
+    Route::post('/invoices/{invoice}/charge', [ClientCardController::class, 'charge'])->name('invoices.charge');
 
     Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
     Route::get('/invoices/create', [InvoiceController::class, 'create'])->name('invoices.create');
