@@ -60,6 +60,34 @@ class ClientCardTest extends TestCase
         $this->from("/clients/{$this->client->id}")->post("/invoices/{$invoice->id}/charge")->assertSessionHas('success');
     }
 
+    public function test_charge_now_needs_confirmation_and_sends_cents(): void
+    {
+        $mock = $this->mock(StripeService::class, function (MockInterface $m) {
+            $m->shouldReceive('currency')->andReturn('usd');
+        });
+
+        $this->from("/clients/{$this->client->id}")->post("/clients/{$this->client->id}/charge", ['amount' => '50', 'description' => 'Extra budget'])
+            ->assertSessionHasErrors('confirm');
+
+        $mock->shouldReceive('chargeNow')->once()
+            ->withArgs(fn ($c, $amount, $desc, $service, $pm) => $c->is($this->client) && $amount === 12550 && $desc === 'Extra budget' && $service === 'meta_ads' && $pm === 'pm_2')
+            ->andReturn(new Invoice);
+
+        $this->from("/clients/{$this->client->id}")->post("/clients/{$this->client->id}/charge", [
+            'amount' => '125.50', 'description' => 'Extra budget', 'service' => 'meta_ads', 'payment_method' => 'pm_2', 'confirm' => '1',
+        ])->assertSessionHas('success');
+    }
+
+    public function test_enter_card_now_sends_the_admin_to_stripe(): void
+    {
+        $this->mock(StripeService::class, fn (MockInterface $m) => $m->shouldReceive('cardSetupLink')
+            ->once()->withArgs(fn ($c, $url) => str_contains($url, "/clients/{$this->client->id}?card=added"))
+            ->andReturn('https://checkout.stripe.com/c/pay/cs_test_2'));
+
+        $this->post("/clients/{$this->client->id}/cards/enter", [], ['X-Inertia' => 'true'])
+            ->assertStatus(409)->assertHeader('X-Inertia-Location', 'https://checkout.stripe.com/c/pay/cs_test_2');
+    }
+
     public function test_the_card_saved_page_is_public(): void
     {
         auth()->logout();

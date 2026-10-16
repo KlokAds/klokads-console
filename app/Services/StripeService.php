@@ -181,6 +181,45 @@ class StripeService
         return $session->url;
     }
 
+    /**
+     * Charge a saved card right away for any amount. Creates a finalized invoice so the
+     * charge has a number, a receipt and shows up in every total.
+     */
+    public function chargeNow(Client $client, int $amount, string $description, ?string $service = null, ?string $paymentMethodId = null): Invoice
+    {
+        $stripe = $this->stripe();
+        $customer = $this->ensureCustomer($client);
+        $paymentMethodId ??= collect($this->paymentMethods($client))->firstWhere('is_default', true)['id'] ?? null;
+
+        if (! $paymentMethodId) {
+            throw new RuntimeException('This client has no saved card yet.');
+        }
+
+        $this->assertOwnsPaymentMethod($client, $paymentMethodId);
+
+        $invoice = $stripe->invoices->create([
+            'customer' => $customer,
+            'collection_method' => 'charge_automatically',
+            'auto_advance' => false,
+            'currency' => $this->currency(),
+            'description' => $description,
+            'pending_invoice_items_behavior' => 'exclude',
+            'metadata' => ['klok_client_id' => $client->id, 'service' => $service ?? '', 'charged_from' => 'klokads-console'],
+        ]);
+
+        $stripe->invoiceItems->create([
+            'customer' => $customer,
+            'invoice' => $invoice->id,
+            'currency' => $this->currency(),
+            'amount' => $amount,
+            'description' => $description,
+        ]);
+
+        $stripe->invoices->finalizeInvoice($invoice->id, ['auto_advance' => false]);
+
+        return $this->upsertInvoice($stripe->invoices->pay($invoice->id, ['payment_method' => $paymentMethodId]));
+    }
+
     /** Charge an open invoice to a saved card (the default when none is given). */
     public function chargeInvoice(Invoice $invoice, ?string $paymentMethodId = null): Invoice
     {

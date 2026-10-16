@@ -80,7 +80,7 @@ function destroy() {
         </div>
 
         <div class="mt-5">
-            <ClientCards :client="client" :cards="cards ?? null" :connected="stripeConnected" />
+            <ClientCards :client="client" :cards="cards ?? null" :connected="stripeConnected" :currency="currency" :service-labels="serviceLabels" />
         </div>
 
         <div class="card mt-5">

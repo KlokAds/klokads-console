@@ -34,6 +34,8 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('clients', ClientController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
     Route::post('/clients/{client}/cards/link', [ClientCardController::class, 'link'])->name('clients.cards.link');
+    Route::post('/clients/{client}/cards/enter', [ClientCardController::class, 'enter'])->name('clients.cards.enter');
+    Route::post('/clients/{client}/charge', [ClientCardController::class, 'chargeNow'])->name('clients.charge');
     Route::post('/clients/{client}/cards/{paymentMethod}/default', [ClientCardController::class, 'makeDefault'])->name('clients.cards.default');
     Route::delete('/clients/{client}/cards/{paymentMethod}', [ClientCardController::class, 'destroy'])->name('clients.cards.destroy');
     Route::post('/invoices/{invoice}/charge', [ClientCardController::class, 'charge'])->name('invoices.charge');
