@@ -386,7 +386,7 @@ const marginPct = (s) => (s.revenue ? Math.round((s.margin / s.revenue) * 100) :
             <div class="card">
                 <div class="card-head">
                     <div class="card-title">Payouts to bank</div>
-                    <Link :href="route('cashflow.index', { kind: 'payouts', period: 'all' })" class="btn-link text-xs">Ledger →</Link>
+                    <Link :href="route('payouts.index')" class="btn-link text-xs">Payouts →</Link>
                 </div>
                 <ul v-if="recentPayouts.length" class="divide-y divide-line/70">
                     <li v-for="p in recentPayouts" :key="p.id" class="flex items-center gap-3 px-5 py-3.5 sm:px-6">

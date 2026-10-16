@@ -7,6 +7,7 @@ use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\PaymentLinkController;
+use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecurringPlanController;
 use App\Http\Controllers\SettingsController;
@@ -47,6 +48,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/payment-links/{paymentLink}/toggle', [PaymentLinkController::class, 'toggle'])->name('payment-links.toggle');
 
     Route::resource('expenses', ExpenseController::class)->only(['index', 'store', 'update', 'destroy']);
+
+    Route::get('/payouts', [PayoutController::class, 'index'])->name('payouts.index');
+    Route::post('/payouts', [PayoutController::class, 'store'])->name('payouts.store');
+    Route::post('/payouts/schedule', [PayoutController::class, 'updateSchedule'])->name('payouts.schedule');
 
     Route::get('/cashflow', [CashflowController::class, 'index'])->name('cashflow.index');
     Route::get('/cashflow/export', [CashflowController::class, 'export'])->name('cashflow.export');

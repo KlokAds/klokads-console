@@ -23,6 +23,7 @@ const sections = [
         items: [
             { name: 'Dashboard', route: 'dashboard', match: 'dashboard', icon: 'home' },
             { name: 'Cashflow', route: 'cashflow.index', match: 'cashflow.*', icon: 'flow' },
+            { name: 'Payouts', route: 'payouts.index', match: 'payouts.*', icon: 'bank' },
         ],
     },
     {

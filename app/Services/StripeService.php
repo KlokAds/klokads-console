@@ -341,6 +341,71 @@ class StripeService
         $link->update(['active' => $active]);
     }
 
+    // ---------------------------------------------------------------- payouts
+
+    public const PAYOUT_INTERVALS = ['daily', 'weekly', 'monthly', 'manual'];
+
+    public const PAYOUT_WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
+    /**
+     * The account's payout schedule and status, straight from Stripe.
+     *
+     * @return array{interval: ?string, weekly_days: array<int, string>, monthly_days: array<int, int>, status: ?string, delay_days: ?int}
+     */
+    public function payoutSettings(): array
+    {
+        $payments = $this->stripe()->balanceSettings->retrieve()->payments;
+        $schedule = $payments->payouts?->schedule;
+
+        return [
+            'interval' => $schedule?->interval,
+            'weekly_days' => array_values((array) ($schedule?->weekly_payout_days ?? [])),
+            'monthly_days' => array_map('intval', array_values((array) ($schedule?->monthly_payout_days ?? []))),
+            'status' => $payments->payouts?->status,
+            'delay_days' => $payments->settlement_timing?->delay_days,
+        ];
+    }
+
+    /** Change when Stripe pays out automatically, or switch to manual payouts. */
+    public function updatePayoutSchedule(string $interval, ?string $weekday = null, ?int $monthDay = null): array
+    {
+        $schedule = ['interval' => $interval];
+
+        if ($interval === 'weekly') {
+            $schedule['weekly_payout_days'] = [$weekday ?? 'monday'];
+        }
+
+        if ($interval === 'monthly') {
+            $schedule['monthly_payout_days'] = [$monthDay ?? 1];
+        }
+
+        $this->stripe()->balanceSettings->update(['payments' => ['payouts' => ['schedule' => $schedule]]]);
+
+        return $this->payoutSettings();
+    }
+
+    /** Available balance in one currency, read fresh (never cached) before paying out. */
+    public function availableBalance(string $currency): int
+    {
+        return (int) collect($this->stripe()->balance->retrieve()->available)
+            ->where('currency', strtolower($currency))->sum('amount');
+    }
+
+    /** Send money from the Stripe balance to the bank now. Only allowed on a manual schedule. */
+    public function createPayout(int $amount, string $currency, ?string $description = null): Payout
+    {
+        $payout = $this->stripe()->payouts->create(array_filter([
+            'amount' => $amount,
+            'currency' => strtolower($currency),
+            'description' => $description,
+            'metadata' => ['created_from' => 'klokads-console'],
+        ]));
+
+        self::forgetBalance();
+
+        return $this->upsertPayout($payout);
+    }
+
     // ---------------------------------------------------------------- balance & sync
 
     /** Live Stripe balance, cached briefly. */
@@ -475,9 +540,9 @@ class StripeService
         return $n;
     }
 
-    public function upsertPayout(\Stripe\Payout $p): void
+    public function upsertPayout(\Stripe\Payout $p): Payout
     {
-        Payout::updateOrCreate(['stripe_payout_id' => $p->id], [
+        return Payout::updateOrCreate(['stripe_payout_id' => $p->id], [
             'amount' => $p->amount,
             'currency' => $p->currency,
             'status' => $p->status,
