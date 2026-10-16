@@ -4,6 +4,7 @@ use App\Http\Controllers\CashflowController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\InstallController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\PaymentLinkController;
 use App\Http\Controllers\ProfileController;
@@ -15,6 +16,14 @@ use Illuminate\Support\Facades\Route;
 Route::redirect('/', '/dashboard');
 
 Route::post('/stripe/webhook', StripeWebhookController::class)->name('stripe.webhook');
+
+Route::prefix('install')->name('install.')->group(function () {
+    Route::get('/', [InstallController::class, 'show'])->name('show');
+    Route::post('/code', [InstallController::class, 'verifyCode'])->middleware('throttle:10,1')->name('code');
+    Route::post('/database', [InstallController::class, 'database'])->name('database');
+    Route::post('/admin', [InstallController::class, 'admin'])->name('admin');
+    Route::post('/business', [InstallController::class, 'business'])->name('business');
+});
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Setting;
+use App\Support\Installer;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -30,13 +31,16 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        // Before installation there is no database to read settings from.
+        $installed = Installer::isInstalled();
+
         return [
             ...parent::share($request),
             'auth' => [
                 'user' => $request->user(),
             ],
-            'appName' => Setting::get('business_name', 'Klok Ads'),
-            'stripeStatus' => fn () => [
+            'appName' => $installed ? Setting::get('business_name', 'Klok Ads') : 'Klok Ads',
+            'stripeStatus' => fn () => ! $installed ? [] : [
                 'mode' => ($key = Setting::get('stripe_secret')) ? (str_contains($key, '_live_') ? 'live' : 'test') : null,
                 'lastSyncAt' => Setting::get('last_sync_at'),
             ],

@@ -3,6 +3,7 @@
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\StripeService;
+use App\Support\Installer;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schedule;
@@ -40,5 +41,16 @@ Artisan::command('klok:admin {email} {--name=Admin} {--password= : Leave empty t
         $this->line("Password: {$password}");
     }
 })->purpose('Create or reset the dashboard admin login');
+
+Artisan::command('klok:install-code', function () {
+    if (Installer::isInstalled()) {
+        $this->warn('Already installed — the web installer is closed.');
+
+        return;
+    }
+
+    $this->line('Setup code for '.config('app.url').'/install :');
+    $this->info(Installer::setupCode());
+})->purpose('Show the one-time code the web installer asks for');
 
 Schedule::command('klok:sync')->everyFifteenMinutes()->withoutOverlapping();
