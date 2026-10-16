@@ -137,7 +137,9 @@ class InstallController extends Controller
 
             // Stored encrypted (see Setting::SECRET), never hashed: the app must send it to Stripe.
             Setting::put('stripe_secret', $data['stripe_secret']);
+            Setting::put('stripe_mode', str_contains($data['stripe_secret'], '_live_') ? 'live' : 'test');
             Setting::put('stripe_account_name', $account->settings?->dashboard?->display_name ?: $account->email ?: $account->id);
+            Setting::put('currency', strtolower($account->default_currency ?: $data['currency']));
         }
 
         Installer::markInstalled();

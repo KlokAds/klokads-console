@@ -116,8 +116,11 @@ function disconnect() {
                     </div>
                     <div>
                         <label class="label">Reporting currency</label>
-                        <input v-model="businessForm.currency" maxlength="3" class="input uppercase" />
-                        <div class="hint">Match your Stripe settlement currency (SGD for a Singapore account).</div>
+                        <input v-model="businessForm.currency" maxlength="3" class="input uppercase" :disabled="business.currencyFromStripe" :class="{ 'cursor-not-allowed bg-ink-50 text-ink-500': business.currencyFromStripe }" />
+                        <div class="hint">
+                            <template v-if="business.currencyFromStripe">Set automatically from your Stripe account's default currency.</template>
+                            <template v-else>Used until Stripe is connected — then it follows your Stripe account.</template>
+                        </div>
                     </div>
                 </div>
                 <div class="flex justify-end border-t border-line bg-ink-50/60 px-6 py-4">

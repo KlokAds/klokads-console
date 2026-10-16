@@ -13,6 +13,7 @@ import { ref } from 'vue';
 
 const props = defineProps({
     client: Object,
+    stripeCustomerId: String,
     currency: String,
     totals: Object,
     invoices: Array,
@@ -48,7 +49,7 @@ function destroy() {
                     <a :href="`mailto:${client.email}`" class="flex items-center gap-1.5 hover:text-brand-700"><Icon name="send" :size="14" /> {{ client.email }}</a>
                     <span v-if="client.phone">{{ client.phone }}</span>
                     <span>{{ client.country }}</span>
-                    <span v-if="client.stripe_customer_id" class="font-mono text-xs text-ink-400">{{ client.stripe_customer_id }}</span>
+                    <span v-if="stripeCustomerId" class="font-mono text-xs text-ink-400">{{ stripeCustomerId }}</span>
                 </div>
                 <p v-if="client.notes" class="mt-2 max-w-2xl text-sm text-ink-600">{{ client.notes }}</p>
             </div>

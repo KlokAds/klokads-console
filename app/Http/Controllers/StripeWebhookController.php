@@ -6,7 +6,6 @@ use App\Models\Setting;
 use App\Services\StripeService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Cache;
 use Stripe\Exception\SignatureVerificationException;
 use Stripe\Invoice;
 use Stripe\Payout;
@@ -47,7 +46,7 @@ class StripeWebhookController extends Controller
         // Money moved: pull the latest balance transactions (fees, nets) and refresh the balance.
         if (str_starts_with($type, 'charge.') || str_starts_with($type, 'payout.') || $type === 'balance.available' || $type === 'invoice.paid') {
             $stripe->syncTransactions(now()->subDays(3));
-            Cache::forget('stripe_balance');
+            StripeService::forgetBalance();
         }
 
         return response('ok');

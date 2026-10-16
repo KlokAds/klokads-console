@@ -217,6 +217,13 @@ router.on('navigate', () => {
                 </div>
             </header>
 
+            <div v-if="stripe.mode === 'test'" class="border-b border-amber-200 bg-amber-50">
+                <div class="mx-auto flex max-w-[1400px] items-center gap-2 px-4 py-2 text-xs text-amber-800 sm:px-8">
+                    <span class="badge bg-amber-200/70 text-amber-900">Test mode</span>
+                    You're seeing Stripe <b>test</b> data only — no real money. Live payments appear here once a live key is saved in Settings.
+                </div>
+            </div>
+
             <main class="mx-auto max-w-[1400px] px-4 py-6 sm:px-8 sm:py-8">
                 <slot />
             </main>

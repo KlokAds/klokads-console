@@ -25,6 +25,30 @@ class StripeService
         return (bool) Setting::get('stripe_secret');
     }
 
+    /**
+     * Whether the dashboard works with live-mode data. Follows the connected key;
+     * after a disconnect it keeps the last mode so history stays visible.
+     */
+    public static function isLive(): bool
+    {
+        if ($key = Setting::get('stripe_secret')) {
+            return str_contains($key, '_live_');
+        }
+
+        return Setting::get('stripe_mode') === 'live';
+    }
+
+    private static function balanceCacheKey(): string
+    {
+        return 'stripe_balance_'.(self::isLive() ? 'live' : 'test');
+    }
+
+    public static function forgetBalance(): void
+    {
+        Cache::forget('stripe_balance_live');
+        Cache::forget('stripe_balance_test');
+    }
+
     public function stripe(): StripeClient
     {
         if ($this->client) {
@@ -48,8 +72,8 @@ class StripeService
 
     public function ensureCustomer(Client $client): string
     {
-        if ($client->stripe_customer_id) {
-            return $client->stripe_customer_id;
+        if ($existing = $client->stripeCustomerId()) {
+            return $existing;
         }
 
         $customer = $this->stripe()->customers->create([
@@ -60,18 +84,18 @@ class StripeService
             'metadata' => ['klok_client_id' => $client->id, 'contact' => $client->name],
         ]);
 
-        $client->update(['stripe_customer_id' => $customer->id]);
+        $client->update([Client::customerColumn() => $customer->id]);
 
         return $customer->id;
     }
 
     public function updateCustomer(Client $client): void
     {
-        if (! $client->stripe_customer_id) {
+        if (! $client->stripeCustomerId()) {
             return;
         }
 
-        $this->stripe()->customers->update($client->stripe_customer_id, [
+        $this->stripe()->customers->update($client->stripeCustomerId(), [
             'name' => $client->company ?: $client->name,
             'email' => $client->email,
             'phone' => $client->phone,
@@ -101,7 +125,7 @@ class StripeService
         foreach ($items as $item) {
             $qty = max(1, (int) $item['quantity']);
             $stripe->invoiceItems->create([
-                'customer' => $client->stripe_customer_id,
+                'customer' => $client->stripeCustomerId(),
                 'invoice' => $invoice->id,
                 'currency' => $currency,
                 'amount' => $item['amount'] * $qty,
@@ -153,7 +177,7 @@ class StripeService
 
         $clientId = $si->metadata['klok_client_id'] ?? null
             ?: $plan?->client_id
-            ?: Client::where('stripe_customer_id', $customerId)->value('id');
+            ?: Client::findByStripeCustomer($customerId)?->id;
 
         $service = ($si->metadata['service'] ?? null) ?: $plan?->service;
 
@@ -326,7 +350,7 @@ class StripeService
             return null;
         }
 
-        return Cache::remember('stripe_balance', 300, function () {
+        return Cache::remember(self::balanceCacheKey(), 300, function () {
             $b = $this->stripe()->balance->retrieve();
             $sum = fn ($list) => collect($list)->groupBy('currency')
                 ->map(fn ($rows) => $rows->sum('amount'))->all();
@@ -342,6 +366,8 @@ class StripeService
         $from = $since ? Carbon::parse($since)->subDays(2) : now()->subDays($days);
         $startedAt = now();
 
+        $this->syncAccount();
+
         $counts = [
             'invoices' => $this->syncInvoices($from),
             'transactions' => $this->syncTransactions($from),
@@ -350,9 +376,22 @@ class StripeService
         ];
 
         Setting::put('last_sync_at', $startedAt->toIso8601String());
-        Cache::forget('stripe_balance');
+        self::forgetBalance();
 
         return $counts;
+    }
+
+    /** Keep the reporting currency, account name and mode in step with the Stripe account. */
+    public function syncAccount(): void
+    {
+        $account = $this->stripe()->accounts->retrieve();
+
+        if ($account->default_currency) {
+            Setting::put('currency', strtolower($account->default_currency));
+        }
+
+        Setting::put('stripe_account_name', $account->settings?->dashboard?->display_name ?: $account->email ?: $account->id);
+        Setting::put('stripe_mode', self::isLive() ? 'live' : 'test');
     }
 
     public function syncInvoices(Carbon $from): int
@@ -400,7 +439,7 @@ class StripeService
             $customer = $source->customer ?? null;
             $customer = is_object($customer) ? $customer->id : $customer;
             if (! $clientId && $customer) {
-                $clientId = Client::where('stripe_customer_id', $customer)->value('id');
+                $clientId = Client::findByStripeCustomer($customer)?->id;
             }
             $method = $source->payment_method_details->type ?? null;
             if ($method === 'card' && isset($source->payment_method_details->card->brand)) {

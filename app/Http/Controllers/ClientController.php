@@ -38,6 +38,7 @@ class ClientController extends Controller
 
         return Inertia::render('Clients/Show', [
             'client' => $client,
+            'stripeCustomerId' => $client->stripeCustomerId(),
             'currency' => $stripe->currency(),
             'totals' => $row ?? ['revenue' => 0, 'fees' => 0, 'spend' => 0, 'profit' => 0, 'outstanding' => 0],
             'invoices' => $client->invoices()->latest('issued_at')->get(),

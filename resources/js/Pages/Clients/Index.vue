@@ -57,7 +57,7 @@ const totals = computed(() => ({
                                     <Avatar :name="c.company || c.name" :size="36" />
                                     <span>
                                         <span class="block font-semibold text-ink-900 hover:text-brand-700">{{ c.company || c.name }}</span>
-                                        <span class="block text-xs text-ink-500">{{ c.country }}<template v-if="c.stripe_customer_id"> · Stripe linked</template></span>
+                                        <span class="block text-xs text-ink-500">{{ c.country }}<template v-if="c.stripe_customer_id || c.stripe_test_customer_id"> · Stripe linked</template></span>
                                     </span>
                                 </Link>
                             </td>

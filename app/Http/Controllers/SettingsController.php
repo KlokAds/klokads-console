@@ -36,6 +36,7 @@ class SettingsController extends Controller
             'business' => [
                 'name' => Setting::get('business_name', 'Klok Ads'),
                 'currency' => Setting::get('currency', 'sgd'),
+                'currencyFromStripe' => (bool) $secret,
             ],
         ]);
     }
@@ -57,10 +58,12 @@ class SettingsController extends Controller
             }
 
             Setting::put('stripe_secret', $data['stripe_secret']);
+            Setting::put('stripe_mode', str_contains($data['stripe_secret'], '_live_') ? 'live' : 'test');
             Setting::put('stripe_account_name', $account->settings?->dashboard?->display_name ?: $account->email ?: $account->id);
-            Setting::put('currency', $account->default_currency ?: 'sgd');
+            // The reporting currency always follows the Stripe account's default currency.
+            Setting::put('currency', strtolower($account->default_currency ?: 'sgd'));
             Setting::put('last_sync_at', null);
-            Cache::forget('stripe_balance');
+            StripeService::forgetBalance();
         }
 
         if (filled($data['stripe_webhook_secret'] ?? null)) {
@@ -75,20 +78,26 @@ class SettingsController extends Controller
         foreach (['stripe_secret', 'stripe_webhook_secret', 'stripe_account_name', 'last_sync_at'] as $key) {
             Setting::put($key, null);
         }
-        Cache::forget('stripe_balance');
+        StripeService::forgetBalance();
 
         return back()->with('success', 'Stripe disconnected. Synced history is kept.');
     }
 
     public function updateBusiness(Request $request): RedirectResponse
     {
+        $connected = StripeService::configured();
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
-            'currency' => ['required', 'string', 'size:3'],
+            'currency' => [$connected ? 'nullable' : 'required', 'string', 'size:3'],
         ]);
 
         Setting::put('business_name', $data['name']);
-        Setting::put('currency', strtolower($data['currency']));
+
+        // While Stripe is connected the currency comes from the Stripe account.
+        if (! $connected) {
+            Setting::put('currency', strtolower($data['currency']));
+        }
 
         return back()->with('success', 'Business settings saved.');
     }

@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasStripeMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class RecurringPlan extends Model
 {
+    use HasStripeMode;
+
     protected $guarded = [];
 
     protected $casts = ['current_period_end' => 'datetime'];

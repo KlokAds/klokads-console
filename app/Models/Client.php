@@ -2,12 +2,34 @@
 
 namespace App\Models;
 
+use App\Services\StripeService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Client extends Model
 {
-    protected $fillable = ['name', 'company', 'email', 'phone', 'country', 'stripe_customer_id', 'notes'];
+    protected $fillable = ['name', 'company', 'email', 'phone', 'country', 'stripe_customer_id', 'stripe_test_customer_id', 'notes'];
+
+    /** The Stripe customer column for the mode of the connected key (test and live customers differ). */
+    public static function customerColumn(): string
+    {
+        return StripeService::isLive() ? 'stripe_customer_id' : 'stripe_test_customer_id';
+    }
+
+    public function stripeCustomerId(): ?string
+    {
+        return $this->{self::customerColumn()};
+    }
+
+    /** Find a client by a Stripe customer ID from either mode. */
+    public static function findByStripeCustomer(?string $customerId): ?self
+    {
+        if (! $customerId) {
+            return null;
+        }
+
+        return static::where('stripe_customer_id', $customerId)->orWhere('stripe_test_customer_id', $customerId)->first();
+    }
 
     public function invoices(): HasMany
     {
