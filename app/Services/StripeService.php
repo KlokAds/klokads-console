@@ -13,6 +13,7 @@ use App\Support\Business;
 use App\Support\Pricing;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\URL;
 use RuntimeException;
 use Stripe\BalanceTransaction;
 use Stripe\StripeClient;
@@ -119,7 +120,7 @@ class StripeService
         }
 
         $stripe = $this->stripe();
-        $cards = $stripe->customers->allPaymentMethods($customerId, ['type' => 'card', 'limit' => 20])->data;
+        $cards = $stripe->customers->allPaymentMethods($customerId, ['limit' => 20])->data;
         $default = $stripe->customers->retrieve($customerId)->invoice_settings?->default_payment_method;
         $default = is_object($default) ? $default->id : $default;
 
@@ -129,15 +130,29 @@ class StripeService
         }
 
         return collect($cards)
-            ->map(fn ($pm) => [
-                'id' => $pm->id,
-                'brand' => $pm->card->brand,
-                'last4' => $pm->card->last4,
-                'exp_month' => $pm->card->exp_month,
-                'exp_year' => $pm->card->exp_year,
-                'is_default' => $pm->id === $default,
-            ])
+            ->map(fn ($pm) => self::describePaymentMethod($pm) + ['is_default' => $pm->id === $default])
             ->sortByDesc('is_default')->values()->all();
+    }
+
+    /**
+     * Card, Link, bank account, wallet… as one shape for the saved-methods list.
+     *
+     * @return array{id: string, type: string, brand: string, last4: ?string, exp_month: ?int, exp_year: ?int, detail: ?string}
+     */
+    public static function describePaymentMethod(object $pm): array
+    {
+        $type = $pm->type;
+        $info = $pm->{$type} ?? null;
+
+        return [
+            'id' => $pm->id,
+            'type' => $type,
+            'brand' => $type === 'card' ? $info->brand : $type,
+            'last4' => $info->last4 ?? null,
+            'exp_month' => $type === 'card' ? $info->exp_month : null,
+            'exp_year' => $type === 'card' ? $info->exp_year : null,
+            'detail' => $info->bank_name ?? $info->email ?? $info->cashtag ?? null,
+        ];
     }
 
     /** Make a card the default for invoices and for the client's active recurring plans. */
@@ -177,21 +192,26 @@ class StripeService
         }
     }
 
-    /** A secure Stripe page where the client saves a new card (valid 24 hours). */
-    public function cardSetupLink(Client $client, string $returnUrl): string
+    /**
+     * Secret for saving a new card on OUR pages (admin popup or the client's add-card link).
+     * The card box there is Stripe's secure field, so card numbers never reach our server.
+     */
+    public function cardSetupSecret(Client $client): string
     {
-        // Which payment methods appear is managed in the Stripe Dashboard (dynamic payment
-        // methods); the API no longer accepts payment_method_types here.
-        $session = $this->stripe()->checkout->sessions->create([
-            'mode' => 'setup',
+        $intent = $this->stripe()->setupIntents->create([
             'customer' => $this->ensureCustomer($client),
-            'currency' => $this->currency(),
-            'success_url' => $returnUrl,
-            'cancel_url' => $returnUrl,
+            'usage' => 'off_session',
+            'automatic_payment_methods' => ['enabled' => true],
             'metadata' => ['klok_client_id' => $client->id],
         ]);
 
-        return $session->url;
+        return $intent->client_secret;
+    }
+
+    /** Our own, branded add-card link for the client (valid 7 days). */
+    public static function cardLink(Client $client): string
+    {
+        return URL::temporarySignedRoute('public.card', now()->addDays(7), ['client' => $client->id]);
     }
 
     /**

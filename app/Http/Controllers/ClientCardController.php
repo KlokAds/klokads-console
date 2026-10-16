@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\Invoice;
+use App\Models\Setting;
 use App\Services\StripeService;
+use App\Support\Business;
 use App\Support\Catalog;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -13,32 +16,56 @@ use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
 use Stripe\Exception\ApiErrorException;
-use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
+use Throwable;
 
 /**
- * A client's saved cards: add (Stripe-hosted page), make default, remove, charge an invoice.
+ * A client's saved cards: add (our own card form), make default, remove, charge an invoice.
  */
 class ClientCardController extends Controller
 {
-    /** Create a Stripe page link the client opens to save a card. */
+    /** Our own branded link where the client adds a card (valid 7 days). */
     public function link(Client $client, StripeService $stripe): RedirectResponse
     {
         return $this->stripeAction(function () use ($client, $stripe) {
-            $url = $stripe->cardSetupLink($client, route('cards.saved'));
-            session()->flash('card_link', $url);
-        }, 'Card link ready — send it to the client (valid for 24 hours).');
+            $stripe->ensureCustomer($client);
+            session()->flash('card_link', StripeService::cardLink($client));
+        }, 'Card link ready — send it to the client (valid for 7 days).');
     }
 
-    /** Admin enters the card on Stripe's page, then comes back to the client page. */
-    public function enter(Client $client, StripeService $stripe): SymfonyResponse
+    /** Secret for the card popup inside the console ("Enter card now"). */
+    public function enter(Client $client, StripeService $stripe): JsonResponse
     {
-        try {
-            $url = $stripe->cardSetupLink($client, route('clients.show', ['client' => $client, 'card' => 'added']));
-        } catch (ApiErrorException|RuntimeException $e) {
-            return back()->with('error', 'Stripe: '.$e->getMessage());
+        if (! Setting::get('stripe_publishable')) {
+            return response()->json(['message' => 'Add your Stripe publishable key in Settings → Stripe & payments first.'], 422);
         }
 
-        return Inertia::location($url);
+        try {
+            return response()->json([
+                'client_secret' => $stripe->cardSetupSecret($client),
+                'publishable_key' => Setting::get('stripe_publishable'),
+            ]);
+        } catch (ApiErrorException|RuntimeException $e) {
+            return response()->json(['message' => 'Stripe: '.$e->getMessage()], 422);
+        }
+    }
+
+    /** Client-facing add-card page on our domain (signed, expiring link). */
+    public function publicPage(Client $client, StripeService $stripe): Response
+    {
+        $secret = null;
+        $error = null;
+
+        try {
+            $secret = Setting::get('stripe_publishable') ? $stripe->cardSetupSecret($client) : null;
+        } catch (Throwable) {
+            $error = 'Saving a card is temporarily unavailable. Please try again shortly.';
+        }
+
+        return Inertia::render('Public/AddCard', [
+            'client' => ['name' => $client->name, 'company' => $client->company, 'email' => $client->email],
+            'business' => Business::profile(),
+            'setup' => ['client_secret' => $secret, 'publishable_key' => Setting::get('stripe_publishable'), 'error' => $error],
+        ]);
     }
 
     /** Charge a saved card now for any amount (e.g. when the client asks). */

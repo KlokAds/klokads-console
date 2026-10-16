@@ -23,8 +23,9 @@ Route::post('/stripe/webhook', StripeWebhookController::class)->name('stripe.web
 
 Route::get('/card-saved', [ClientCardController::class, 'saved'])->name('cards.saved');
 
-// Client-facing invoice / receipt pages (secret link per invoice).
+// Client-facing invoice / receipt pages (secret link per invoice) and add-card page (signed link).
 Route::middleware('throttle:60,1')->group(function () {
+    Route::get('/card/{client}', [ClientCardController::class, 'publicPage'])->middleware('signed')->name('public.card');
     Route::get('/i/{token}', [PublicInvoiceController::class, 'show'])->name('public.invoice');
     Route::get('/i/{token}/pdf', [PublicInvoiceController::class, 'pdf'])->name('public.invoice.pdf');
 });

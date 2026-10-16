@@ -2,6 +2,7 @@
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Icon from '@/Components/Icon.vue';
 import { money } from '@/money';
+import { appearance, loadStripeJs } from '@/stripe';
 import { Head, router } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
 
@@ -29,17 +30,6 @@ const payError = ref(props.payment.error);
 let stripe = null;
 let elements = null;
 
-function loadStripeJs() {
-    if (window.Stripe) return Promise.resolve(window.Stripe);
-    return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = 'https://js.stripe.com/v3/';
-        s.onload = () => resolve(window.Stripe);
-        s.onerror = () => reject(new Error('Could not load the secure payment form.'));
-        document.head.appendChild(s);
-    });
-}
-
 onMounted(async () => {
     if (!canPay.value) return;
     try {
@@ -47,10 +37,7 @@ onMounted(async () => {
         stripe = Stripe(props.payment.publishable_key);
         elements = stripe.elements({
             clientSecret: props.payment.client_secret,
-            appearance: {
-                theme: 'stripe',
-                variables: { colorPrimary: '#5b45e8', colorText: '#131729', borderRadius: '12px', fontFamily: 'Inter, system-ui, sans-serif' },
-            },
+            appearance,
         });
         const el = elements.create('payment', { layout: 'tabs' });
         el.on('ready', () => (ready.value = true));

@@ -3,6 +3,7 @@ import CopyButton from '@/Components/CopyButton.vue';
 import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
 import BudgetFields from '@/Components/BudgetFields.vue';
+import SavePaymentMethod from '@/Components/SavePaymentMethod.vue';
 import StatementField from '@/Components/StatementField.vue';
 import { confirmDialog } from '@/confirm';
 import { money } from '@/money';
@@ -19,17 +20,47 @@ const props = defineProps({
     serviceLabels: { type: Object, default: () => ({}) },
 });
 
-const BRAND = { visa: 'Visa', mastercard: 'Mastercard', amex: 'Amex', unionpay: 'UnionPay', jcb: 'JCB', discover: 'Discover' };
+const BRAND = {
+    visa: 'Visa', mastercard: 'Mastercard', amex: 'Amex', unionpay: 'UnionPay', jcb: 'JCB', discover: 'Discover',
+    link: 'Link', us_bank_account: 'Bank', cashapp: 'Cash App', sepa_debit: 'SEPA', paypal: 'PayPal', amazon_pay: 'Amazon Pay',
+};
 const busy = ref(null);
 const link = computed(() => usePage().props.flash?.card_link);
-const justAdded = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('card') === 'added';
+const query = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+const justAdded = ref(query.get('card') === 'added' || query.get('redirect_status') === 'succeeded');
 const items = computed(() => props.cards?.items ?? []);
-const label = (c) => `${BRAND[c.brand] ?? c.brand} •••• ${c.last4}`;
+const brandName = (c) => BRAND[c.brand] ?? c.brand.replace(/_/g, ' ');
+const label = (c) => (c.last4 ? `${brandName(c)} •••• ${c.last4}` : c.detail ? `${brandName(c)} · ${c.detail}` : brandName(c));
 
 const opts = (id) => ({ preserveScroll: true, onStart: () => (busy.value = id), onFinish: () => (busy.value = null) });
 
 const sendLink = () => router.post(route('clients.cards.link', props.client.id), {}, opts('link'));
-const enterNow = () => router.post(route('clients.cards.enter', props.client.id), {}, opts('enter'));
+// Enter card now: Stripe's secure form in a popup on our page.
+const setup = ref(null);
+const setupError = ref(null);
+async function enterNow() {
+    busy.value = 'enter';
+    setupError.value = null;
+    try {
+        const xsrf = decodeURIComponent(document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/)?.[1] ?? '');
+        const res = await fetch(route('clients.cards.enter', props.client.id), {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'X-XSRF-TOKEN': xsrf, 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message);
+        setup.value = data;
+    } catch (e) {
+        setupError.value = e.message || 'Could not open the card form.';
+    } finally {
+        busy.value = null;
+    }
+}
+function onSaved() {
+    setup.value = null;
+    justAdded.value = true;
+    router.reload({ only: ['cards'], preserveScroll: true });
+}
 const makeDefault = (card) => router.post(route('clients.cards.default', [props.client.id, card.id]), {}, opts(card.id));
 async function remove(card) {
     const ok = await confirmDialog({
@@ -42,7 +73,7 @@ async function remove(card) {
     });
     if (ok) router.delete(route('clients.cards.destroy', [props.client.id, card.id]), opts(card.id));
 }
-const expired = (c) => new Date(c.exp_year, c.exp_month) < new Date();
+const expired = (c) => c.exp_year && new Date(c.exp_year, c.exp_month) < new Date();
 
 // Charge now
 const showCharge = ref(false);
@@ -79,8 +110,8 @@ function submitCharge() {
             </div>
             <div v-if="connected" class="flex flex-wrap gap-1.5">
                 <button v-if="items.length" class="btn-dark btn-sm" @click="openCharge"><Icon name="card" :size="14" /> Charge now</button>
-                <button class="btn-secondary btn-sm" :disabled="busy === 'enter'" title="Type the card yourself on Stripe's secure page" @click="enterNow">
-                    <Icon name="pencil" :size="14" /> {{ busy === 'enter' ? 'Opening Stripe…' : 'Enter card now' }}
+                <button class="btn-secondary btn-sm" :disabled="busy === 'enter'" title="Type the client's card yourself in a secure popup" @click="enterNow">
+                    <Icon name="pencil" :size="14" /> {{ busy === 'enter' ? 'Opening…' : 'Enter card now' }}
                 </button>
                 <button class="btn-secondary btn-sm" :disabled="busy === 'link'" @click="sendLink">
                     <Icon name="send" :size="14" /> {{ busy === 'link' ? 'Creating…' : 'Send link to client' }}
@@ -89,14 +120,18 @@ function submitCharge() {
         </div>
 
         <div v-if="justAdded" class="flex items-center gap-2 border-b border-line bg-emerald-50 px-6 py-3 text-sm text-emerald-800">
-            <Icon name="check" :size="16" class="text-emerald-500" /> Card saved with Stripe.
+            <Icon name="check" :size="16" class="text-emerald-500" /> Payment method saved.
+        </div>
+
+        <div v-if="setupError" class="flex items-center gap-2 border-b border-line bg-rose-50 px-6 py-3 text-sm text-rose-700">
+            <Icon name="alert" :size="16" /> {{ setupError }}
         </div>
 
         <div v-if="link" class="flex flex-wrap items-center gap-3 border-b border-line bg-brand-50/60 px-6 py-4 text-sm">
             <Icon name="link" class="text-brand-600" />
             <span class="min-w-0 flex-1">
-                <b class="text-ink-900">Send this secure Stripe link to the client</b>
-                <span class="block text-xs text-ink-500">They enter their card on Stripe's page and it's saved to this client. Valid 24 hours.</span>
+                <b class="text-ink-900">Send this secure link to the client</b>
+                <span class="block text-xs text-ink-500">Opens our own Klok Ads page where they save a card or other payment method. Valid 7 days.</span>
             </span>
             <CopyButton :text="link" />
         </div>
@@ -117,14 +152,15 @@ function submitCharge() {
 
             <ul class="divide-y divide-line/70">
             <li v-for="c in items" :key="c.id" class="flex flex-wrap items-center gap-4 px-6 py-3.5">
-                <span class="flex h-9 w-14 items-center justify-center rounded-lg border border-line bg-ink-50 text-[11px] font-bold uppercase tracking-wide text-ink-700">{{ BRAND[c.brand] ?? c.brand }}</span>
+                <span class="flex h-9 w-14 items-center justify-center rounded-lg border border-line bg-ink-50 text-[11px] font-bold uppercase tracking-wide text-ink-700">{{ brandName(c) }}</span>
                 <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2 font-semibold text-ink-900">
-                        •••• {{ c.last4 }}
+                        {{ c.last4 ? '•••• ' + c.last4 : brandName(c) }}
                         <span v-if="c.is_default" class="badge bg-brand-50 text-brand-700">Default</span>
                         <span v-if="expired(c)" class="badge bg-rose-50 text-rose-700">Expired</span>
                     </div>
-                    <div class="text-xs text-ink-500">Expires {{ String(c.exp_month).padStart(2, '0') }}/{{ c.exp_year }}</div>
+                    <div v-if="c.exp_year" class="text-xs text-ink-500">Expires {{ String(c.exp_month).padStart(2, '0') }}/{{ c.exp_year }}</div>
+                    <div v-else class="text-xs text-ink-500">{{ c.detail || 'Saved payment method' }}</div>
                 </div>
                 <div class="flex gap-1.5">
                     <button v-if="!c.is_default" class="btn-secondary btn-sm" :disabled="busy === c.id" @click="makeDefault(c)">Make default</button>
@@ -138,6 +174,20 @@ function submitCharge() {
         </template>
 
         <div v-else class="px-6 py-6 text-sm text-ink-500">No saved cards yet. Use <b>Enter card now</b> (client tells you the card) or <b>Send link to client</b>.</div>
+
+        <!-- Enter card now -->
+        <Modal :show="!!setup" max-width="md" @close="setup = null">
+            <div class="flex items-start justify-between border-b border-line px-6 py-5">
+                <div>
+                    <h2 class="text-lg font-bold text-ink-900">Add payment method</h2>
+                    <p class="mt-0.5 text-sm text-ink-500">For {{ client.company || client.name }}. Only with the client's permission.</p>
+                </div>
+                <button type="button" class="icon-btn" @click="setup = null"><Icon name="close" /></button>
+            </div>
+            <div class="px-6 py-5">
+                <SavePaymentMethod v-if="setup" :client-secret="setup.client_secret" :publishable-key="setup.publishable_key" @saved="onSaved" />
+            </div>
+        </Modal>
 
         <!-- Charge now -->
         <Modal :show="showCharge" max-width="lg" @close="showCharge = false">

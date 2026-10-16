@@ -28,14 +28,30 @@ class ClientCardTest extends TestCase
         $this->actingAs(User::factory()->create());
     }
 
-    public function test_card_link_is_created_and_flashed(): void
+    public function test_card_link_is_our_own_signed_page(): void
     {
-        $this->mock(StripeService::class, fn (MockInterface $m) => $m->shouldReceive('cardSetupLink')
-            ->once()->withArgs(fn ($client, $url) => $client->is($this->client) && str_ends_with($url, '/card-saved'))
-            ->andReturn('https://checkout.stripe.com/c/pay/cs_test_1'));
+        $this->mock(StripeService::class, fn (MockInterface $m) => $m->shouldReceive('ensureCustomer')->once()->andReturn('cus_1'));
 
-        $this->from("/clients/{$this->client->id}")->post("/clients/{$this->client->id}/cards/link")
-            ->assertSessionHas('card_link', 'https://checkout.stripe.com/c/pay/cs_test_1');
+        $this->from("/clients/{$this->client->id}")->post("/clients/{$this->client->id}/cards/link")->assertSessionHas('success');
+
+        $link = session('card_link');
+        $this->assertStringContainsString("/card/{$this->client->id}?", $link);
+        $this->assertStringContainsString('signature=', $link);
+    }
+
+    public function test_client_add_card_page_needs_a_valid_signature(): void
+    {
+        auth()->logout();
+        Setting::put('stripe_publishable', 'pk_test_abc');
+        $this->mock(StripeService::class, fn (MockInterface $m) => $m->shouldReceive('cardSetupSecret')->once()->andReturn('seti_1_secret_x'));
+
+        $this->get("/card/{$this->client->id}")->assertForbidden();
+
+        $this->get(StripeService::cardLink($this->client))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Public/AddCard')
+                ->where('setup.client_secret', 'seti_1_secret_x')
+                ->where('setup.publishable_key', 'pk_test_abc')
+                ->where('client.name', 'Ann'));
     }
 
     public function test_default_card_can_be_changed(): void
@@ -79,14 +95,26 @@ class ClientCardTest extends TestCase
         ])->assertSessionHas('success');
     }
 
-    public function test_enter_card_now_sends_the_admin_to_stripe(): void
+    public function test_enter_card_now_returns_a_setup_secret_for_the_popup(): void
     {
-        $this->mock(StripeService::class, fn (MockInterface $m) => $m->shouldReceive('cardSetupLink')
-            ->once()->withArgs(fn ($c, $url) => str_contains($url, "/clients/{$this->client->id}?card=added"))
-            ->andReturn('https://checkout.stripe.com/c/pay/cs_test_2'));
+        $this->postJson("/clients/{$this->client->id}/cards/enter")->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, 'publishable key'));
 
-        $this->post("/clients/{$this->client->id}/cards/enter", [], ['X-Inertia' => 'true'])
-            ->assertStatus(409)->assertHeader('X-Inertia-Location', 'https://checkout.stripe.com/c/pay/cs_test_2');
+        Setting::put('stripe_publishable', 'pk_test_abc');
+        $this->mock(StripeService::class, fn (MockInterface $m) => $m->shouldReceive('cardSetupSecret')->once()
+            ->withArgs(fn ($c) => $c->is($this->client))->andReturn('seti_2_secret_y'));
+
+        $this->postJson("/clients/{$this->client->id}/cards/enter")->assertOk()
+            ->assertExactJson(['client_secret' => 'seti_2_secret_y', 'publishable_key' => 'pk_test_abc']);
+    }
+
+    public function test_saved_methods_other_than_cards_are_described(): void
+    {
+        $bank = (object) ['id' => 'pm_b', 'type' => 'us_bank_account', 'us_bank_account' => (object) ['last4' => '6789', 'bank_name' => 'STRIPE TEST BANK']];
+        $link = (object) ['id' => 'pm_l', 'type' => 'link', 'link' => (object) ['email' => 'ann@example.sg']];
+
+        $this->assertSame(['id' => 'pm_b', 'type' => 'us_bank_account', 'brand' => 'us_bank_account', 'last4' => '6789', 'exp_month' => null, 'exp_year' => null, 'detail' => 'STRIPE TEST BANK'],
+            StripeService::describePaymentMethod($bank));
+        $this->assertSame('ann@example.sg', StripeService::describePaymentMethod($link)['detail']);
     }
 
     public function test_default_card_is_locked_only_while_a_recurring_plan_is_running(): void
