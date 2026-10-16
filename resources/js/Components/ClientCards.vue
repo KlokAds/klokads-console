@@ -14,6 +14,7 @@ const props = defineProps({
     client: { type: Object, required: true },
     cards: { type: Object, default: null }, // { items, error } — null while loading
     connected: { type: Boolean, default: false },
+    defaultLocked: { type: Boolean, default: false }, // active recurring plan uses the default card
     currency: { type: String, default: 'sgd' },
     serviceLabels: { type: Object, default: () => ({}) },
 });
@@ -108,7 +109,13 @@ function submitCharge() {
 
         <div v-else-if="cards.error" class="px-6 py-5 text-sm text-rose-600">Could not load cards: {{ cards.error }}</div>
 
-        <ul v-else-if="items.length" class="divide-y divide-line/70">
+        <template v-else-if="items.length">
+            <div v-if="defaultLocked" class="flex items-start gap-2 border-b border-line bg-ink-50/60 px-6 py-2.5 text-xs text-ink-600">
+                <Icon name="repeat" :size="14" class="mt-0.5 text-brand-500" />
+                <span>This client has an active recurring plan, so the <b>default card stays</b>. To replace it, add the new card, click <b>Make default</b>, then remove the old one.</span>
+            </div>
+
+            <ul class="divide-y divide-line/70">
             <li v-for="c in items" :key="c.id" class="flex flex-wrap items-center gap-4 px-6 py-3.5">
                 <span class="flex h-9 w-14 items-center justify-center rounded-lg border border-line bg-ink-50 text-[11px] font-bold uppercase tracking-wide text-ink-700">{{ BRAND[c.brand] ?? c.brand }}</span>
                 <div class="min-w-0 flex-1">
@@ -121,10 +128,14 @@ function submitCharge() {
                 </div>
                 <div class="flex gap-1.5">
                     <button v-if="!c.is_default" class="btn-secondary btn-sm" :disabled="busy === c.id" @click="makeDefault(c)">Make default</button>
-                    <button class="btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700" :disabled="busy === c.id" @click="remove(c)">Remove</button>
+                    <span v-if="c.is_default && defaultLocked" class="flex items-center gap-1.5 px-2 text-xs text-ink-500" title="Make another card the default first">
+                        <Icon name="shield" :size="14" class="text-brand-500" /> Pays recurring plan
+                    </span>
+                    <button v-else class="btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700" :disabled="busy === c.id" @click="remove(c)">Remove</button>
                 </div>
             </li>
-        </ul>
+            </ul>
+        </template>
 
         <div v-else class="px-6 py-6 text-sm text-ink-500">No saved cards yet. Use <b>Enter card now</b> (client tells you the card) or <b>Send link to client</b>.</div>
 

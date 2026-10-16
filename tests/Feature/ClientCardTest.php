@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\Invoice;
+use App\Models\RecurringPlan;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\StripeService;
@@ -86,6 +87,18 @@ class ClientCardTest extends TestCase
 
         $this->post("/clients/{$this->client->id}/cards/enter", [], ['X-Inertia' => 'true'])
             ->assertStatus(409)->assertHeader('X-Inertia-Location', 'https://checkout.stripe.com/c/pay/cs_test_2');
+    }
+
+    public function test_default_card_is_locked_only_while_a_recurring_plan_is_running(): void
+    {
+        $this->assertFalse(StripeService::defaultCardLocked($this->client));
+
+        $plan = RecurringPlan::create(['client_id' => $this->client->id, 'stripe_subscription_id' => 'sub_1', 'description' => 'Monthly', 'amount' => 1000,
+            'currency' => 'sgd', 'interval' => 'month', 'collection' => 'auto', 'status' => 'active']);
+        $this->assertTrue(StripeService::defaultCardLocked($this->client));
+
+        $plan->update(['status' => 'canceled']);
+        $this->assertFalse(StripeService::defaultCardLocked($this->client));
     }
 
     public function test_the_card_saved_page_is_public(): void

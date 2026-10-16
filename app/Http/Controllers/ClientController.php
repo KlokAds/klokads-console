@@ -52,6 +52,7 @@ class ClientController extends Controller
             'serviceLabels' => Catalog::SERVICES,
             'categoryLabels' => Catalog::EXPENSE_CATEGORIES,
             'stripeConnected' => StripeService::configured(),
+            'defaultCardLocked' => StripeService::defaultCardLocked($client),
             // Loaded right after the page renders: listing cards is a Stripe API call.
             'cards' => Inertia::defer(function () use ($client, $stripe) {
                 if (! StripeService::configured()) {

@@ -155,10 +155,20 @@ class StripeService
         );
     }
 
+    /** Recurring plans charge the default card, so it can't be removed while one is running. */
+    public static function defaultCardLocked(Client $client): bool
+    {
+        return $client->plans()->whereIn('status', ['active', 'trialing', 'past_due', 'incomplete'])->exists();
+    }
+
     public function removePaymentMethod(Client $client, string $paymentMethodId): void
     {
         $this->assertOwnsPaymentMethod($client, $paymentMethodId);
         $wasDefault = collect($this->paymentMethods($client))->firstWhere('id', $paymentMethodId)['is_default'] ?? false;
+
+        if ($wasDefault && self::defaultCardLocked($client)) {
+            throw new RuntimeException('This is the default card and it pays an active recurring plan. Make another card the default first, then remove this one.');
+        }
 
         $this->stripe()->paymentMethods->detach($paymentMethodId);
 
@@ -170,11 +180,12 @@ class StripeService
     /** A secure Stripe page where the client saves a new card (valid 24 hours). */
     public function cardSetupLink(Client $client, string $returnUrl): string
     {
+        // Which payment methods appear is managed in the Stripe Dashboard (dynamic payment
+        // methods); the API no longer accepts payment_method_types here.
         $session = $this->stripe()->checkout->sessions->create([
             'mode' => 'setup',
             'customer' => $this->ensureCustomer($client),
             'currency' => $this->currency(),
-            'payment_method_types' => ['card'],
             'success_url' => $returnUrl,
             'cancel_url' => $returnUrl,
             'metadata' => ['klok_client_id' => $client->id],
