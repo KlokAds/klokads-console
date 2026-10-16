@@ -36,7 +36,10 @@ class InvoiceDocument
             'description' => $l['description'] ?? '',
             'quantity' => $l['quantity'] ?? 1,
             'amount' => (int) ($l['amount'] ?? 0),
-        ])->all();
+        ])
+            // Main items first; the card fee and any GST line go last.
+            ->sortBy(fn ($l) => preg_match('/processing fee|^gst\b/i', $l['description']) ? 1 : 0)
+            ->values()->all();
 
         if (! $lines) {
             $lines = [['description' => $invoice->description ?: 'Services', 'quantity' => 1, 'amount' => (int) ($invoice->subtotal ?? $invoice->total)]];
