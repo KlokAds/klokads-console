@@ -141,11 +141,11 @@ class SettingsController extends Controller
     public function updateTemplates(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'defaults' => ['required', 'array'],
-            'defaults.*' => ['required', Rule::in(array_keys(Catalog::TEMPLATES))],
+            'template_for' => ['required', 'array'],
+            'template_for.*' => ['required', Rule::in(array_keys(Catalog::TEMPLATES))],
         ]);
 
-        foreach (array_intersect_key($data['defaults'], Catalog::DEFAULT_TEMPLATE_FOR) as $service => $template) {
+        foreach (array_intersect_key($data['template_for'], Catalog::DEFAULT_TEMPLATE_FOR) as $service => $template) {
             Setting::put("template_for_{$service}", $template);
         }
 

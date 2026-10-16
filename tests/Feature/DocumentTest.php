@@ -94,7 +94,7 @@ class DocumentTest extends TestCase
 
     public function test_default_templates_per_service_are_saved(): void
     {
-        $this->actingAs(User::factory()->create())->post('/settings/templates', ['defaults' => ['meta_ads' => 'pro_meta', 'seo' => 'classic_google']])
+        $this->actingAs(User::factory()->create())->post('/settings/templates', ['template_for' => ['meta_ads' => 'pro_meta', 'seo' => 'classic_google']])
             ->assertSessionHasNoErrors();
 
         $this->assertSame('pro_meta', Business::templateFor('meta_ads'));
