@@ -9,7 +9,6 @@ use App\Support\Ledger;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -23,9 +22,9 @@ class MoneyController extends Controller
 {
     public function index(Request $request): Response
     {
-        // Remember the last tab, so the sidebar link opens where you left off.
-        $scope = in_array($request->input('scope'), ['business', 'personal'], true) ? $request->input('scope') : $request->session()->get('money_scope', 'business');
-        $request->session()->put('money_scope', $scope);
+        // Business and personal are two separate sides of the app; the sidebar switch picks one.
+        $scope = in_array($request->input('scope'), ['business', 'personal'], true) ? $request->input('scope') : $request->session()->get('mode', 'business');
+        $request->session()->put('mode', $scope);
         $month = preg_match('/^\d{4}-\d{2}$/', (string) $request->input('month')) ? $request->input('month') : now()->format('Y-m');
         $start = CarbonImmutable::createFromFormat('Y-m-d', "{$month}-01")->startOfDay();
 
@@ -54,10 +53,10 @@ class MoneyController extends Controller
                 'account' => $t->account,
                 'to_account' => $t->toAccount,
                 // Seen from this scope: money leaving it, arriving, or moving inside it.
-                'direction' => $this->direction($t, $ids->all()),
+                'direction' => Ledger::direction($t, $ids->all()),
                 'fee_value' => $t->fee ? Ledger::value($t->account, $t->fee, $t->id) : 0,
             ]),
-            'summary' => $this->summary($transactions, $ids->all()),
+            'summary' => Ledger::summary($transactions, $ids->all()),
             'categories' => [
                 'expense' => Catalog::options($scope === 'business' ? Catalog::EXPENSE_CATEGORIES : Catalog::PERSONAL_CATEGORIES),
                 'income' => Catalog::options(Catalog::INCOME_CATEGORIES[$scope]),
@@ -112,73 +111,6 @@ class MoneyController extends Controller
         Ledger::delete($transaction);
 
         return back()->with('success', 'Deleted.');
-    }
-
-    /** @param  array<int, int>  $ids */
-    private function direction(MoneyTransaction $t, array $ids): string
-    {
-        $from = in_array($t->account_id, $ids, true);
-        $to = $t->to_account_id && in_array($t->to_account_id, $ids, true);
-
-        return match (true) {
-            $t->kind === 'income' => 'in',
-            $t->kind === 'expense' => 'out',
-            $from && $to => 'move',
-            $from => 'out',
-            default => 'in',
-        };
-    }
-
-    /**
-     * Month totals in the reporting currency, as seen from one scope.
-     *
-     * @param  Collection<int, MoneyTransaction>  $transactions
-     * @param  array<int, int>  $ids
-     * @return array<string, mixed>
-     */
-    private function summary($transactions, array $ids): array
-    {
-        $in = $spent = $fees = $sentOut = $cameIn = 0;
-        $byCategory = [];
-
-        foreach ($transactions as $t) {
-            $fee = $t->fee ? Ledger::value($t->account, $t->fee, $t->id) : 0;
-            $from = in_array($t->account_id, $ids, true);
-            $to = $t->to_account_id && in_array($t->to_account_id, $ids, true);
-
-            if ($t->kind === 'income') {
-                $in += $t->base_amount;
-                $fees += $fee;
-            } elseif ($t->kind === 'expense') {
-                $spent += $t->base_amount - $fee;
-                $fees += $fee;
-                $byCategory[$t->category ?: 'other'] = ($byCategory[$t->category ?: 'other'] ?? 0) + $t->base_amount - $fee;
-            } else {
-                if ($from) {
-                    $fees += $fee;
-                }
-                if ($from && ! $to) {
-                    $sentOut += $t->base_amount;
-                } elseif ($to && ! $from) {
-                    $cameIn += $t->base_amount;
-                }
-            }
-        }
-
-        if ($fees) {
-            $byCategory['bank_fees'] = ($byCategory['bank_fees'] ?? 0) + $fees;
-        }
-        arsort($byCategory);
-
-        return [
-            'in' => $in,
-            'spent' => $spent + $fees,
-            'fees' => $fees,
-            'sent_out' => $sentOut, // e.g. business → personal (owner draw)
-            'came_in' => $cameIn,
-            'net' => $in + $cameIn - $spent - $fees - $sentOut,
-            'by_category' => $byCategory,
-        ];
     }
 
     /** @return array<string, mixed> */

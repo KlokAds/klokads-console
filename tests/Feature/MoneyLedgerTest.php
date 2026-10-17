@@ -107,6 +107,27 @@ class MoneyLedgerTest extends TestCase
         $this->get('/money?scope=business')->assertInertia(fn ($page) => $page->where('scope', 'business'));
     }
 
+    public function test_personal_dashboard_shows_only_personal_money_and_six_months(): void
+    {
+        $wallet = Account::create(['name' => 'My DBS', 'scope' => 'personal', 'kind' => 'bank', 'currency' => 'SGD', 'opening_balance' => 50000]);
+        $this->post('/money', ['kind' => 'expense', 'account_id' => $wallet->id, 'amount' => 120, 'category' => 'food', 'occurred_on' => now()->toDateString()]);
+        $this->post('/money', ['kind' => 'expense', 'account_id' => $wallet->id, 'amount' => 80, 'category' => 'home', 'occurred_on' => now()->subMonthNoOverflow()->startOfMonth()->toDateString()]);
+        $this->post('/money', ['kind' => 'expense', 'account_id' => $this->sgd->id, 'amount' => 999, 'category' => 'software', 'occurred_on' => now()->toDateString()]);
+
+        $this->get('/personal')->assertOk()->assertInertia(fn ($page) => $page->component('Personal/Dashboard')
+            ->has('accounts', 1)
+            ->where('accounts.0.balance', 30000)
+            ->where('current.spent', 12000)
+            ->where('previous.spent', 8000)
+            ->has('months', 6)
+            ->has('recent', 2));
+
+        // The Money link then opens on the personal side.
+        $this->get('/money')->assertInertia(fn ($page) => $page->where('scope', 'personal'));
+        $this->get('/dashboard');
+        $this->get('/money')->assertInertia(fn ($page) => $page->where('scope', 'business'));
+    }
+
     public function test_deleting_a_transaction_removes_its_expenses(): void
     {
         $this->post('/money', ['kind' => 'expense', 'account_id' => $this->sgd->id, 'amount' => 30, 'fee' => 1, 'category' => 'software', 'occurred_on' => now()->toDateString()]);

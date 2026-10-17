@@ -182,6 +182,75 @@ class Ledger
         return Expense::create($data)->id;
     }
 
+    // ---------------------------------------------------------------- reports
+
+    /** @param  array<int, int>  $ids */
+    public static function direction(MoneyTransaction $t, array $ids): string
+    {
+        $from = in_array($t->account_id, $ids, true);
+        $to = $t->to_account_id && in_array($t->to_account_id, $ids, true);
+
+        return match (true) {
+            $t->kind === 'income' => 'in',
+            $t->kind === 'expense' => 'out',
+            $from && $to => 'move',
+            $from => 'out',
+            default => 'in',
+        };
+    }
+
+    /**
+     * Month totals in the reporting currency, as seen from one scope.
+     *
+     * @param  iterable<int, MoneyTransaction>  $transactions
+     * @param  array<int, int>  $ids
+     * @return array<string, mixed>
+     */
+    public static function summary(iterable $transactions, array $ids): array
+    {
+        $in = $spent = $fees = $sentOut = $cameIn = 0;
+        $byCategory = [];
+
+        foreach ($transactions as $t) {
+            $fee = $t->fee ? self::value($t->account, $t->fee, $t->id) : 0;
+            $from = in_array($t->account_id, $ids, true);
+            $to = $t->to_account_id && in_array($t->to_account_id, $ids, true);
+
+            if ($t->kind === 'income') {
+                $in += $t->base_amount;
+                $fees += $fee;
+            } elseif ($t->kind === 'expense') {
+                $spent += $t->base_amount - $fee;
+                $fees += $fee;
+                $byCategory[$t->category ?: 'other'] = ($byCategory[$t->category ?: 'other'] ?? 0) + $t->base_amount - $fee;
+            } else {
+                if ($from) {
+                    $fees += $fee;
+                }
+                if ($from && ! $to) {
+                    $sentOut += $t->base_amount;
+                } elseif ($to && ! $from) {
+                    $cameIn += $t->base_amount;
+                }
+            }
+        }
+
+        if ($fees) {
+            $byCategory['bank_fees'] = ($byCategory['bank_fees'] ?? 0) + $fees;
+        }
+        arsort($byCategory);
+
+        return [
+            'in' => $in,
+            'spent' => $spent + $fees,
+            'fees' => $fees,
+            'sent_out' => $sentOut, // e.g. business → personal (owner draw)
+            'came_in' => $cameIn,
+            'net' => $in + $cameIn - $spent - $fees - $sentOut,
+            'by_category' => $byCategory,
+        ];
+    }
+
     // ---------------------------------------------------------------- payouts
 
     public static function bankFeeRate(): float

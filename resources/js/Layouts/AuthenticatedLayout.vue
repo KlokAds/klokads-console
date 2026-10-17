@@ -18,14 +18,17 @@ const userOpen = ref(false);
 const syncing = ref(false);
 const toast = ref(null);
 
-const sections = [
+// Two sides of the app: the agency, and your own money. Each has its own dashboard and menu.
+const mode = computed(() => (route().current('personal.*') || (route().current('money.*') && page.props.scope === 'personal') ? 'personal' : 'business'));
+
+const businessSections = [
     {
         label: 'Overview',
         items: [
             { name: 'Dashboard', route: 'dashboard', match: 'dashboard', icon: 'home' },
             { name: 'Cashflow', route: 'cashflow.index', match: 'cashflow.*', icon: 'flow' },
             { name: 'Payouts', route: 'payouts.index', match: 'payouts.*', icon: 'bank' },
-            { name: 'Money', route: 'money.index', match: 'money.*', icon: 'wallet' },
+            { name: 'Bank & money', route: 'money.index', params: { scope: 'business' }, match: 'money.*', icon: 'wallet' },
         ],
     },
     {
@@ -46,14 +49,29 @@ const sections = [
     },
 ];
 
-const quickCreate = [
+const personalSections = [
+    {
+        label: 'Personal',
+        items: [
+            { name: 'Dashboard', route: 'personal.dashboard', match: 'personal.*', icon: 'home' },
+            { name: 'Money', route: 'money.index', params: { scope: 'personal' }, match: 'money.*', icon: 'wallet' },
+        ],
+    },
+];
+const sections = computed(() => (mode.value === 'personal' ? personalSections : businessSections));
+
+const personalCreate = [
+    { label: 'Spending', hint: 'What you paid, where and why', icon: 'card', href: () => route('money.index', { scope: 'personal', new: 1 }) },
+];
+const businessCreate = [
     { label: 'Invoice', hint: 'One-off invoice, emailed by Stripe', icon: 'invoice', href: () => route('invoices.create') },
     { label: 'Recurring plan', hint: 'Monthly retainer, auto-charge', icon: 'repeat', href: () => route('recurring.index', { new: 1 }) },
     { label: 'Payment link', hint: 'Share by WhatsApp or email', icon: 'link', href: () => route('payment-links.index') },
     { label: 'Expense', hint: 'Ad spend, tools, salary', icon: 'card', href: () => route('expenses.index', { new: 1 }) },
-    { label: 'Money entry', hint: 'Spending, transfer, conversion', icon: 'wallet', href: () => route('money.index', { new: 1 }) },
+    { label: 'Money entry', hint: 'Bank transfer, conversion, salary', icon: 'wallet', href: () => route('money.index', { scope: 'business', new: 1 }) },
     { label: 'Client', hint: 'Adds a Stripe customer', icon: 'users', href: () => route('clients.index', { new: 1 }) },
 ];
+const quickCreate = computed(() => (mode.value === 'personal' ? personalCreate : businessCreate));
 
 const user = computed(() => page.props.auth.user);
 const stripe = computed(() => page.props.stripeStatus ?? {});
@@ -126,10 +144,18 @@ router.on('navigate', () => {
             :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
         >
             <div class="flex h-[68px] items-center justify-between px-5">
-                <Link :href="route('dashboard')"><ApplicationLogo :size="34" wordmark dark /></Link>
+                <Link :href="route(mode === 'personal' ? 'personal.dashboard' : 'dashboard')"><ApplicationLogo :size="34" wordmark dark /></Link>
                 <button class="icon-btn text-ink-400 hover:bg-white/10 hover:text-white lg:hidden" @click="sidebarOpen = false">
                     <Icon name="close" />
                 </button>
+            </div>
+
+            <!-- Business / Personal switch -->
+            <div class="mx-3 mb-3 grid grid-cols-2 gap-1 rounded-xl bg-white/[0.05] p-1">
+                <Link :href="route('dashboard')" class="flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition"
+                    :class="mode === 'business' ? 'bg-white text-ink-900' : 'text-ink-400 hover:text-white'"><Icon name="bank" :size="14" /> Business</Link>
+                <Link :href="route('personal.dashboard')" class="flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition"
+                    :class="mode === 'personal' ? 'bg-white text-ink-900' : 'text-ink-400 hover:text-white'"><Icon name="user" :size="14" /> Personal</Link>
             </div>
 
             <nav class="flex-1 space-y-6 overflow-y-auto px-3 pb-4 pt-2">
@@ -139,7 +165,7 @@ router.on('navigate', () => {
                         <Link
                             v-for="item in section.items"
                             :key="item.route"
-                            :href="route(item.route)"
+                            :href="route(item.route, item.params)"
                             class="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium transition"
                             :class="route().current(item.match) ? 'bg-white/[0.08] text-white' : 'text-ink-300 hover:bg-white/[0.04] hover:text-white'"
                         >
@@ -152,7 +178,7 @@ router.on('navigate', () => {
             </nav>
 
             <!-- Stripe status -->
-            <div class="mx-3 mb-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
+            <div v-if="mode === 'business'" class="mx-3 mb-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2 text-xs font-semibold text-white">
                         <span class="relative flex h-2 w-2">
@@ -221,7 +247,7 @@ router.on('navigate', () => {
                 </div>
             </header>
 
-            <div v-if="stripe.mode === 'test'" class="border-b border-amber-200 bg-amber-50">
+            <div v-if="stripe.mode === 'test' && mode === 'business'" class="border-b border-amber-200 bg-amber-50">
                 <div class="mx-auto flex max-w-[1400px] items-center gap-2 px-4 py-2 text-xs text-amber-800 sm:px-8">
                     <span class="badge bg-amber-200/70 text-amber-900">Test mode</span>
                     You're seeing Stripe <b>test</b> data only — no real money. Live payments appear here once a live key is saved in Settings.

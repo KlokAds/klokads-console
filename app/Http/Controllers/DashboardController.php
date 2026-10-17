@@ -17,6 +17,8 @@ class DashboardController extends Controller
 {
     public function __invoke(Request $request, StripeService $stripe): Response
     {
+        $request->session()->put('mode', 'business');
+
         $period = $request->string('period', 'this_month')->toString();
         $report = CashflowReport::forPeriod($period, $request->input('from'), $request->input('to'));
 

@@ -11,6 +11,7 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MoneyController;
 use App\Http\Controllers\PaymentLinkController;
 use App\Http\Controllers\PayoutController;
+use App\Http\Controllers\PersonalDashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicInvoiceController;
 use App\Http\Controllers\RecurringPlanController;
@@ -41,6 +42,7 @@ Route::prefix('install')->name('install.')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::get('/personal', PersonalDashboardController::class)->name('personal.dashboard');
 
     Route::resource('clients', ClientController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
     Route::post('/clients/{client}/cards/link', [ClientCardController::class, 'link'])->name('clients.cards.link');

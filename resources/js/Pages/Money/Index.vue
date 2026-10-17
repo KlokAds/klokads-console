@@ -165,19 +165,17 @@ if (wantsNew()) openTx();
 </script>
 
 <template>
-    <Head title="Money" />
+    <Head :title="scope === 'personal' ? 'Personal money' : 'Bank & money'" />
 
-    <AuthenticatedLayout title="Money" subtitle="Bank accounts, wallets and cash — what came in, what went out, and where it went">
+    <AuthenticatedLayout :title="scope === 'personal' ? 'Personal money' : 'Bank & money'"
+        :subtitle="scope === 'personal' ? 'Your own accounts — what you spend, where, and what you save' : 'Business bank accounts, transfers, conversions and salaries'">
         <template #actions>
             <button class="btn-primary" :disabled="!activeAccounts.length" @click="openTx()"><Icon name="plus" :size="16" /> Add entry</button>
         </template>
 
         <!-- Scope + month -->
         <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="inline-flex rounded-xl border border-line bg-white p-1">
-                <button v-for="s in ['business', 'personal']" :key="s" class="rounded-lg px-4 py-1.5 text-sm font-semibold capitalize transition"
-                    :class="scope === s ? 'bg-ink-900 text-white' : 'text-ink-600 hover:text-ink-900'" @click="go({ scope: s })">{{ s }}</button>
-            </div>
+            <div class="text-sm font-semibold text-ink-700">{{ monthLabel }}</div>
             <div class="flex items-center gap-1">
                 <button class="icon-btn" title="Previous month" @click="shiftMonth(-1)"><Icon name="chevron" :size="16" class="rotate-90" /></button>
                 <input :value="month" type="month" class="input input-sm w-auto" @change="go({ month: $event.target.value })" />
