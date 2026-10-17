@@ -44,7 +44,7 @@ const canSave = props.setup.client_secret && props.setup.publishable_key;
                     <template v-else-if="canSave">
                         <div class="mb-3 flex items-center justify-between">
                             <div class="card-title">Your details</div>
-                            <span class="flex items-center gap-1.5 text-xs text-ink-500"><Icon name="shield" :size="14" class="text-emerald-500" /> Encrypted · powered by Stripe</span>
+                            <span class="flex items-center gap-1.5 text-xs text-ink-500"><Icon name="shield" :size="14" class="text-emerald-500" /> Secure · 256-bit encrypted</span>
                         </div>
                         <SavePaymentMethod :client-secret="setup.client_secret" :publishable-key="setup.publishable_key" @saved="saved = true" />
                         <p class="mt-3 text-xs text-ink-500">By saving, you allow {{ business.legal_name || business.name }} to charge this method for agreed invoices and plans.</p>
@@ -57,7 +57,7 @@ const canSave = props.setup.client_secret && props.setup.publishable_key;
                     <div v-if="business.email" class="mt-1">Questions? <a :href="`mailto:${business.email}`" class="text-brand-600 hover:underline">{{ business.email }}</a></div>
                 </div>
             </div>
-            <p class="mt-6 text-center text-xs text-ink-400">Details are processed securely by Stripe and never stored by {{ business.name }}.</p>
+            <p class="mt-6 text-center text-xs text-ink-400">Your details are encrypted end to end and never stored on our servers.</p>
         </div>
     </div>
 </template>

@@ -2,7 +2,7 @@
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Icon from '@/Components/Icon.vue';
 import { money } from '@/money';
-import { appearance, loadStripeJs } from '@/stripe';
+import { appearance, loadStripeJs, paymentLayout } from '@/stripe';
 import { Head, router } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
 
@@ -39,7 +39,7 @@ onMounted(async () => {
             clientSecret: props.payment.client_secret,
             appearance,
         });
-        const el = elements.create('payment', { layout: 'tabs' });
+        const el = elements.create('payment', { layout: paymentLayout });
         el.on('ready', () => (ready.value = true));
         el.mount(mountEl.value);
     } catch (e) {
@@ -143,7 +143,7 @@ const pdfUrl = (type) => route('public.invoice.pdf', { token: props.token, type 
                 <div v-if="!isPaid" class="border-t border-line bg-ink-50/60 px-6 py-6 sm:px-8">
                     <div class="mb-3 flex items-center justify-between">
                         <div class="card-title">Pay securely</div>
-                        <span class="flex items-center gap-1.5 text-xs text-ink-500"><Icon name="shield" :size="14" class="text-emerald-500" /> Encrypted · powered by Stripe</span>
+                        <span class="flex items-center gap-1.5 text-xs text-ink-500"><Icon name="shield" :size="14" class="text-emerald-500" /> Secure · 256-bit encrypted</span>
                     </div>
                     <template v-if="canPay">
                         <div ref="mountEl" class="min-h-[120px] rounded-xl bg-white p-4 ring-1 ring-line">
@@ -172,7 +172,7 @@ const pdfUrl = (type) => route('public.invoice.pdf', { token: props.token, type 
                 </div>
             </div>
 
-            <p class="mt-6 text-center text-xs text-ink-400">Payments are processed securely by Stripe. Card details are never stored by {{ d.business.name }}.</p>
+            <p class="mt-6 text-center text-xs text-ink-400">Payments are encrypted end to end. Card details are never stored on our servers.</p>
         </div>
     </div>
 </template>

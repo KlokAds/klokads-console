@@ -1,6 +1,6 @@
 <script setup>
 import Icon from '@/Components/Icon.vue';
-import { appearance, loadStripeJs } from '@/stripe';
+import { appearance, loadStripeJs, paymentLayout } from '@/stripe';
 import { onMounted, ref } from 'vue';
 
 // Stripe's payment form (card, Link, wallets, bank… whatever is on in Stripe) for saving a method, on our page.
@@ -23,7 +23,7 @@ onMounted(async () => {
         const Stripe = await loadStripeJs();
         stripe = Stripe(props.publishableKey);
         elements = stripe.elements({ clientSecret: props.clientSecret, appearance });
-        const el = elements.create('payment', { layout: 'tabs' });
+        const el = elements.create('payment', { layout: paymentLayout });
         el.on('ready', () => (ready.value = true));
         el.mount(mountEl.value);
     } catch (e) {
