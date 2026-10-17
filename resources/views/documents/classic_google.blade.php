@@ -8,8 +8,10 @@
     table { width: 100%; border-collapse: collapse; }
     td { vertical-align: top; }
     .b { font-weight: bold; }
-    .lead td { padding: 2.5px 0; }
-    .lead .dots { border-bottom: 1px dotted #9aa0a6; }
+    .lead td { padding: 5px 0 0; line-height: 1.15; }
+    .lead .lbl { width: 1%; white-space: nowrap; padding-right: 3px; }
+    .lead .dots { border-bottom: 1.2px dotted #80868b; }
+    .lead .val { width: 1%; white-space: nowrap; padding-left: 3px; }
     .rule { border-top: 2px solid #9aa0a6; }
     .grid th { text-align: left; font-weight: bold; padding: 8px 0; border-top: 1px solid #5f6368; border-bottom: 1px solid #5f6368; }
     .grid td { padding: 8px 0; border-bottom: 1px solid #9aa0a6; }
@@ -48,8 +50,12 @@
     <div class="b">Bill to</div>
     {{ $client->name }}<br>
     @if ($client->company){{ $client->company }}<br>@endif
-    {{ $client->email }}<br>
-    {{ $client->country ?? '' }}
+    @if (! empty($client->address))
+        {!! nl2br(e($client->address)) !!}
+    @else
+        {{ $client->email }}<br>
+        {{ $client->country ?? '' }}
+    @endif
 </div>
 
 <table style="margin-top:26px">
@@ -57,17 +63,17 @@
         <td style="width:48%;padding-right:4%">
             <div class="b" style="margin-bottom:6px">Details</div>
             <table class="lead">
-                <tr><td style="width:1%;white-space:nowrap;padding-right:3px">{{ $isReceipt ? 'Receipt' : 'Invoice' }} number</td><td class="dots"></td><td style="width:1%;white-space:nowrap;padding-left:3px">{{ $number }}</td></tr>
-                <tr><td style="white-space:nowrap;padding-right:3px">{{ $isReceipt ? 'Payment date' : 'Invoice date' }}</td><td class="dots"></td><td style="white-space:nowrap;padding-left:3px">{{ ($isReceipt ? $paid_at : $issued_at)?->format('M j, Y') }}</td></tr>
+                <tr><td class="lbl">{{ $isReceipt ? 'Receipt' : 'Invoice' }} number</td><td class="dots"></td><td class="val">{{ $number }}</td></tr>
+                <tr><td class="lbl">{{ $isReceipt ? 'Payment date' : 'Invoice date' }}</td><td class="dots"></td><td class="val">{{ ($isReceipt ? $paid_at : $issued_at)?->format('M j, Y') }}</td></tr>
                 @if (! $isReceipt && $due_at)
-                    <tr><td style="white-space:nowrap;padding-right:3px">Due date</td><td class="dots"></td><td style="white-space:nowrap;padding-left:3px">{{ $due_at->format('M j, Y') }}</td></tr>
+                    <tr><td class="lbl">Due date</td><td class="dots"></td><td class="val">{{ $due_at->format('M j, Y') }}</td></tr>
                 @endif
-                <tr><td style="white-space:nowrap;padding-right:3px">Billing ID</td><td class="dots"></td><td style="white-space:nowrap;padding-left:3px">{{ $billingId }}</td></tr>
+                <tr><td class="lbl">Billing ID</td><td class="dots"></td><td class="val">{{ $billingId }}</td></tr>
                 @if ($ad_account_id)
-                    <tr><td style="white-space:nowrap;padding-right:3px">Account ID</td><td class="dots"></td><td style="white-space:nowrap;padding-left:3px">{{ $ad_account_id }}</td></tr>
+                    <tr><td class="lbl">Account ID</td><td class="dots"></td><td class="val">{{ $ad_account_id }}</td></tr>
                 @endif
                 @if ($isReceipt && $paid_with)
-                    <tr><td style="white-space:nowrap;padding-right:3px">Paid with</td><td class="dots"></td><td style="white-space:nowrap;padding-left:3px">{{ $paid_with }}</td></tr>
+                    <tr><td class="lbl">Paid with</td><td class="dots"></td><td class="val">{{ $paid_with }}</td></tr>
                 @endif
             </table>
         </td>
@@ -155,8 +161,12 @@
     </tr>
 </table>
 
+@if (collect($rows)->contains(fn ($r) => $r['amount'] < 0))
+    <div style="margin-top:40px;color:#5f6368">Credits relate to the original invoice or month of service noted. Invoice numbers associated with a credit might have changed if there was a rebill.</div>
+@endif
+
 @if ($business['email'])
-    <div style="margin-top:40px;color:#5f6368">Questions about this {{ $isReceipt ? 'receipt' : 'invoice' }}? {{ $business['email'] }}</div>
+    <div style="margin-top:14px;color:#5f6368">Questions about this {{ $isReceipt ? 'receipt' : 'invoice' }}? {{ $business['email'] }}</div>
 @endif
 
 @include('documents.partials.page-numbers', ['color' => [0.37, 0.39, 0.41]])

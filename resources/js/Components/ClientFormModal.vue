@@ -7,7 +7,7 @@ import { watch } from 'vue';
 const props = defineProps({ show: Boolean, client: { type: Object, default: null } });
 const emit = defineEmits(['close']);
 
-const blank = { name: '', company: '', email: '', phone: '', country: 'SG', commission_rate: '', notes: '' };
+const blank = { name: '', company: '', email: '', phone: '', country: 'SG', address: '', tax_id: '', commission_rate: '', notes: '' };
 const form = useForm({ ...blank });
 
 watch(
@@ -69,6 +69,16 @@ function submit() {
                     <input v-model="form.commission_rate" type="number" step="0.5" min="0" max="100" class="input" placeholder="Default" />
                     <div class="hint">Empty = the default from Settings</div>
                     <div v-if="form.errors.commission_rate" class="error">{{ form.errors.commission_rate }}</div>
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="label">Billing address</label>
+                    <textarea v-model="form.address" rows="3" class="input" placeholder="30 Roberts Ln&#10;#02-01&#10;Singapore 218309"></textarea>
+                    <div class="hint">Printed under "Bill to" on invoices</div>
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="label">Tax / GST / UEN no.</label>
+                    <input v-model="form.tax_id" class="input" placeholder="e.g. 201912345K" />
+                    <div class="hint">Client's own tax number, shown in the footer</div>
                 </div>
                 <div class="col-span-2">
                     <label class="label">Notes</label>

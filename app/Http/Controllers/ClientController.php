@@ -106,6 +106,8 @@ class ClientController extends Controller
             'email' => ['required', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'country' => ['required', 'string', 'size:2'],
+            'address' => ['nullable', 'string', 'max:500'],
+            'tax_id' => ['nullable', 'string', 'max:60'],
             'notes' => ['nullable', 'string', 'max:5000'],
             'commission_rate' => ['nullable', 'numeric', 'between:0,100'],
         ]);

@@ -54,7 +54,31 @@ class InvoiceController extends Controller
             'units' => Catalog::UNITS,
             'currency' => $stripe->currency(),
             'clientId' => $request->integer('client_id') ?: null,
+            'lastDetails' => $this->lastDetailsByClient(),
         ]);
+    }
+
+    /**
+     * Each client's ad account and campaign rows from their latest invoice, so a new
+     * invoice starts pre-filled and only this month's numbers need typing.
+     *
+     * @return array<int, array{ad_account_id: ?string, template: ?string, service: ?string, campaigns: array<int, array<string, mixed>>}>
+     */
+    private function lastDetailsByClient(): array
+    {
+        return Invoice::whereNotNull('details')->latest('issued_at')->latest('id')
+            ->get(['client_id', 'details', 'template', 'service'])
+            ->unique('client_id')
+            ->filter(fn ($i) => $i->client_id && ($i->details['campaigns'] ?? $i->details['ad_account_id'] ?? null))
+            ->mapWithKeys(fn ($i) => [$i->client_id => [
+                'ad_account_id' => $i->details['ad_account_id'] ?? null,
+                'template' => $i->template,
+                'service' => $i->service,
+                'campaigns' => collect($i->details['campaigns'] ?? [])
+                    ->reject(fn ($c) => ($c['amount'] ?? 0) < 0)
+                    ->map(fn ($c) => ['name' => $c['name'], 'detail' => $c['detail'] ?? '', 'unit' => $c['unit'] ?? 'Impressions'])
+                    ->values()->all(),
+            ]])->all();
     }
 
     public function store(Request $request, StripeService $stripe): RedirectResponse
@@ -81,7 +105,7 @@ class InvoiceController extends Controller
             'campaigns.*.detail' => ['nullable', 'string', 'max:150'],
             'campaigns.*.quantity' => ['nullable', 'integer', 'min:0'],
             'campaigns.*.unit' => ['nullable', Rule::in(Catalog::UNITS)],
-            'campaigns.*.amount' => ['required', 'numeric', 'min:0'],
+            'campaigns.*.amount' => ['required', 'numeric', 'between:-1000000,1000000'],
         ]);
 
         $data['details'] = array_filter([

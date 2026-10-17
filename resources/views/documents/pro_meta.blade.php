@@ -35,7 +35,9 @@
                 <div class="eyebrow">Billed to</div>
                 <b style="color:#fff">{{ $client->company ?: $client->name }}</b><br>
                 @if ($client->company){{ $client->name }}<br>@endif
+                @if (! empty($client->address)){!! nl2br(e($client->address)) !!}<br>@endif
                 {{ $client->email }}
+                @if (! empty($client->tax_id))<br>Tax ID: {{ $client->tax_id }}@endif
             </td>
         </tr>
     </table>

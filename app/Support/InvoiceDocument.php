@@ -85,7 +85,9 @@ class InvoiceDocument
         return new self($template, $type, [
             'business' => Business::profile(),
             'gst' => Business::gst() + ['charged' => Business::gstEnabled()],
-            'client' => (object) ['name' => 'Jane Tan', 'company' => 'Sample Client Pte Ltd', 'email' => 'jane@example.com', 'country' => 'SG', 'id' => 1024],
+            'client' => (object) ['name' => 'Jane Tan', 'company' => 'Sample Client Pte Ltd', 'email' => 'jane@example.com', 'country' => 'SG', 'address' => '30 Roberts Ln
+#02-01
+Singapore 218309', 'tax_id' => '201912345K', 'id' => 1024],
             'number' => 'KA-0001',
             'currency' => strtoupper((string) Setting::get('currency', 'sgd')),
             'issued_at' => now(),
@@ -101,8 +103,10 @@ class InvoiceDocument
                 ['description' => 'Card processing fee', 'quantity' => 1, 'amount' => 1679],
             ],
             'campaigns' => [
-                ['name' => 'Sales Campaign — October', 'detail' => 'Sales Ad Set', 'quantity' => 16091, 'unit' => 'Impressions', 'amount' => 30000],
-                ['name' => 'Leads Campaign', 'detail' => 'Lead Form Ad Set', 'quantity' => 1151, 'unit' => 'Clicks', 'amount' => 20000],
+                ['name' => 'Sales Campaign — October', 'detail' => 'Sales Ad Set — Singapore', 'quantity' => 16091, 'unit' => 'Impressions', 'amount' => 18000],
+                ['name' => 'Sales Campaign — October', 'detail' => 'Retargeting Ad Set', 'quantity' => 9412, 'unit' => 'Impressions', 'amount' => 12000],
+                ['name' => 'Leads Campaign', 'detail' => 'Lead Form Ad Set', 'quantity' => 1151, 'unit' => 'Clicks', 'amount' => 20050],
+                ['name' => 'Invalid activity — Leads Campaign (Sep)', 'detail' => null, 'quantity' => null, 'unit' => null, 'amount' => -50],
             ],
             'ad_account_id' => '837982438493101',
             'period_start' => $period->copy()->startOfMonth(),

@@ -20,6 +20,10 @@
 @php
     $clientName = $client->company ? "{$client->name} ({$client->company})" : $client->name;
     $isReceipt = $type === 'receipt';
+    // One header per campaign with its ad sets underneath, like Meta's own breakdown.
+    $groups = collect($campaigns)->groupBy('name');
+    $country = $client->country ?? '';
+    $countryName = $country && class_exists(\Locale::class) ? \Locale::getDisplayRegion('-'.$country, 'en') : $country;
 @endphp
 
 <table>
@@ -74,23 +78,26 @@
 <div style="font-weight:bold;font-size:12.5px;margin:16px 0 10px">{{ $campaigns ? 'Campaigns' : 'Items' }}</div>
 <table>
     @if ($campaigns)
-        @foreach ($campaigns as $c)
+        @foreach ($groups as $name => $sets)
             <tr><td colspan="3" style="border-top:1px solid #ccd0d5;padding-top:9px"></td></tr>
             <tr>
                 <td colspan="2">
-                    <div style="font-weight:bold">{{ $c['name'] }}</div>
-                    @if ($period_start && $period_end)
+                    <div style="font-weight:bold">{{ $name }}</div>
+                    @if ($period_start && $period_end && $sets->sum('amount') >= 0)
                         <div style="margin-top:3px">From {{ $period_start->format('M j, Y') }}, 12:00 AM to {{ $period_end->format('M j, Y') }}, 11:59 PM</div>
                     @endif
                 </td>
-                <td style="text-align:right;font-weight:bold;vertical-align:middle">{{ $cash($c['amount']) }}</td>
+                <td style="text-align:right;font-weight:bold;vertical-align:middle">{{ $cash($sets->sum('amount')) }}</td>
             </tr>
-            <tr><td colspan="3" class="dash" style="padding-top:9px"></td></tr>
-            <tr>
-                <td style="padding:0 0 9px 76px;width:45%">{{ $c['detail'] ?? $c['name'] }}</td>
-                <td style="padding-bottom:9px">{{ isset($c['quantity']) ? number_format($c['quantity']).' '.($c['unit'] ?? '') : '' }}</td>
-                <td style="text-align:right;padding-bottom:9px">{{ $cash($c['amount']) }}</td>
-            </tr>
+            @foreach ($sets->filter(fn ($s) => ! empty($s['detail']) || isset($s['quantity'])) as $c)
+                <tr><td colspan="3" class="dash" style="padding-top:9px"></td></tr>
+                <tr>
+                    <td style="padding:0 0 9px 76px;width:45%">{{ $c['detail'] ?: $name }}</td>
+                    <td style="padding-bottom:9px">{{ isset($c['quantity']) ? number_format($c['quantity']).' '.($c['unit'] ?? '') : '' }}</td>
+                    <td style="text-align:right;padding-bottom:9px">{{ $cash($c['amount']) }}</td>
+                </tr>
+            @endforeach
+            <tr><td colspan="3" style="padding-bottom:4px"></td></tr>
         @endforeach
         <tr><td colspan="3" style="border-top:1px solid #ccd0d5;padding:22px 0 10px;font-weight:bold;font-size:12.5px">Summary</td></tr>
     @endif
@@ -126,12 +133,18 @@
                 @if ($gst['charged'] && $gst['reg_no']){{ $gst['label'] }} Reg. No. {{ $gst['reg_no'] }}@endif
             </td>
             <td style="border-bottom:1px solid #ccd0d5;padding-bottom:6px;text-align:right;vertical-align:bottom">
-                {{ $client->country ?? '' }}<br>
+                {{ $countryName }}<br>
+                @if (! empty($client->tax_id))Tax ID: {{ $client->tax_id }}<br>@endif
                 {{ $isReceipt ? 'Receipt' : 'Invoice' }} # {{ $number }}
             </td>
         </tr>
     </table>
-    <div style="margin-top:12px">{{ $business['email'] ? 'Questions? '.$business['email'] : '' }}</div>
+    <div style="margin-top:12px">
+        @if (! $gst['charged'] && $country && $country !== 'SG')
+            Customers to account for any GST/VAT arising on this supply in accordance with the tax laws of {{ $countryName }}.<br>
+        @endif
+        {{ $business['email'] ? 'Questions? '.$business['email'] : '' }}
+    </div>
 </div>
 </body>
 </html>

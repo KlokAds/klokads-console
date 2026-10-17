@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Client extends Model
 {
-    protected $fillable = ['name', 'company', 'email', 'phone', 'country', 'commission_rate', 'stripe_customer_id', 'stripe_test_customer_id', 'notes'];
+    protected $fillable = ['name', 'company', 'email', 'phone', 'country', 'address', 'tax_id', 'commission_rate', 'stripe_customer_id', 'stripe_test_customer_id', 'notes'];
 
     protected $casts = ['commission_rate' => 'float'];
 

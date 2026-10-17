@@ -7,9 +7,9 @@ import StatementField from '@/Components/StatementField.vue';
 import { clientName, money } from '@/money';
 import { breakdown } from '@/pricing';
 import { Head, Link, usePage, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
-const props = defineProps({ clients: Array, services: Array, templates: Array, templateFor: Object, units: Array, currency: String, clientId: Number });
+const props = defineProps({ clients: Array, services: Array, templates: Array, templateFor: Object, units: Array, currency: String, clientId: Number, lastDetails: { type: Object, default: () => ({}) } });
 
 const form = useForm({
     client_id: props.clientId ?? '',
@@ -33,6 +33,28 @@ const form = useForm({
 const showDetails = ref(false);
 const addCampaign = () => form.campaigns.push({ name: '', detail: '', quantity: '', unit: 'Impressions', amount: '' });
 const removeCampaign = (i) => form.campaigns.splice(i, 1);
+
+// Last invoice's ad account + campaigns for this client: only this month's numbers need typing.
+const last = computed(() => props.lastDetails?.[form.client_id] ?? null);
+const isoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function useLastCampaigns() {
+    if (!last.value) return;
+    form.ad_account_id = last.value.ad_account_id ?? '';
+    form.campaigns = last.value.campaigns.map((c) => ({ ...c, quantity: '', amount: '' }));
+    if (!form.period_start) {
+        const now = new Date();
+        form.period_start = isoDate(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+        form.period_end = isoDate(new Date(now.getFullYear(), now.getMonth(), 0));
+    }
+    showDetails.value = true;
+}
+watch(
+    () => form.client_id,
+    () => {
+        if (last.value && !form.campaigns.length && !form.ad_account_id) useLastCampaigns();
+    },
+    { immediate: true },
+);
 const campaignTotal = computed(() => form.campaigns.reduce((s, c) => s + Math.round((Number(c.amount) || 0) * 100), 0));
 const previewUrl = computed(() => route('settings.templates.preview', { template: form.template, type: 'invoice' }));
 
@@ -193,7 +215,10 @@ function setService(value) {
                             <div>
                                 <div class="mb-2 flex items-center justify-between">
                                     <span class="label mb-0">Campaigns (shown as a breakdown)</span>
-                                    <span v-if="form.campaigns.length" class="text-xs text-ink-500">Total {{ money(campaignTotal, currency) }}</span>
+                                    <span class="flex items-center gap-3">
+                                        <button v-if="last" type="button" class="btn-link text-xs" @click="useLastCampaigns">Use last invoice's campaigns</button>
+                                        <span v-if="form.campaigns.length" class="text-xs text-ink-500">Total {{ money(campaignTotal, currency) }}</span>
+                                    </span>
                                 </div>
                                 <div class="space-y-2">
                                     <div v-for="(c, i) in form.campaigns" :key="i" class="grid grid-cols-12 gap-2">
@@ -203,11 +228,12 @@ function setService(value) {
                                         <select v-model="c.unit" class="input input-sm col-span-3 sm:col-span-2">
                                             <option v-for="u in units" :key="u" :value="u">{{ u }}</option>
                                         </select>
-                                        <input v-model="c.amount" type="number" step="0.01" min="0" class="input input-sm col-span-10 sm:col-span-1" placeholder="0.00" required />
+                                        <input v-model="c.amount" type="number" step="0.01" class="input input-sm col-span-10 sm:col-span-1" placeholder="0.00" title="Use a minus amount for a credit, e.g. -1.83" required />
                                         <button type="button" class="icon-btn col-span-2 sm:col-span-1 hover:text-rose-600" @click="removeCampaign(i)"><Icon name="trash" :size="15" /></button>
                                     </div>
                                 </div>
-                                <button type="button" class="btn-secondary btn-sm mt-2" @click="addCampaign"><Icon name="plus" :size="14" /> Add campaign</button>
+                                <button type="button" class="btn-secondary btn-sm mt-2" @click="addCampaign"><Icon name="plus" :size="14" /> Add campaign / ad set</button>
+                                <div class="hint mt-1.5">Same campaign name on several rows = one campaign with several ad sets. A minus amount is a credit (e.g. invalid activity).</div>
                             </div>
                         </div>
                     </div>
