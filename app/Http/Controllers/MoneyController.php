@@ -23,7 +23,9 @@ class MoneyController extends Controller
 {
     public function index(Request $request): Response
     {
-        $scope = $request->input('scope') === 'personal' ? 'personal' : 'business';
+        // Remember the last tab, so the sidebar link opens where you left off.
+        $scope = in_array($request->input('scope'), ['business', 'personal'], true) ? $request->input('scope') : $request->session()->get('money_scope', 'business');
+        $request->session()->put('money_scope', $scope);
         $month = preg_match('/^\d{4}-\d{2}$/', (string) $request->input('month')) ? $request->input('month') : now()->format('Y-m');
         $start = CarbonImmutable::createFromFormat('Y-m-d', "{$month}-01")->startOfDay();
 

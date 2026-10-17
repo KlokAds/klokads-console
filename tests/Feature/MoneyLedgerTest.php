@@ -100,6 +100,13 @@ class MoneyLedgerTest extends TestCase
         $this->get('/money?scope=personal')->assertInertia(fn ($page) => $page->where('summary.came_in', 20000));
     }
 
+    public function test_the_last_chosen_tab_is_remembered(): void
+    {
+        $this->get('/money?scope=personal')->assertInertia(fn ($page) => $page->where('scope', 'personal'));
+        $this->get('/money')->assertInertia(fn ($page) => $page->where('scope', 'personal'));
+        $this->get('/money?scope=business')->assertInertia(fn ($page) => $page->where('scope', 'business'));
+    }
+
     public function test_deleting_a_transaction_removes_its_expenses(): void
     {
         $this->post('/money', ['kind' => 'expense', 'account_id' => $this->sgd->id, 'amount' => 30, 'fee' => 1, 'category' => 'software', 'occurred_on' => now()->toDateString()]);
