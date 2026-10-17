@@ -146,7 +146,9 @@ const pdfUrl = (type) => route('public.invoice.pdf', { token: props.token, type 
                         <span class="flex items-center gap-1.5 text-xs text-ink-500"><Icon name="shield" :size="14" class="text-emerald-500" /> Secure · 256-bit encrypted</span>
                     </div>
                     <template v-if="canPay">
-                        <div ref="mountEl" class="min-h-[120px] rounded-xl bg-white p-4 ring-1 ring-line">
+                        <div class="min-h-[120px] rounded-xl bg-white p-4 ring-1 ring-line">
+                            <!-- Stripe owns this box; keep Vue-rendered nodes out of it. -->
+                            <div ref="mountEl"></div>
                             <div v-if="!ready" class="space-y-3">
                                 <div class="h-10 animate-pulse rounded-lg bg-ink-100"></div>
                                 <div class="h-10 animate-pulse rounded-lg bg-ink-100"></div>
