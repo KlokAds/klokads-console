@@ -107,25 +107,51 @@ class MoneyLedgerTest extends TestCase
         $this->get('/money?scope=business')->assertInertia(fn ($page) => $page->where('scope', 'business'));
     }
 
-    public function test_personal_dashboard_shows_only_personal_money_and_six_months(): void
+    public function test_personal_dashboard_keeps_sgd_and_bdt_apart_and_shows_where_spending_came_from(): void
     {
-        $wallet = Account::create(['name' => 'My DBS', 'scope' => 'personal', 'kind' => 'bank', 'currency' => 'SGD', 'opening_balance' => 50000]);
-        $this->post('/money', ['kind' => 'expense', 'account_id' => $wallet->id, 'amount' => 120, 'category' => 'food', 'occurred_on' => now()->toDateString()]);
-        $this->post('/money', ['kind' => 'expense', 'account_id' => $wallet->id, 'amount' => 80, 'category' => 'home', 'occurred_on' => now()->subMonthNoOverflow()->startOfMonth()->toDateString()]);
+        $dbs = Account::create(['name' => 'DBS Savings', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'dbs', 'currency' => 'SGD', 'opening_balance' => 50000]);
+        $bkash = Account::create(['name' => 'bKash', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'currency' => 'BDT', 'opening_balance' => 1000000]);
+        $this->post('/money', ['kind' => 'expense', 'account_id' => $dbs->id, 'amount' => 120, 'category' => 'food', 'occurred_on' => now()->toDateString()]);
+        $this->post('/money', ['kind' => 'expense', 'account_id' => $dbs->id, 'amount' => 80, 'category' => 'home', 'occurred_on' => now()->subMonthNoOverflow()->startOfMonth()->toDateString()]);
+        $this->post('/money', ['kind' => 'expense', 'account_id' => $bkash->id, 'amount' => 2500, 'fee' => 20, 'category' => 'family', 'occurred_on' => now()->toDateString()]);
+        // My own SGD → BDT conversion is neither spending nor income.
+        $this->post('/money', ['kind' => 'transfer', 'account_id' => $dbs->id, 'to_account_id' => $bkash->id, 'amount' => 100, 'to_amount' => 9000, 'occurred_on' => now()->toDateString()]);
         $this->post('/money', ['kind' => 'expense', 'account_id' => $this->sgd->id, 'amount' => 999, 'category' => 'software', 'occurred_on' => now()->toDateString()]);
 
         $this->get('/personal')->assertOk()->assertInertia(fn ($page) => $page->component('Personal/Dashboard')
-            ->has('accounts', 1)
-            ->where('accounts.0.balance', 30000)
-            ->where('current.spent', 12000)
-            ->where('previous.spent', 8000)
-            ->has('months', 6)
-            ->has('recent', 2));
+            ->where('currencies', ['SGD', 'BDT'])
+            ->has('accounts', 2)
+            ->where('accounts.0.name', 'DBS Savings')
+            ->where('accounts.0.balance', 50000 - 12000 - 8000 - 10000)
+            ->where('accounts.0.month_out', 12000)
+            ->where('accounts.1.balance', 1000000 - 252000 + 900000)
+            ->where('accounts.1.month_out', 252000)
+            ->where('stats.SGD.current.spent', 12000)
+            ->where('stats.SGD.previous.spent', 8000)
+            ->where('stats.BDT.current.spent', 252000)
+            ->where('stats.BDT.current.by_category.family', 250000)
+            ->where('stats.BDT.current.by_category.bank_fees', 2000)
+            ->where('stats.BDT.current.in', 0)
+            ->has('stats.SGD.months', 6)
+            ->where('recent.0.account.name', fn ($name) => in_array($name, ['DBS Savings', 'bKash'], true)));
 
         // The Money link then opens on the personal side.
         $this->get('/money')->assertInertia(fn ($page) => $page->where('scope', 'personal'));
         $this->get('/dashboard');
         $this->get('/money')->assertInertia(fn ($page) => $page->where('scope', 'business'));
+    }
+
+    public function test_personal_accounts_are_sgd_or_bdt_and_keep_their_bank(): void
+    {
+        $this->post('/money/accounts', ['name' => 'Revolut USD', 'scope' => 'personal', 'kind' => 'wallet', 'currency' => 'USD'])
+            ->assertSessionHasErrors(['currency' => 'Personal accounts are SGD or BDT.']);
+
+        $this->post('/money/accounts', ['name' => 'Airwallex', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'airwallex', 'currency' => 'SGD'])
+            ->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('accounts', ['name' => 'Airwallex', 'provider' => 'airwallex', 'currency' => 'SGD']);
+
+        // Business accounts can still be any currency.
+        $this->post('/money/accounts', ['name' => 'Wise USD', 'scope' => 'business', 'kind' => 'wallet', 'currency' => 'USD'])->assertSessionHasNoErrors();
     }
 
     public function test_deleting_a_transaction_removes_its_expenses(): void

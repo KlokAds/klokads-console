@@ -65,6 +65,38 @@ class Catalog
         'other' => 'Other',
     ];
 
+    /** Banks and wallets to pick from when adding an account: key => [label, kind]. */
+    public const PROVIDERS = [
+        'SGD' => [
+            'dbs' => ['DBS / POSB', 'bank'],
+            'ocbc' => ['OCBC', 'bank'],
+            'uob' => ['UOB', 'bank'],
+            'airwallex' => ['Airwallex', 'wallet'],
+            'aspire' => ['Aspire', 'bank'],
+            'wise' => ['Wise', 'wallet'],
+            'youtrip' => ['YouTrip', 'wallet'],
+            'revolut' => ['Revolut', 'wallet'],
+            'grabpay' => ['GrabPay', 'wallet'],
+            'cash' => ['Cash', 'cash'],
+            'other' => ['Other', 'bank'],
+        ],
+        'BDT' => [
+            'bkash' => ['bKash', 'wallet'],
+            'nagad' => ['Nagad', 'wallet'],
+            'rocket' => ['Rocket', 'wallet'],
+            'city' => ['City Bank', 'bank'],
+            'brac' => ['BRAC Bank', 'bank'],
+            'dbbl' => ['Dutch-Bangla Bank', 'bank'],
+            'ebl' => ['Eastern Bank', 'bank'],
+            'islami' => ['Islami Bank', 'bank'],
+            'cash' => ['Cash', 'cash'],
+            'other' => ['Other', 'bank'],
+        ],
+    ];
+
+    /** The personal side only keeps these currencies. */
+    public const PERSONAL_CURRENCIES = ['SGD', 'BDT'];
+
     public const ACCOUNT_KINDS = ['bank' => 'Bank', 'wallet' => 'Wallet (Wise, bKash…)', 'card' => 'Card', 'cash' => 'Cash'];
 
     /** Invoice / receipt PDF designs. "Classic" layouts follow the familiar ad-platform format, with Klok Ads as issuer. */

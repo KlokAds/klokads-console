@@ -37,8 +37,11 @@ const iconTone = {
             <DeltaChip v-if="current !== null" :current="current" :previous="previous" :up-is-good="upIsGood" />
         </div>
         <div
-            class="mt-3 font-display text-[26px] font-bold leading-none tabular-nums tracking-tight"
-            :class="{ 'text-ink-900': tone === 'default' || tone === 'brand', 'text-emerald-600': tone === 'good', 'text-rose-600': tone === 'bad' }"
+            class="mt-3 whitespace-nowrap font-display font-bold leading-none tabular-nums tracking-tight"
+            :class="[
+                value.length > 12 ? 'text-[19px] sm:text-[26px]' : 'text-[26px]',
+                { 'text-ink-900': tone === 'default' || tone === 'brand', 'text-emerald-600': tone === 'good', 'text-rose-600': tone === 'bad' },
+            ]"
         >
             {{ value }}
         </div>

@@ -19,6 +19,8 @@ const props = defineProps({
     summary: Object,
     categories: Object,
     kinds: Array,
+    providers: Object,
+    personalCurrencies: Array,
 });
 
 const B = (v) => money(v, props.base);
@@ -41,6 +43,7 @@ const monthLabel = computed(() => {
 const scopeAccounts = computed(() => props.accounts.filter((a) => a.scope === props.scope && !a.archived));
 const archived = computed(() => props.accounts.filter((a) => a.scope === props.scope && a.archived));
 const activeAccounts = computed(() => props.accounts.filter((a) => !a.archived));
+const currencyTotal = (c) => scopeAccounts.value.filter((a) => a.currency.toUpperCase() === c).reduce((s, a) => s + a.balance, 0);
 const totalBalance = computed(() => scopeAccounts.value.reduce((s, a) => s + (a.base_value || 0), 0));
 const byCategory = computed(() => {
     const all = [...props.categories.expense, { value: 'bank_fees', label: 'Bank & transfer fees' }];
@@ -52,14 +55,33 @@ const perHundred = (a) => (a.rate && !isBase(a.currency) ? `${money(10000, a.cur
 // ---------------------------------------------------------------- accounts
 const showAccount = ref(false);
 const editingAccount = ref(null);
-const accountForm = useForm({ name: '', scope: props.scope, kind: 'bank', currency: props.base.toUpperCase(), opening_balance: '', opening_rate: '', notes: '', archived: false });
+const blankAccount = () => ({ name: '', scope: props.scope, kind: 'bank', provider: '', currency: props.scope === 'personal' ? 'SGD' : props.base.toUpperCase(), opening_balance: '', opening_rate: '', notes: '', archived: false });
+const accountForm = useForm(blankAccount());
+
+// Pick DBS / Airwallex / bKash… — fills the name and type; "Other" lets you type your own.
+const providerList = computed(() => Object.entries(props.providers[accountForm.currency?.toUpperCase()] ?? {}).map(([value, [name, kind]]) => ({ value, name, kind })));
+function pickProvider(p) {
+    const previous = providerList.value.find((x) => x.value === accountForm.provider);
+    accountForm.provider = p.value;
+    accountForm.kind = p.kind;
+    if (p.value !== 'other' && (!accountForm.name || accountForm.name === previous?.name)) accountForm.name = p.name;
+    if (p.value === 'other' && accountForm.name === previous?.name) accountForm.name = '';
+}
+function setScope() {
+    if (accountForm.scope === 'personal' && !props.personalCurrencies.includes(accountForm.currency.toUpperCase())) accountForm.currency = 'SGD';
+}
+function setCurrency(c) {
+    accountForm.currency = c;
+    accountForm.provider = '';
+}
+const providerName = (a) => (a.provider && a.provider !== 'other' ? props.providers[a.currency]?.[a.provider]?.[0] : null);
 
 function openAccount(a = null) {
     editingAccount.value = a;
     accountForm.defaults(
         a
-            ? { ...a, opening_balance: (a.opening_balance / 100).toFixed(2), opening_rate: a.opening_rate ?? '', notes: a.notes ?? '' }
-            : { name: '', scope: props.scope, kind: 'bank', currency: props.base.toUpperCase(), opening_balance: '', opening_rate: '', notes: '', archived: false },
+            ? { ...blankAccount(), ...a, provider: a.provider ?? '', opening_balance: (a.opening_balance / 100).toFixed(2), opening_rate: a.opening_rate ?? '', notes: a.notes ?? '' }
+            : blankAccount(),
     );
     accountForm.reset();
     accountForm.clearErrors();
@@ -183,8 +205,14 @@ if (wantsNew()) openTx();
             </div>
         </div>
 
-        <!-- Month totals -->
-        <div class="mt-5 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <!-- Personal: each currency on its own, never converted -->
+        <div v-if="scope === 'personal'" class="mt-5 grid grid-cols-2 gap-3 sm:gap-4">
+            <StatCard v-for="c in personalCurrencies" :key="c" :label="`${c} · all accounts`" :value="money(currencyTotal(c), c)"
+                :hint="`${scopeAccounts.filter((a) => a.currency.toUpperCase() === c).length} account(s)`" icon="wallet" :tone="c === 'SGD' ? 'brand' : 'good'" />
+        </div>
+
+        <!-- Business month totals -->
+        <div v-else class="mt-5 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
             <StatCard label="Money in" :value="B(summary.in + summary.came_in)" :hint="summary.came_in ? `incl. ${B(summary.came_in)} moved in` : monthLabel" icon="trend" tone="good" />
             <StatCard label="Spent" :value="B(summary.spent)" :hint="summary.fees ? `incl. ${B(summary.fees)} bank fees` : monthLabel" icon="card" tone="bad" />
             <StatCard :label="scope === 'business' ? 'Kept this month' : 'Saved this month'" :value="B(summary.net)"
@@ -200,7 +228,7 @@ if (wantsNew()) openTx();
                         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600"><Icon :name="KIND_ICONS[a.kind] ?? 'bank'" /></span>
                         <div class="min-w-0">
                             <div class="truncate font-semibold text-ink-900">{{ a.name }}</div>
-                            <div class="text-xs text-ink-500">{{ label(kinds, a.kind) }} · {{ a.currency }}</div>
+                            <div class="text-xs text-ink-500">{{ providerName(a) && providerName(a) !== a.name ? providerName(a) : label(kinds, a.kind) }} · {{ a.currency }}</div>
                         </div>
                     </div>
                     <RowMenu>
@@ -225,8 +253,8 @@ if (wantsNew()) openTx();
         </div>
 
         <div class="mt-5 grid gap-5 xl:grid-cols-3">
-            <!-- Where it went -->
-            <div class="card min-w-0">
+            <!-- Where it went (business, in the reporting currency; personal has it per currency on its dashboard) -->
+            <div v-if="scope === 'business'" class="card min-w-0">
                 <div class="card-head"><div><div class="card-title">Where it went</div><div class="card-sub">{{ monthLabel }} · in {{ base.toUpperCase() }}</div></div></div>
                 <div v-if="byCategory.length" class="space-y-3.5 p-5 sm:p-6">
                     <div v-for="c in byCategory" :key="c.key">
@@ -246,7 +274,7 @@ if (wantsNew()) openTx();
             </div>
 
             <!-- Entries -->
-            <div class="card min-w-0 xl:col-span-2">
+            <div class="card min-w-0" :class="scope === 'business' ? 'xl:col-span-2' : 'xl:col-span-3'">
                 <div class="card-head">
                     <div><div class="card-title">Entries</div><div class="card-sub">{{ transactions.length }} in {{ monthLabel }}</div></div>
                     <div v-if="activeAccounts.length" class="flex gap-1.5">
@@ -265,7 +293,8 @@ if (wantsNew()) openTx();
                             <div class="truncate font-semibold text-ink-900">{{ describe(t) }}</div>
                             <div class="truncate text-xs text-ink-500">
                                 {{ date(t.occurred_on) }}
-                                <template v-if="t.kind !== 'transfer'"> · {{ t.account.name }} · {{ label(allCategories, t.category) }}</template>
+                                <template v-if="t.kind === 'expense'"> · from <b class="font-semibold text-ink-700">{{ t.account.name }}</b> · {{ label(allCategories, t.category) }}</template>
+                                <template v-else-if="t.kind === 'income'"> · into <b class="font-semibold text-ink-700">{{ t.account.name }}</b> · {{ label(allCategories, t.category) }}</template>
                                 <template v-if="t.description"> · {{ t.description }}</template>
                                 <template v-if="t.payout_id"> · auto from payout</template>
                             </div>
@@ -385,28 +414,42 @@ if (wantsNew()) openTx();
                     <button type="button" class="icon-btn" @click="showAccount = false"><Icon name="close" /></button>
                 </div>
                 <div class="grid grid-cols-2 gap-4 px-6 py-5">
-                    <div class="col-span-2">
-                        <label class="label">Name *</label>
-                        <input v-model="accountForm.name" class="input" placeholder="DBS Business, City Bank BDT, bKash, Cash…" required />
-                        <div v-if="accountForm.errors.name" class="error">{{ accountForm.errors.name }}</div>
-                    </div>
                     <div>
                         <label class="label">Belongs to</label>
-                        <select v-model="accountForm.scope" class="input">
+                        <select v-model="accountForm.scope" class="input" @change="setScope">
                             <option value="business">Business</option>
                             <option value="personal">Personal</option>
                         </select>
+                    </div>
+                    <div>
+                        <label class="label">Currency *</label>
+                        <div v-if="accountForm.scope === 'personal'" class="grid grid-cols-2 gap-1 rounded-xl bg-ink-100 p-1">
+                            <button v-for="c in personalCurrencies" :key="c" type="button" class="rounded-lg py-2 text-sm font-semibold transition"
+                                :class="accountForm.currency.toUpperCase() === c ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500'" @click="setCurrency(c)">{{ c }}</button>
+                        </div>
+                        <input v-else v-model="accountForm.currency" maxlength="3" class="input uppercase" placeholder="SGD, BDT, USD…" required />
+                        <div v-if="accountForm.errors.currency" class="error">{{ accountForm.errors.currency }}</div>
+                    </div>
+                    <div v-if="providerList.length" class="col-span-2">
+                        <label class="label">Bank / wallet</label>
+                        <div class="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                            <button v-for="p in providerList" :key="p.value" type="button"
+                                class="truncate rounded-xl border px-2.5 py-2 text-xs font-semibold transition"
+                                :class="accountForm.provider === p.value ? 'border-brand-400 bg-brand-50 text-brand-800' : 'border-line text-ink-600 hover:border-ink-200'"
+                                @click="pickProvider(p)">{{ p.name }}</button>
+                        </div>
+                    </div>
+                    <div class="col-span-2">
+                        <label class="label">Name *</label>
+                        <input v-model="accountForm.name" class="input" :placeholder="accountForm.provider === 'other' ? 'Bank or wallet name' : 'e.g. DBS Savings, Airwallex SGD, bKash'" required />
+                        <div class="hint">Shown everywhere, so make it easy to recognise (e.g. "DBS Savings", "Aspire Business").</div>
+                        <div v-if="accountForm.errors.name" class="error">{{ accountForm.errors.name }}</div>
                     </div>
                     <div>
                         <label class="label">Type</label>
                         <select v-model="accountForm.kind" class="input">
                             <option v-for="k in kinds" :key="k.value" :value="k.value">{{ k.label }}</option>
                         </select>
-                    </div>
-                    <div>
-                        <label class="label">Currency *</label>
-                        <input v-model="accountForm.currency" maxlength="3" class="input uppercase" placeholder="SGD, BDT, USD…" required />
-                        <div v-if="accountForm.errors.currency" class="error">{{ accountForm.errors.currency }}</div>
                     </div>
                     <div>
                         <label class="label">Balance today ({{ accountForm.currency || '—' }})</label>

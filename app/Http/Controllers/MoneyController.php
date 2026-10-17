@@ -42,7 +42,7 @@ class MoneyController extends Controller
             'month' => $month,
             'base' => Ledger::base(),
             'accounts' => $allAccounts->map(fn (Account $a) => [
-                ...$a->only('id', 'name', 'scope', 'kind', 'currency', 'opening_balance', 'opening_rate', 'notes', 'archived'),
+                ...$a->only('id', 'name', 'scope', 'kind', 'provider', 'currency', 'opening_balance', 'opening_rate', 'notes', 'archived'),
                 'balance' => $balance = Ledger::balance($a),
                 'rate' => Ledger::rate($a),
                 'base_value' => Ledger::value($a, $balance),
@@ -62,6 +62,8 @@ class MoneyController extends Controller
                 'income' => Catalog::options(Catalog::INCOME_CATEGORIES[$scope]),
             ],
             'kinds' => Catalog::options(Catalog::ACCOUNT_KINDS),
+            'providers' => Catalog::PROVIDERS,
+            'personalCurrencies' => Catalog::PERSONAL_CURRENCIES,
         ]);
     }
 
@@ -120,12 +122,13 @@ class MoneyController extends Controller
             'name' => ['required', 'string', 'max:100'],
             'scope' => ['required', Rule::in(['business', 'personal'])],
             'kind' => ['required', Rule::in(array_keys(Catalog::ACCOUNT_KINDS))],
-            'currency' => ['required', 'alpha', 'size:3'],
+            'currency' => ['required', 'alpha', 'size:3', Rule::when($request->input('scope') === 'personal', [Rule::in(array_merge(Catalog::PERSONAL_CURRENCIES, array_map('strtolower', Catalog::PERSONAL_CURRENCIES)))])],
+            'provider' => ['nullable', 'string', 'max:40'],
             'opening_balance' => ['nullable', 'numeric'],
             'opening_rate' => ['nullable', 'numeric', 'gt:0'],
             'notes' => ['nullable', 'string', 'max:500'],
             'archived' => ['boolean'],
-        ]);
+        ], ['currency.in' => 'Personal accounts are SGD or BDT.']);
 
         $data['currency'] = strtoupper($data['currency']);
         $data['opening_balance'] = $this->toCents($data['opening_balance'] ?? 0);
