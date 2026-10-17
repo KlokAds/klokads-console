@@ -25,8 +25,47 @@ class Catalog
         'salary' => 'Salary / freelancers',
         'office' => 'Office / admin',
         'tax' => 'Tax / GST',
+        'bank_fees' => 'Bank & transfer fees',
         'other' => 'Other',
     ];
+
+    /** Money in, by scope (Money page). */
+    public const INCOME_CATEGORIES = [
+        'business' => [
+            'stripe_payout' => 'Stripe payout',
+            'client_payment' => 'Client paid directly',
+            'owner_capital' => 'Owner put money in',
+            'other_income' => 'Other income',
+        ],
+        'personal' => [
+            'salary' => 'Salary / owner draw',
+            'family' => 'From family',
+            'gift' => 'Gift',
+            'investment' => 'Investment return',
+            'other_income' => 'Other income',
+        ],
+    ];
+
+    /** Personal spending categories (business spending uses EXPENSE_CATEGORIES). */
+    public const PERSONAL_CATEGORIES = [
+        'food' => 'Food & groceries',
+        'home' => 'Rent & home',
+        'bills' => 'Bills & utilities',
+        'transport' => 'Transport',
+        'family' => 'Family support',
+        'shopping' => 'Shopping',
+        'health' => 'Health',
+        'education' => 'Education',
+        'entertainment' => 'Fun & eating out',
+        'travel' => 'Travel',
+        'savings' => 'Savings & investment',
+        'loan' => 'Loan / EMI',
+        'charity' => 'Charity / zakat',
+        'bank_fees' => 'Bank & transfer fees',
+        'other' => 'Other',
+    ];
+
+    public const ACCOUNT_KINDS = ['bank' => 'Bank', 'wallet' => 'Wallet (Wise, bKash…)', 'card' => 'Card', 'cash' => 'Cash'];
 
     /** Invoice / receipt PDF designs. "Classic" layouts follow the familiar ad-platform format, with Klok Ads as issuer. */
     public const TEMPLATES = [

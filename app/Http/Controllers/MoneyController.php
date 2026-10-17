@@ -1,0 +1,242 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Account;
+use App\Models\MoneyTransaction;
+use App\Support\Catalog;
+use App\Support\Ledger;
+use Carbon\CarbonImmutable;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
+use Inertia\Response;
+
+/**
+ * Money: bank accounts, wallets and cash (business and personal), what came in, what
+ * went out and where, and conversions between currencies — month by month.
+ */
+class MoneyController extends Controller
+{
+    public function index(Request $request): Response
+    {
+        $scope = $request->input('scope') === 'personal' ? 'personal' : 'business';
+        $month = preg_match('/^\d{4}-\d{2}$/', (string) $request->input('month')) ? $request->input('month') : now()->format('Y-m');
+        $start = CarbonImmutable::createFromFormat('Y-m-d', "{$month}-01")->startOfDay();
+
+        $allAccounts = Account::orderBy('archived')->orderBy('scope')->orderBy('name')->get();
+        $ids = $allAccounts->where('scope', $scope)->pluck('id');
+
+        $transactions = MoneyTransaction::with('account:id,name,currency,scope', 'toAccount:id,name,currency,scope')
+            ->where(fn ($q) => $q->whereIn('account_id', $ids)->orWhereIn('to_account_id', $ids))
+            ->whereBetween('occurred_on', [$start->toDateString(), $start->endOfMonth()->toDateString()])
+            ->latest('occurred_on')->latest('id')
+            ->get();
+
+        return Inertia::render('Money/Index', [
+            'scope' => $scope,
+            'month' => $month,
+            'base' => Ledger::base(),
+            'accounts' => $allAccounts->map(fn (Account $a) => [
+                ...$a->only('id', 'name', 'scope', 'kind', 'currency', 'opening_balance', 'opening_rate', 'notes', 'archived'),
+                'balance' => $balance = Ledger::balance($a),
+                'rate' => Ledger::rate($a),
+                'base_value' => Ledger::value($a, $balance),
+            ]),
+            'transactions' => $transactions->map(fn (MoneyTransaction $t) => [
+                ...$t->only('id', 'kind', 'account_id', 'to_account_id', 'amount', 'to_amount', 'fee', 'base_amount', 'category', 'counterparty', 'description', 'payout_id'),
+                'occurred_on' => $t->occurred_on->toDateString(),
+                'account' => $t->account,
+                'to_account' => $t->toAccount,
+                // Seen from this scope: money leaving it, arriving, or moving inside it.
+                'direction' => $this->direction($t, $ids->all()),
+                'fee_value' => $t->fee ? Ledger::value($t->account, $t->fee, $t->id) : 0,
+            ]),
+            'summary' => $this->summary($transactions, $ids->all()),
+            'categories' => [
+                'expense' => Catalog::options($scope === 'business' ? Catalog::EXPENSE_CATEGORIES : Catalog::PERSONAL_CATEGORIES),
+                'income' => Catalog::options(Catalog::INCOME_CATEGORIES[$scope]),
+            ],
+            'kinds' => Catalog::options(Catalog::ACCOUNT_KINDS),
+        ]);
+    }
+
+    public function storeAccount(Request $request): RedirectResponse
+    {
+        Account::create($this->accountData($request));
+
+        return back()->with('success', 'Account added.');
+    }
+
+    public function updateAccount(Request $request, Account $account): RedirectResponse
+    {
+        $account->update($this->accountData($request, $account));
+
+        return back()->with('success', 'Account updated.');
+    }
+
+    public function destroyAccount(Account $account): RedirectResponse
+    {
+        if ($account->outgoing()->exists() || $account->incoming()->exists()) {
+            $account->update(['archived' => true]);
+
+            return back()->with('success', "{$account->name} archived — its history is kept.");
+        }
+
+        $account->delete();
+
+        return back()->with('success', 'Account removed.');
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        Ledger::save($this->transactionData($request));
+
+        return back()->with('success', 'Saved.');
+    }
+
+    public function update(Request $request, MoneyTransaction $transaction): RedirectResponse
+    {
+        Ledger::save($this->transactionData($request), $transaction);
+
+        return back()->with('success', 'Updated.');
+    }
+
+    public function destroy(MoneyTransaction $transaction): RedirectResponse
+    {
+        Ledger::delete($transaction);
+
+        return back()->with('success', 'Deleted.');
+    }
+
+    /** @param  array<int, int>  $ids */
+    private function direction(MoneyTransaction $t, array $ids): string
+    {
+        $from = in_array($t->account_id, $ids, true);
+        $to = $t->to_account_id && in_array($t->to_account_id, $ids, true);
+
+        return match (true) {
+            $t->kind === 'income' => 'in',
+            $t->kind === 'expense' => 'out',
+            $from && $to => 'move',
+            $from => 'out',
+            default => 'in',
+        };
+    }
+
+    /**
+     * Month totals in the reporting currency, as seen from one scope.
+     *
+     * @param  Collection<int, MoneyTransaction>  $transactions
+     * @param  array<int, int>  $ids
+     * @return array<string, mixed>
+     */
+    private function summary($transactions, array $ids): array
+    {
+        $in = $spent = $fees = $sentOut = $cameIn = 0;
+        $byCategory = [];
+
+        foreach ($transactions as $t) {
+            $fee = $t->fee ? Ledger::value($t->account, $t->fee, $t->id) : 0;
+            $from = in_array($t->account_id, $ids, true);
+            $to = $t->to_account_id && in_array($t->to_account_id, $ids, true);
+
+            if ($t->kind === 'income') {
+                $in += $t->base_amount;
+                $fees += $fee;
+            } elseif ($t->kind === 'expense') {
+                $spent += $t->base_amount - $fee;
+                $fees += $fee;
+                $byCategory[$t->category ?: 'other'] = ($byCategory[$t->category ?: 'other'] ?? 0) + $t->base_amount - $fee;
+            } else {
+                if ($from) {
+                    $fees += $fee;
+                }
+                if ($from && ! $to) {
+                    $sentOut += $t->base_amount;
+                } elseif ($to && ! $from) {
+                    $cameIn += $t->base_amount;
+                }
+            }
+        }
+
+        if ($fees) {
+            $byCategory['bank_fees'] = ($byCategory['bank_fees'] ?? 0) + $fees;
+        }
+        arsort($byCategory);
+
+        return [
+            'in' => $in,
+            'spent' => $spent + $fees,
+            'fees' => $fees,
+            'sent_out' => $sentOut, // e.g. business → personal (owner draw)
+            'came_in' => $cameIn,
+            'net' => $in + $cameIn - $spent - $fees - $sentOut,
+            'by_category' => $byCategory,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function accountData(Request $request, ?Account $account = null): array
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+            'scope' => ['required', Rule::in(['business', 'personal'])],
+            'kind' => ['required', Rule::in(array_keys(Catalog::ACCOUNT_KINDS))],
+            'currency' => ['required', 'alpha', 'size:3'],
+            'opening_balance' => ['nullable', 'numeric'],
+            'opening_rate' => ['nullable', 'numeric', 'gt:0'],
+            'notes' => ['nullable', 'string', 'max:500'],
+            'archived' => ['boolean'],
+        ]);
+
+        $data['currency'] = strtoupper($data['currency']);
+        $data['opening_balance'] = $this->toCents($data['opening_balance'] ?? 0);
+        $data['opening_rate'] = strtolower($data['currency']) === Ledger::base() ? null : ($data['opening_rate'] ?? null);
+
+        if ($account && $account->currency !== $data['currency'] && ($account->outgoing()->exists() || $account->incoming()->exists())) {
+            $data['currency'] = $account->currency; // history is in the old currency
+        }
+
+        return $data;
+    }
+
+    /** @return array<string, mixed> */
+    private function transactionData(Request $request): array
+    {
+        $data = $request->validate([
+            'kind' => ['required', Rule::in(['income', 'expense', 'transfer'])],
+            'account_id' => ['required', 'exists:accounts,id'],
+            'to_account_id' => ['nullable', 'required_if:kind,transfer', 'exists:accounts,id', 'different:account_id'],
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'to_amount' => ['nullable', 'numeric', 'min:0.01'],
+            'fee' => ['nullable', 'numeric', 'min:0'],
+            'base_amount' => ['nullable', 'numeric', 'min:0'],
+            'category' => ['nullable', 'string', 'max:40'],
+            'counterparty' => ['nullable', 'string', 'max:150'],
+            'description' => ['nullable', 'string', 'max:500'],
+            'occurred_on' => ['required', 'date'],
+        ], ['to_account_id.different' => 'Pick a different account to move money to.']);
+
+        $from = Account::find($data['account_id']);
+        $to = $data['kind'] === 'transfer' ? Account::find($data['to_account_id']) : null;
+
+        if ($to && $to->currency !== $from->currency && blank($data['to_amount'] ?? null)) {
+            throw ValidationException::withMessages(['to_amount' => "How much {$to->currency} arrived in {$to->name}?"]);
+        }
+
+        return [
+            ...$data,
+            'to_account_id' => $to?->id,
+            'amount' => $this->toCents($data['amount']),
+            'fee' => $this->toCents($data['fee'] ?? 0),
+            // Same currency: what leaves arrives. Different: what the other bank actually credited.
+            'to_amount' => $to ? ($to->currency === $from->currency ? $this->toCents($data['amount']) : $this->toCents($data['to_amount'] ?? 0)) : null,
+            'base_amount' => filled($data['base_amount'] ?? null) ? $this->toCents($data['base_amount']) : null,
+            'category' => $data['kind'] === 'transfer' ? null : ($data['category'] ?? 'other'),
+        ];
+    }
+}

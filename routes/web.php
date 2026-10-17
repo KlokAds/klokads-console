@@ -8,6 +8,7 @@ use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\MoneyController;
 use App\Http\Controllers\PaymentLinkController;
 use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\ProfileController;
@@ -70,7 +71,16 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('expenses', ExpenseController::class)->only(['index', 'store', 'update', 'destroy']);
 
+    Route::get('/money', [MoneyController::class, 'index'])->name('money.index');
+    Route::post('/money', [MoneyController::class, 'store'])->name('money.store');
+    Route::put('/money/{transaction}', [MoneyController::class, 'update'])->name('money.update');
+    Route::delete('/money/{transaction}', [MoneyController::class, 'destroy'])->name('money.destroy');
+    Route::post('/money/accounts', [MoneyController::class, 'storeAccount'])->name('money.accounts.store');
+    Route::put('/money/accounts/{account}', [MoneyController::class, 'updateAccount'])->name('money.accounts.update');
+    Route::delete('/money/accounts/{account}', [MoneyController::class, 'destroyAccount'])->name('money.accounts.destroy');
+
     Route::get('/payouts', [PayoutController::class, 'index'])->name('payouts.index');
+    Route::post('/payouts/bank', [PayoutController::class, 'updateBank'])->name('payouts.bank');
     Route::post('/payouts', [PayoutController::class, 'store'])->name('payouts.store');
     Route::post('/payouts/schedule', [PayoutController::class, 'updateSchedule'])->name('payouts.schedule');
 

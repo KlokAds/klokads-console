@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Account;
 use App\Models\Payout;
+use App\Models\Setting;
 use App\Services\StripeService;
+use App\Support\Ledger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -41,7 +44,16 @@ class PayoutController extends Controller
             'currency' => $currency,
             'available' => (int) ($balance['available'][$currency] ?? 0),
             'pending' => (int) ($balance['pending'][$currency] ?? 0),
-            'payouts' => Payout::latest('occurred_at')->paginate(20),
+            'payouts' => Payout::latest('occurred_at')->paginate(20)->through(fn (Payout $p) => [
+                ...$p->toArray(),
+                'bank_fee' => $fee = Ledger::payoutFee($p->amount),
+                'received' => $p->amount - $fee,
+            ]),
+            'bank' => [
+                'fee_rate' => Ledger::bankFeeRate(),
+                'account_id' => Setting::get('payout_account_id'),
+                'accounts' => Account::where('scope', 'business')->where('archived', false)->where('currency', strtoupper($currency))->orderBy('name')->get(['id', 'name', 'currency']),
+            ],
             'totals' => [
                 'paid' => (int) Payout::where('status', 'paid')->sum('amount'),
                 'in_transit' => (int) Payout::whereIn('status', ['pending', 'in_transit'])->sum('amount'),
@@ -69,6 +81,23 @@ class PayoutController extends Controller
             fn () => $stripe->updatePayoutSchedule($data['interval'], $data['weekday'] ?? null, isset($data['month_day']) ? (int) $data['month_day'] : null),
             "Payout schedule saved: Stripe pays out {$label}."
         );
+    }
+
+    /** Bank's cut on each deposit (e.g. 0.3%) and which account payouts land in. */
+    public function updateBank(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'fee_rate' => ['required', 'numeric', 'between:0,10'],
+            'account_id' => ['nullable', Rule::exists('accounts', 'id')->where('scope', 'business')],
+        ]);
+
+        Setting::put('bank_fee_rate', (string) $data['fee_rate']);
+        Setting::put('payout_account_id', $data['account_id'] ? (string) $data['account_id'] : null);
+
+        // Catch up on paid payouts that arrived before an account was chosen.
+        Payout::where('status', 'paid')->orderBy('occurred_at')->each(fn (Payout $p) => Ledger::recordPayout($p));
+
+        return back()->with('success', 'Bank deposit settings saved.');
     }
 
     public function store(Request $request, StripeService $stripe): RedirectResponse

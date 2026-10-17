@@ -19,6 +19,7 @@ const props = defineProps({
     payouts: Object,
     totals: Object,
     weekdays: Array,
+    bank: Object,
 });
 
 const m = (v) => money(v, props.currency);
@@ -41,6 +42,11 @@ const payoutForm = useForm({
     description: '',
     confirm: false,
 });
+
+// Bank's cut when a payout lands, and which account it lands in (Money page).
+const bankForm = useForm({ fee_rate: props.bank?.fee_rate ?? 0, account_id: props.bank?.account_id ? Number(props.bank.account_id) : '' });
+const saveBank = () => bankForm.post(route('payouts.bank'), { preserveScroll: true, onSuccess: () => bankForm.defaults() });
+const sampleFee = computed(() => Math.round(100000 * (Number(bankForm.fee_rate) || 0) / 100));
 
 const isManual = computed(() => props.settings?.interval === 'manual');
 const disabled = computed(() => props.settings?.status && props.settings.status !== 'enabled');
@@ -194,6 +200,38 @@ function payOut() {
                 </form>
             </div>
 
+            <!-- Bank deposit -->
+            <div class="card mt-5">
+                <div class="card-head flex-wrap">
+                    <div>
+                        <div class="card-title">Bank deposit</div>
+                        <div class="card-sub">What your bank keeps when a payout arrives, and where the money is tracked.</div>
+                    </div>
+                </div>
+                <form class="grid gap-4 p-5 sm:grid-cols-3 sm:p-6" @submit.prevent="saveBank">
+                    <div>
+                        <label class="label">Bank fee on deposits (%)</label>
+                        <input v-model="bankForm.fee_rate" type="number" step="0.01" min="0" max="10" class="input" />
+                        <div class="hint">{{ m(100000) }} payout → fee {{ m(sampleFee) }}, you get {{ m(100000 - sampleFee) }}</div>
+                        <div v-if="bankForm.errors.fee_rate" class="error">{{ bankForm.errors.fee_rate }}</div>
+                    </div>
+                    <div>
+                        <label class="label">Payouts land in</label>
+                        <select v-model="bankForm.account_id" class="input">
+                            <option value="">— Don't track in Money —</option>
+                            <option v-for="a in bank.accounts" :key="a.id" :value="a.id">{{ a.name }} ({{ a.currency }})</option>
+                        </select>
+                        <div class="hint">
+                            <template v-if="bank.accounts.length">Each paid payout is added there automatically, minus the fee.</template>
+                            <template v-else>Add a business {{ currency.toUpperCase() }} account on the <Link :href="route('money.index')" class="text-brand-600 hover:underline">Money</Link> page first.</template>
+                        </div>
+                    </div>
+                    <div class="flex items-end">
+                        <button class="btn-primary w-full sm:w-auto" :disabled="bankForm.processing || !bankForm.isDirty">Save</button>
+                    </div>
+                </form>
+            </div>
+
             <!-- History -->
             <div class="card mt-5">
                 <div class="card-head">
@@ -202,11 +240,13 @@ function payOut() {
                 </div>
                 <div v-if="payouts.data.length" class="overflow-x-auto">
                     <table class="table">
-                        <thead><tr><th>Created</th><th class="num">Amount</th><th>Status</th><th>Arrives</th><th>Type</th></tr></thead>
+                        <thead><tr><th>Created</th><th class="num">Amount</th><th class="num">Bank fee</th><th class="num">You get</th><th>Status</th><th>Arrives</th><th>Type</th></tr></thead>
                         <tbody>
                             <tr v-for="p in payouts.data" :key="p.id">
                                 <td>{{ date(p.occurred_at) }}</td>
-                                <td class="num font-semibold text-ink-900">{{ money(p.amount, p.currency) }}</td>
+                                <td class="num text-ink-700">{{ money(p.amount, p.currency) }}</td>
+                                <td class="num text-rose-600">{{ p.bank_fee ? '−' + money(p.bank_fee, p.currency) : '—' }}</td>
+                                <td class="num font-semibold text-ink-900">{{ money(p.received, p.currency) }}</td>
                                 <td><StatusBadge :status="p.status" /></td>
                                 <td>{{ date(p.arrival_at) }}</td>
                                 <td class="capitalize text-ink-500">{{ p.method || '—' }}</td>

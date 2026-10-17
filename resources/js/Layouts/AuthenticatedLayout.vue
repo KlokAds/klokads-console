@@ -25,6 +25,7 @@ const sections = [
             { name: 'Dashboard', route: 'dashboard', match: 'dashboard', icon: 'home' },
             { name: 'Cashflow', route: 'cashflow.index', match: 'cashflow.*', icon: 'flow' },
             { name: 'Payouts', route: 'payouts.index', match: 'payouts.*', icon: 'bank' },
+            { name: 'Money', route: 'money.index', match: 'money.*', icon: 'wallet' },
         ],
     },
     {
@@ -50,6 +51,7 @@ const quickCreate = [
     { label: 'Recurring plan', hint: 'Monthly retainer, auto-charge', icon: 'repeat', href: () => route('recurring.index', { new: 1 }) },
     { label: 'Payment link', hint: 'Share by WhatsApp or email', icon: 'link', href: () => route('payment-links.index') },
     { label: 'Expense', hint: 'Ad spend, tools, salary', icon: 'card', href: () => route('expenses.index', { new: 1 }) },
+    { label: 'Money entry', hint: 'Spending, transfer, conversion', icon: 'wallet', href: () => route('money.index', { new: 1 }) },
     { label: 'Client', hint: 'Adds a Stripe customer', icon: 'users', href: () => route('clients.index', { new: 1 }) },
 ];
 

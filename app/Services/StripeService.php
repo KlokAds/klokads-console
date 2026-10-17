@@ -10,6 +10,7 @@ use App\Models\RecurringPlan;
 use App\Models\Setting;
 use App\Models\Transaction;
 use App\Support\Business;
+use App\Support\Ledger;
 use App\Support\Pricing;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -998,7 +999,7 @@ class StripeService
 
     public function upsertPayout(\Stripe\Payout $p): Payout
     {
-        return Payout::updateOrCreate(['stripe_payout_id' => $p->id], [
+        $payout = Payout::updateOrCreate(['stripe_payout_id' => $p->id], [
             'amount' => $p->amount,
             'currency' => $p->currency,
             'status' => $p->status,
@@ -1007,6 +1008,10 @@ class StripeService
             'arrival_at' => $this->ts($p->arrival_date),
             'occurred_at' => $this->ts($p->created),
         ]);
+
+        Ledger::recordPayout($payout); // lands in the chosen bank account, minus its fee
+
+        return $payout;
     }
 
     public function syncSubscriptions(): int
