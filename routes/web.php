@@ -12,6 +12,7 @@ use App\Http\Controllers\MoneyController;
 use App\Http\Controllers\PaymentLinkController;
 use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\PersonalDashboardController;
+use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicInvoiceController;
 use App\Http\Controllers\RecurringPlanController;
@@ -43,6 +44,14 @@ Route::prefix('install')->name('install.')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::get('/personal', PersonalDashboardController::class)->name('personal.dashboard');
+    Route::post('/personal/budgets', [PlanningController::class, 'saveBudgets'])->name('personal.budgets');
+    Route::post('/personal/goals', [PlanningController::class, 'storeGoal'])->name('personal.goals.store');
+    Route::put('/personal/goals/{goal}', [PlanningController::class, 'updateGoal'])->name('personal.goals.update');
+    Route::delete('/personal/goals/{goal}', [PlanningController::class, 'destroyGoal'])->name('personal.goals.destroy');
+    Route::post('/personal/bills', [PlanningController::class, 'storeBill'])->name('personal.bills.store');
+    Route::put('/personal/bills/{bill}', [PlanningController::class, 'updateBill'])->name('personal.bills.update');
+    Route::delete('/personal/bills/{bill}', [PlanningController::class, 'destroyBill'])->name('personal.bills.destroy');
+    Route::post('/personal/bills/{bill}/pay', [PlanningController::class, 'payBill'])->name('personal.bills.pay');
 
     Route::resource('clients', ClientController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
     Route::post('/clients/{client}/cards/link', [ClientCardController::class, 'link'])->name('clients.cards.link');
@@ -75,6 +84,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/money', [MoneyController::class, 'index'])->name('money.index');
     Route::post('/money', [MoneyController::class, 'store'])->name('money.store');
+    Route::get('/money/export', [MoneyController::class, 'export'])->name('money.export');
     Route::put('/money/{transaction}', [MoneyController::class, 'update'])->name('money.update');
     Route::delete('/money/{transaction}', [MoneyController::class, 'destroy'])->name('money.destroy');
     Route::post('/money/accounts', [MoneyController::class, 'storeAccount'])->name('money.accounts.store');

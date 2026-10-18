@@ -24,3 +24,9 @@ createInertiaApp({
         color: '#4B5563',
     },
 });
+
+// Works offline: the service worker keeps app files and the last copy of each page.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+    const base = (window.Ziggy?.url ?? window.location.origin).replace(/\/$/, '') + '/';
+    window.addEventListener('load', () => navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch(() => {}));
+}

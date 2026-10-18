@@ -7,12 +7,14 @@ use App\Models\MoneyTransaction;
 use App\Support\Catalog;
 use App\Support\Ledger;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Money: bank accounts, wallets and cash (business and personal), what came in, what
@@ -31,7 +33,7 @@ class MoneyController extends Controller
         $allAccounts = Account::orderBy('archived')->orderBy('scope')->orderBy('name')->get();
         $ids = $allAccounts->where('scope', $scope)->pluck('id');
 
-        $transactions = MoneyTransaction::with('account:id,name,currency,scope', 'toAccount:id,name,currency,scope')
+        $transactions = MoneyTransaction::with('account:id,name,currency,scope', 'toAccount:id,name,currency,scope,purpose')
             ->where(fn ($q) => $q->whereIn('account_id', $ids)->orWhereIn('to_account_id', $ids))
             ->whereBetween('occurred_on', [$start->toDateString(), $start->endOfMonth()->toDateString()])
             ->latest('occurred_on')->latest('id')
@@ -42,7 +44,7 @@ class MoneyController extends Controller
             'month' => $month,
             'base' => Ledger::base(),
             'accounts' => $allAccounts->map(fn (Account $a) => [
-                ...$a->only('id', 'name', 'scope', 'kind', 'provider', 'currency', 'opening_balance', 'opening_rate', 'notes', 'archived'),
+                ...$a->only('id', 'name', 'scope', 'kind', 'purpose', 'provider', 'currency', 'opening_balance', 'opening_rate', 'notes', 'archived'),
                 'balance' => $balance = Ledger::balance($a),
                 'rate' => Ledger::rate($a),
                 'base_value' => Ledger::value($a, $balance),
@@ -94,11 +96,52 @@ class MoneyController extends Controller
         return back()->with('success', 'Account removed.');
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse|JsonResponse
     {
-        Ledger::save($this->transactionData($request));
+        $tx = Ledger::save($this->transactionData($request));
+
+        // Entries made offline are sent later by the app itself and only need a yes.
+        if ($request->wantsJson()) {
+            return response()->json(['id' => $tx->id], 201);
+        }
 
         return back()->with('success', 'Saved.');
+    }
+
+    /** One month of entries for one side, as a spreadsheet (CSV). */
+    public function export(Request $request): StreamedResponse
+    {
+        $scope = $request->input('scope') === 'personal' ? 'personal' : 'business';
+        $month = preg_match('/^\d{4}-\d{2}$/', (string) $request->input('month')) ? $request->input('month') : now()->format('Y-m');
+        $ids = Account::where('scope', $scope)->pluck('id');
+        $labels = Catalog::EXPENSE_CATEGORIES + Catalog::PERSONAL_CATEGORIES + Catalog::INCOME_CATEGORIES['business'] + Catalog::INCOME_CATEGORIES['personal'];
+
+        $rows = MoneyTransaction::with('account', 'toAccount')
+            ->where(fn ($q) => $q->whereIn('account_id', $ids)->orWhereIn('to_account_id', $ids))
+            ->where('occurred_on', 'like', "{$month}%")
+            ->orderBy('occurred_on')->orderBy('id')->get();
+
+        return response()->streamDownload(function () use ($rows, $labels) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Date', 'Type', 'From / account', 'To', 'Category', 'Paid to / from', 'Purpose', 'Amount', 'Currency', 'Fee', 'Arrived', 'Arrived currency']);
+            foreach ($rows as $t) {
+                fputcsv($out, [
+                    $t->occurred_on->toDateString(),
+                    ['income' => 'Money in', 'expense' => 'Spent', 'transfer' => 'Move / convert'][$t->kind],
+                    $t->account->name,
+                    $t->toAccount?->name,
+                    $t->category ? ($labels[$t->category] ?? $t->category) : '',
+                    $t->counterparty,
+                    $t->description,
+                    number_format($t->amount / 100, 2, '.', ''),
+                    strtoupper($t->account->currency),
+                    $t->fee ? number_format($t->fee / 100, 2, '.', '') : '',
+                    $t->to_amount !== null && $t->toAccount ? number_format($t->to_amount / 100, 2, '.', '') : '',
+                    $t->toAccount ? strtoupper($t->toAccount->currency) : '',
+                ]);
+            }
+            fclose($out);
+        }, "{$scope}-money-{$month}.csv", ['Content-Type' => 'text/csv']);
     }
 
     public function update(Request $request, MoneyTransaction $transaction): RedirectResponse
@@ -124,6 +167,7 @@ class MoneyController extends Controller
             'kind' => ['required', Rule::in(array_keys(Catalog::ACCOUNT_KINDS))],
             'currency' => ['required', 'alpha', 'size:3', Rule::when($request->input('scope') === 'personal', [Rule::in(array_merge(Catalog::PERSONAL_CURRENCIES, array_map('strtolower', Catalog::PERSONAL_CURRENCIES)))])],
             'provider' => ['nullable', 'string', 'max:40'],
+            'purpose' => ['nullable', Rule::in(['spending', 'savings'])],
             'opening_balance' => ['nullable', 'numeric'],
             'opening_rate' => ['nullable', 'numeric', 'gt:0'],
             'notes' => ['nullable', 'string', 'max:500'],

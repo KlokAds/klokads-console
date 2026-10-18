@@ -6,7 +6,12 @@
         <meta name="theme-color" content="#0b1020">
 
         <title inertia>{{ config('app.name', 'Klok Ads') }}</title>
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+        <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+        <link rel="manifest" href="{{ asset('manifest.webmanifest') }}">
+        <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-title" content="Klok">
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">

@@ -7,6 +7,7 @@ import StatCard from '@/Components/StatCard.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { date, money, wantsNew } from '@/money';
+import { discardEntry, online, pending, queueEntry } from '@/offline';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
@@ -55,7 +56,7 @@ const perHundred = (a) => (a.rate && !isBase(a.currency) ? `${money(10000, a.cur
 // ---------------------------------------------------------------- accounts
 const showAccount = ref(false);
 const editingAccount = ref(null);
-const blankAccount = () => ({ name: '', scope: props.scope, kind: 'bank', provider: '', currency: props.scope === 'personal' ? 'SGD' : props.base.toUpperCase(), opening_balance: '', opening_rate: '', notes: '', archived: false });
+const blankAccount = () => ({ name: '', scope: props.scope, kind: 'bank', purpose: 'spending', provider: '', currency: props.scope === 'personal' ? 'SGD' : props.base.toUpperCase(), opening_balance: '', opening_rate: '', notes: '', archived: false });
 const accountForm = useForm(blankAccount());
 
 // Pick DBS / Airwallex / bKash… — fills the name and type; "Other" lets you type your own.
@@ -80,7 +81,7 @@ function openAccount(a = null) {
     editingAccount.value = a;
     accountForm.defaults(
         a
-            ? { ...blankAccount(), ...a, provider: a.provider ?? '', opening_balance: (a.opening_balance / 100).toFixed(2), opening_rate: a.opening_rate ?? '', notes: a.notes ?? '' }
+            ? { ...blankAccount(), ...a, purpose: a.purpose ?? 'spending', provider: a.provider ?? '', opening_balance: (a.opening_balance / 100).toFixed(2), opening_rate: a.opening_rate ?? '', notes: a.notes ?? '' }
             : blankAccount(),
     );
     accountForm.reset();
@@ -148,8 +149,40 @@ function setKind(kind) {
     txForm.category = kind === 'income' ? props.categories.income[0]?.value : kind === 'expense' ? props.categories.expense[0]?.value : '';
 }
 function submitTx() {
+    // Offline: keep it on this device; it is sent automatically when back online.
+    if (!editingTx.value && !navigator.onLine) {
+        queueEntry(txForm.data());
+        showTx.value = false;
+        return;
+    }
     const opts = { preserveScroll: true, onSuccess: () => (showTx.value = false) };
     editingTx.value ? txForm.put(route('money.update', editingTx.value.id), opts) : txForm.post(route('money.store'), opts);
+}
+
+// ---------------------------------------------------------------- search & filters
+const q = ref('');
+const fAccount = ref('');
+const fKind = ref('');
+const filtered = computed(() => {
+    const needle = q.value.trim().toLowerCase();
+    return props.transactions.filter((t) => {
+        if (fAccount.value && t.account_id !== Number(fAccount.value) && t.to_account_id !== Number(fAccount.value)) return false;
+        if (fKind.value && (fKind.value === 'saved' ? !(t.kind === 'transfer' && t.to_account?.purpose === 'savings') : t.kind !== fKind.value)) return false;
+        if (!needle) return true;
+        return [t.counterparty, t.description, t.account?.name, t.to_account?.name, label(allCategories.value, t.category)].some((v) => v?.toLowerCase().includes(needle));
+    });
+});
+const filtering = computed(() => q.value || fAccount.value || fKind.value);
+const myPending = computed(() => pending.value.filter((e) => scopeAccounts.value.some((a) => a.id === Number(e.account_id))));
+const accountName = (id) => props.accounts.find((a) => a.id === Number(id))?.name ?? '—';
+const accountCurrency = (id) => props.accounts.find((a) => a.id === Number(id))?.currency ?? '';
+const exportUrl = computed(() => route('money.export', { scope: props.scope, month: props.month }));
+const savingsTargets = computed(() => activeAccounts.value.filter((a) => a.scope === props.scope && a.purpose === 'savings'));
+function openSave() {
+    openTx(null, 'transfer');
+    txForm.account_id = scopeAccounts.value.find((a) => a.purpose !== 'savings')?.id ?? txForm.account_id;
+    txForm.to_account_id = savingsTargets.value[0]?.id ?? '';
+    txForm.description = 'Savings';
 }
 async function removeTx(t) {
     const ok = await confirmDialog({
@@ -236,7 +269,10 @@ if (wantsNew()) openTx();
                         <button class="menu-item text-rose-600 hover:bg-rose-50 hover:text-rose-700" @click="removeAccount(a)"><Icon name="trash" :size="15" /> Remove</button>
                     </RowMenu>
                 </div>
-                <div class="mt-4 font-display text-2xl font-extrabold tabular-nums" :class="a.balance < 0 ? 'text-rose-600' : 'text-ink-900'">{{ money(a.balance, a.currency) }}</div>
+                <div class="mt-4 flex items-end justify-between gap-2">
+                    <div class="font-display text-2xl font-extrabold tabular-nums" :class="a.balance < 0 ? 'text-rose-600' : 'text-ink-900'">{{ money(a.balance, a.currency) }}</div>
+                    <span v-if="a.purpose === 'savings'" class="badge bg-emerald-50 text-emerald-700">Savings</span>
+                </div>
                 <div v-if="!isBase(a.currency)" class="mt-1 text-xs text-ink-500">
                     <template v-if="a.rate">≈ {{ B(a.base_value) }} · {{ perHundred(a) }}</template>
                     <template v-else>Add a conversion into it (or an opening rate) to see its {{ base.toUpperCase() }} value</template>
@@ -277,14 +313,52 @@ if (wantsNew()) openTx();
             <div class="card min-w-0" :class="scope === 'business' ? 'xl:col-span-2' : 'xl:col-span-3'">
                 <div class="card-head">
                     <div><div class="card-title">Entries</div><div class="card-sub">{{ transactions.length }} in {{ monthLabel }}</div></div>
-                    <div v-if="activeAccounts.length" class="flex gap-1.5">
+                    <div v-if="activeAccounts.length" class="flex flex-wrap gap-1.5">
                         <button class="btn-secondary btn-sm" @click="openTx(null, 'income')">+ In</button>
+                        <button v-if="savingsTargets.length" class="btn-secondary btn-sm text-emerald-700" @click="openSave">↧ Save</button>
                         <button class="btn-secondary btn-sm" @click="openTx(null, 'transfer')">⇄ Move</button>
                         <button class="btn-dark btn-sm" @click="openTx(null, 'expense')">− Spend</button>
                     </div>
                 </div>
-                <ul v-if="transactions.length" class="divide-y divide-line/70">
-                    <li v-for="t in transactions" :key="t.id" class="flex items-center gap-3 px-5 py-3 sm:px-6">
+
+                <!-- Search & filters -->
+                <div v-if="transactions.length" class="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3 sm:px-6">
+                    <div class="relative min-w-[160px] flex-1">
+                        <Icon name="search" :size="15" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+                        <input v-model="q" class="input input-sm pl-9" placeholder="Search shop, person, note…" />
+                    </div>
+                    <select v-model="fAccount" class="input input-sm w-auto">
+                        <option value="">All accounts</option>
+                        <option v-for="a in scopeAccounts" :key="a.id" :value="a.id">{{ a.name }}</option>
+                    </select>
+                    <select v-model="fKind" class="input input-sm w-auto">
+                        <option value="">Everything</option>
+                        <option value="expense">Spent</option>
+                        <option value="income">Money in</option>
+                        <option value="saved">Saved</option>
+                        <option value="transfer">Moves / conversions</option>
+                    </select>
+                    <a :href="exportUrl" class="btn-ghost btn-sm" title="Download this month as a spreadsheet"><Icon name="download" :size="14" /> CSV</a>
+                </div>
+
+                <!-- Saved on this device while offline -->
+                <ul v-if="myPending.length" class="divide-y divide-line/70 border-b border-line bg-amber-50/50">
+                    <li v-for="e in myPending" :key="e._id" class="flex items-center gap-3 px-5 py-3 sm:px-6">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700"><Icon name="clock" :size="16" /></span>
+                        <div class="min-w-0 flex-1">
+                            <div class="truncate font-semibold text-ink-900">{{ e.counterparty || e.description || label(allCategories, e.category) || 'Entry' }}</div>
+                            <div class="truncate text-xs" :class="e._error ? 'text-rose-600' : 'text-amber-700'">
+                                {{ e._error ? `Not saved: ${e._error}` : online ? 'Sending…' : 'Saved on this device — sends when you are back online' }} · {{ accountName(e.account_id) }}
+                            </div>
+                        </div>
+                        <div class="font-semibold tabular-nums text-ink-900">{{ e.kind === 'income' ? '+' : '−' }}{{ money(Math.round(Number(e.amount) * 100), accountCurrency(e.account_id)) }}</div>
+                        <button class="icon-btn hover:text-rose-600" title="Discard" @click="discardEntry(e._id)"><Icon name="trash" :size="15" /></button>
+                    </li>
+                </ul>
+
+                <div v-if="filtering && !filtered.length" class="px-6 py-8 text-sm text-ink-500">Nothing matches. <button class="btn-link" @click="q = fAccount = fKind = ''">Clear filters</button></div>
+                <ul v-if="filtered.length" class="divide-y divide-line/70">
+                    <li v-for="t in filtered" :key="t.id" class="flex items-center gap-3 px-5 py-3 sm:px-6">
                         <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
                             :class="t.direction === 'in' ? 'bg-emerald-50 text-emerald-600' : t.kind === 'transfer' ? 'bg-brand-50 text-brand-600' : 'bg-orange-50 text-orange-600'">
                             <Icon :name="t.kind === 'transfer' ? 'flow' : t.direction === 'in' ? 'trend' : 'card'" :size="16" />
@@ -313,8 +387,8 @@ if (wantsNew()) openTx();
                         </RowMenu>
                     </li>
                 </ul>
-                <EmptyState v-else-if="activeAccounts.length" compact icon="wallet" title="Nothing recorded this month" text="Add what you spent, money that came in, or a transfer / currency conversion." />
-                <EmptyState v-else compact icon="bank" title="Add your first account" text="Start with the bank account Stripe pays into, then your other banks, wallets and cash.">
+                <EmptyState v-else-if="activeAccounts.length && !filtering && !myPending.length" compact icon="wallet" title="Nothing recorded this month" text="Add what you spent, money that came in, or a transfer / currency conversion." />
+                <EmptyState v-else-if="!activeAccounts.length" compact icon="bank" title="Add your first account" text="Start with the bank account Stripe pays into, then your other banks, wallets and cash.">
                     <button class="btn-primary btn-sm" @click="openAccount()"><Icon name="plus" :size="14" /> Add account</button>
                 </EmptyState>
             </div>
@@ -444,6 +518,18 @@ if (wantsNew()) openTx();
                         <input v-model="accountForm.name" class="input" :placeholder="accountForm.provider === 'other' ? 'Bank or wallet name' : 'e.g. DBS Savings, Airwallex SGD, bKash'" required />
                         <div class="hint">Shown everywhere, so make it easy to recognise (e.g. "DBS Savings", "Aspire Business").</div>
                         <div v-if="accountForm.errors.name" class="error">{{ accountForm.errors.name }}</div>
+                    </div>
+                    <div class="col-span-2">
+                        <label class="label">Used for</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button v-for="p in [['spending', 'Spending', 'Daily money you pay from'], ['savings', 'Savings', 'Money you put aside']]" :key="p[0]" type="button"
+                                class="rounded-xl border px-3 py-2.5 text-left transition"
+                                :class="accountForm.purpose === p[0] ? (p[0] === 'savings' ? 'border-emerald-400 bg-emerald-50' : 'border-brand-400 bg-brand-50') : 'border-line hover:border-ink-200'"
+                                @click="accountForm.purpose = p[0]">
+                                <span class="block text-sm font-semibold text-ink-900">{{ p[1] }}</span>
+                                <span class="block text-[11px] text-ink-500">{{ p[2] }}</span>
+                            </button>
+                        </div>
                     </div>
                     <div>
                         <label class="label">Type</label>

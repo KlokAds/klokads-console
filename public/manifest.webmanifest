@@ -1,0 +1,21 @@
+{
+    "name": "Klok Ads Console",
+    "short_name": "Klok",
+    "description": "Agency billing, cashflow and personal money — works offline.",
+    "start_url": "./dashboard",
+    "scope": "./",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "background_color": "#f6f7fb",
+    "theme_color": "#0b1020",
+    "icons": [
+        { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+        { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+        { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+        { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+    ],
+    "shortcuts": [
+        { "name": "Personal", "url": "./personal", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+        { "name": "Add spending", "url": "./money?scope=personal&new=1", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+    ]
+}

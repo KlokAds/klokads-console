@@ -3,6 +3,7 @@ import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import ConfirmDialog from '@/Components/ConfirmDialog.vue';
 import Icon from '@/Components/Icon.vue';
 import { date } from '@/money';
+import { online, pending, syncEntries, syncState } from '@/offline';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
@@ -126,8 +127,14 @@ function autoSyncIfStale() {
 
 onMounted(() => {
     document.addEventListener('click', closeMenus);
-    autoSyncIfStale();
+    if (navigator.onLine) autoSyncIfStale();
+    syncEntries();
 });
+
+// Log out: drop the pages kept for offline use, so nothing private stays on this device.
+function clearOffline() {
+    navigator.serviceWorker?.controller?.postMessage('clear');
+}
 onUnmounted(() => document.removeEventListener('click', closeMenus));
 router.on('navigate', () => {
     sidebarOpen.value = false;
@@ -210,7 +217,7 @@ router.on('navigate', () => {
                 <div v-if="userOpen" class="menu bottom-full left-3 right-3 mb-2">
                     <Link :href="route('profile.edit')" class="menu-item"><Icon name="user" :size="16" /> Profile & password</Link>
                     <Link :href="route('settings.edit')" class="menu-item"><Icon name="cog" :size="16" /> Settings</Link>
-                    <Link :href="route('logout')" method="post" as="button" class="menu-item text-rose-600"><Icon name="logout" :size="16" /> Log out</Link>
+                    <Link :href="route('logout')" method="post" as="button" class="menu-item text-rose-600" @click="clearOffline"><Icon name="logout" :size="16" /> Log out</Link>
                 </div>
             </div>
         </aside>
@@ -246,6 +253,27 @@ router.on('navigate', () => {
                     </div>
                 </div>
             </header>
+
+            <!-- Offline / waiting entries -->
+            <div v-if="!online || pending.length" class="border-b" :class="!online ? 'border-amber-200 bg-amber-50' : syncState === 'login' ? 'border-rose-200 bg-rose-50' : 'border-sky-200 bg-sky-50'">
+                <div class="mx-auto flex max-w-[1400px] flex-wrap items-center gap-2 px-4 py-2 text-xs sm:px-8" :class="!online ? 'text-amber-800' : syncState === 'login' ? 'text-rose-800' : 'text-sky-800'">
+                    <template v-if="!online">
+                        <span class="badge bg-amber-200/70 text-amber-900">Offline</span>
+                        Showing what was last saved on this device. Money entries you add are kept here and sent when you're back online.
+                        <b v-if="pending.length">{{ pending.length }} waiting.</b>
+                    </template>
+                    <template v-else-if="syncState === 'login'">
+                        <span class="badge bg-rose-200/70 text-rose-900">Sign in</span>
+                        {{ pending.length }} entr{{ pending.length === 1 ? 'y' : 'ies' }} saved offline need you to log in again to be sent.
+                        <Link :href="route('login')" class="font-semibold underline">Log in</Link>
+                    </template>
+                    <template v-else>
+                        <span class="badge bg-sky-200/70 text-sky-900">Syncing</span>
+                        {{ pending.length }} offline entr{{ pending.length === 1 ? 'y' : 'ies' }}{{ syncState === 'syncing' ? ' being sent…' : ' waiting.' }}
+                        <button v-if="syncState !== 'syncing'" class="font-semibold underline" @click="syncEntries">Send now</button>
+                    </template>
+                </div>
+            </div>
 
             <div v-if="stripe.mode === 'test' && mode === 'business'" class="border-b border-amber-200 bg-amber-50">
                 <div class="mx-auto flex max-w-[1400px] items-center gap-2 px-4 py-2 text-xs text-amber-800 sm:px-8">
