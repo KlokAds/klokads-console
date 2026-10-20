@@ -99,6 +99,22 @@ class Pricing
     }
 
     /**
+     * "Commission only": the client paid the ad platform themselves, so we bill just our
+     * share of that spend (plus card fees when the client pays them, and GST when on).
+     * All of what we receive is commission; the spend is kept for the record.
+     *
+     * @return array{net: int, charge: int, processing_fee: int, card_fee: int, payout_fee: int, tax: int, tax_rate: float, subtotal: int, commission_rate: float, commission: int, ad_budget: int, client_spend: int, mode: string}
+     */
+    public function commissionOnly(int $spend, bool $passFees = true): array
+    {
+        $commission = (int) round($spend * $this->commissionRate / 100);
+        $b = $this->breakdown($commission, $passFees);
+
+        // Commission is always the full share of the spend; card fees we absorb are our own cost.
+        return ['commission' => $commission, 'ad_budget' => 0, 'client_spend' => $spend, 'mode' => 'commission'] + $b;
+    }
+
+    /**
      * Smallest processing-fee line so that, after card + payout fees and setting the
      * tax aside, at least $net is left.
      */

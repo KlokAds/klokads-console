@@ -379,7 +379,7 @@ class StripeService
     // ---------------------------------------------------------------- ad budget & commission
 
     /** Local columns that hold an ad-budget breakdown (see App\Support\Pricing). */
-    public const BUDGET_FIELDS = ['net_amount', 'processing_fee', 'commission_rate', 'commission_amount', 'ad_budget'];
+    public const BUDGET_FIELDS = ['net_amount', 'processing_fee', 'commission_rate', 'commission_amount', 'ad_budget', 'client_spend'];
 
     /**
      * Budget line plus the card processing fee line the client pays on top.
@@ -389,13 +389,22 @@ class StripeService
      */
     public static function budgetItems(array $budget, string $label): array
     {
-        $items = [['description' => $label, 'amount' => $budget['net'], 'quantity' => 1]];
+        $items = [['description' => isset($budget['client_spend']) ? self::commissionLine($budget, $label) : $label, 'amount' => $budget['net'], 'quantity' => 1]];
 
         if ($budget['processing_fee'] > 0) {
             $items[] = ['description' => 'Card processing fee', 'amount' => $budget['processing_fee'], 'quantity' => 1];
         }
 
         return $items;
+    }
+
+    /** "Management commission — 20% of 1,000.00 Meta Ads spend (paid directly by you)" */
+    public static function commissionLine(array $budget, string $label): string
+    {
+        $what = trim(preg_replace('/\s*budget$/i', '', $label)) ?: 'ad';
+        $rate = rtrim(rtrim(number_format((float) $budget['commission_rate'], 2), '0'), '.');
+
+        return "Management commission — {$rate}% of ".number_format($budget['client_spend'] / 100, 2)." {$what} spend (paid directly by you)";
     }
 
     /** @return array<string, string> Stripe metadata for a Pricing::breakdown() */
@@ -411,7 +420,7 @@ class StripeService
             'commission_rate' => (string) $budget['commission_rate'],
             'commission_amount' => (string) $budget['commission'],
             'ad_budget' => (string) $budget['ad_budget'],
-        ];
+        ] + (isset($budget['client_spend']) ? ['client_spend' => (string) $budget['client_spend']] : []);
     }
 
     /** @return array<string, int|float> local columns from Stripe metadata, or [] when absent */
@@ -427,6 +436,7 @@ class StripeService
             'commission_rate' => (float) ($metadata['commission_rate'] ?? 0),
             'commission_amount' => (int) ($metadata['commission_amount'] ?? 0),
             'ad_budget' => (int) ($metadata['ad_budget'] ?? 0),
+            'client_spend' => isset($metadata['client_spend']) ? (int) $metadata['client_spend'] : null,
         ];
     }
 

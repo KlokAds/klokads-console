@@ -166,7 +166,7 @@ async function cancel(plan) {
                         </select>
                     </div>
                     <div>
-                        <label class="label">{{ form.billing === 'budget' ? 'You receive each cycle' : 'Amount' }} ({{ currency.toUpperCase() }}) *</label>
+                        <label class="label">{{ form.billing === 'budget' ? 'You receive each cycle' : form.billing === 'commission' ? "Client's ad spend each cycle" : 'Amount' }} ({{ currency.toUpperCase() }}) *</label>
                         <input v-model="form.amount" type="number" step="0.01" min="0.5" class="input" placeholder="0.00" required />
                         <div v-if="form.errors.amount" class="error">{{ form.errors.amount }}</div>
                     </div>
@@ -220,7 +220,7 @@ async function cancel(plan) {
                 </div>
 
                 <div class="flex items-center justify-between gap-3 border-t border-line bg-ink-50/60 px-6 py-4">
-                    <span class="text-sm text-ink-500"><template v-if="form.amount">≈ <b class="text-ink-800">{{ money(Math.round(form.amount * 100 * ({ week: 52 / 12, month: 1, year: 1 / 12 }[form.interval]) / (form.interval_count || 1)), currency) }}</b> / month {{ form.billing === 'budget' ? 'received' : '' }}</template></span>
+                    <span class="text-sm text-ink-500"><template v-if="form.amount">≈ <b class="text-ink-800">{{ money(Math.round(form.amount * 100 * ({ week: 52 / 12, month: 1, year: 1 / 12 }[form.interval]) / (form.interval_count || 1)), currency) }}</b> / month {{ form.billing === 'budget' ? 'received' : form.billing === 'commission' ? 'client spend' : '' }}</template></span>
                     <div class="flex gap-2">
                         <button type="button" class="btn-secondary" @click="showForm = false">Cancel</button>
                         <button class="btn-primary" :disabled="form.processing">{{ form.processing ? 'Creating…' : 'Create plan' }}</button>

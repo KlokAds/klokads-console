@@ -20,7 +20,7 @@ abstract class Controller
     protected function budgetRules(): array
     {
         return [
-            'billing' => ['nullable', 'in:standard,budget'],
+            'billing' => ['nullable', 'in:standard,budget,commission'],
             'pass_fees' => ['boolean'],
             'commission_rate' => ['nullable', 'numeric', 'between:0,100'],
             'statement_descriptor' => ['nullable', 'string', 'max:'.StripeService::descriptorMaxLength(), 'regex:/^[A-Za-z0-9 .\-&]*[A-Za-z][A-Za-z0-9 .\-&]*$/'],
@@ -35,7 +35,7 @@ abstract class Controller
      */
     protected function budgetFromRequest(Request $request, int $net, ?Client $client): ?array
     {
-        if ($request->input('billing') !== 'budget') {
+        if (! in_array($request->input('billing'), ['budget', 'commission'], true)) {
             return null;
         }
 
@@ -44,7 +44,10 @@ abstract class Controller
             $pricing->commissionRate = (float) $request->input('commission_rate');
         }
 
-        return $pricing->breakdown($net, $request->boolean('pass_fees', true));
+        // Commission only: the amount entered is the client's own ad spend.
+        return $request->input('billing') === 'commission'
+            ? $pricing->commissionOnly($net, $request->boolean('pass_fees', true))
+            : $pricing->breakdown($net, $request->boolean('pass_fees', true));
     }
 
     /** Convert a decimal amount from a form (e.g. "1250.50") to cents. */

@@ -54,3 +54,18 @@ export function breakdown(net, p, passFees = true) {
         ad_budget: received - commission,
     };
 }
+
+/** "Commission only": the client paid the platform; we bill only our share of that spend. */
+export function commissionOnly(spend, p, passFees = true) {
+    const commission = Math.round((spend * p.commission_rate) / 100);
+    // Commission is always the full share of the spend; card fees we absorb are our own cost.
+    return { ...breakdown(commission, p, passFees), commission, ad_budget: 0, client_spend: spend, mode: 'commission' };
+}
+
+/** What a form will charge for its billing type (budget, commission or a plain amount). */
+export function priced(billing, cents, p, passFees = true) {
+    if (!p || !cents) return null;
+    if (billing === 'commission') return commissionOnly(cents, p, passFees);
+    if (billing === 'budget') return breakdown(cents, p, passFees);
+    return null;
+}

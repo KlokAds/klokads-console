@@ -9,7 +9,9 @@
     $isReceipt = $type === 'receipt';
     $title = $isReceipt ? 'Receipt' : ($gst['charged'] ? 'Tax Invoice' : 'Invoice');
     $rate = rtrim(rtrim(number_format($gst['rate'], 2), '0'), '.');
-    $rows = $campaigns ?: collect($lines)->map(fn ($l) => ['name' => $l['description'], 'quantity' => null, 'unit' => null, 'amount' => $l['amount']])->all();
+    $clientSpend = $client_spend ?? null;
+    // Commission only: the charged lines are our commission; the spend is shown apart, for reference.
+    $rows = $clientSpend ? collect($lines)->map(fn ($l) => ['name' => $l['description'], 'quantity' => null, 'unit' => null, 'amount' => $l['amount']])->all() : ($campaigns ?: collect($lines)->map(fn ($l) => ['name' => $l['description'], 'quantity' => null, 'unit' => null, 'amount' => $l['amount']])->all());
 @endphp
 
 <div class="band" style="padding-bottom:26px">
@@ -68,6 +70,10 @@
         </tr>
     </table>
 
+    @if ($clientSpend)
+        @include('documents.partials.client-spend', ['fmt' => $cash ?? $money, 'margin' => '12px 0 4px', 'radius' => '10px'])
+    @endif
+
     <table class="grid" style="margin-top:10px">
         <thead><tr><th>Description</th><th class="r" style="width:13%">Quantity</th><th style="width:15%">Units</th><th class="r" style="width:18%">Amount ({{ $currency }})</th></tr></thead>
         <tbody>
@@ -79,7 +85,7 @@
                     <td class="r">{{ number_format($row['amount'] / 100, 2) }}</td>
                 </tr>
             @endforeach
-            @if ($campaigns)
+            @if ($campaigns && ! $clientSpend)
                 @foreach ($lines as $line)
                     @continue(str_contains(strtolower($line['description']), 'budget'))
                     <tr><td>{{ $line['description'] }}</td><td></td><td></td><td class="r">{{ number_format($line['amount'] / 100, 2) }}</td></tr>

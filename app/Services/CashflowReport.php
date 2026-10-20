@@ -88,7 +88,7 @@ class CashflowReport
     /**
      * Commission earned and ad budget received on ad-budget invoices paid in the period.
      *
-     * @return array{commission: int, ad_budget_received: int, budget_invoices: int}
+     * @return array{commission: int, ad_budget_received: int, budget_invoices: int, client_spend: int}
      */
     public function commission(): array
     {
@@ -98,6 +98,8 @@ class CashflowReport
             'commission' => (int) (clone $paid)->sum('commission_amount'),
             'ad_budget_received' => (int) (clone $paid)->sum('ad_budget'),
             'budget_invoices' => (clone $paid)->count(),
+            // Ad spend clients paid the platforms themselves, on commission-only invoices.
+            'client_spend' => (int) (clone $paid)->sum('client_spend'),
         ];
     }
 

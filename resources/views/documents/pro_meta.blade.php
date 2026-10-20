@@ -54,7 +54,9 @@
         </tr>
     </table>
 
-    @if ($campaigns)
+    @if (! empty($client_spend))
+        @include('documents.partials.client-spend', ['fmt' => $cash, 'margin' => '22px 0 4px', 'radius' => '10px'])
+    @elseif ($campaigns)
         <div class="b" style="font-size:13px;margin:24px 0 10px">Campaign breakdown</div>
         <table class="grid">
             <thead><tr><th>Campaign</th><th>Ad set</th><th class="r">Delivery</th><th class="r">Spend</th></tr></thead>

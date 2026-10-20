@@ -75,9 +75,12 @@
 
 <hr style="margin-top:48px">
 
-<div style="font-weight:bold;font-size:12.5px;margin:16px 0 10px">{{ $campaigns ? 'Campaigns' : 'Items' }}</div>
+@if (! empty($client_spend))
+    @include('documents.partials.client-spend', ['fmt' => $cash, 'margin' => '18px 0 6px'])
+@endif
+<div style="font-weight:bold;font-size:12.5px;margin:16px 0 10px">{{ $campaigns && empty($client_spend) ? 'Campaigns' : 'Items' }}</div>
 <table>
-    @if ($campaigns)
+    @if ($campaigns && empty($client_spend))
         @foreach ($groups as $name => $sets)
             <tr><td colspan="3" style="border-top:1px solid #ccd0d5;padding-top:9px"></td></tr>
             <tr>

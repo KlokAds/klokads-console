@@ -110,9 +110,20 @@ const pdfUrl = (type) => route('public.invoice.pdf', { token: props.token, type 
                     <div class="bg-white p-4"><div class="eyebrow">Reference</div><div class="mt-1 truncate font-mono text-xs font-semibold text-ink-900">{{ isPaid && d.transaction_id ? d.transaction_id : d.number }}</div></div>
                 </div>
 
+                <!-- Commission only: the spend the client paid the platform themselves -->
+                <div v-if="d.client_spend" class="border-t border-line bg-ink-50/60 px-6 py-4 sm:px-8">
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <div class="text-sm font-semibold text-ink-900">Your {{ d.service }} spend</div>
+                            <div class="mt-0.5 text-xs text-ink-500">Paid directly by you to the ad platform — shown for reference, not charged here.</div>
+                        </div>
+                        <div class="whitespace-nowrap text-sm font-bold tabular-nums text-ink-900">{{ m(d.client_spend) }}</div>
+                    </div>
+                </div>
+
                 <!-- Campaigns -->
                 <div v-if="d.campaigns.length" class="border-t border-line px-6 py-5 sm:px-8">
-                    <div class="card-title mb-3">Campaign breakdown</div>
+                    <div class="card-title mb-3">{{ d.client_spend ? 'Your spend by campaign (reference)' : 'Campaign breakdown' }}</div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <tbody>

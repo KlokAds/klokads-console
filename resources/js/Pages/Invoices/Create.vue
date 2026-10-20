@@ -5,7 +5,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BudgetFields from '@/Components/BudgetFields.vue';
 import StatementField from '@/Components/StatementField.vue';
 import { clientName, money } from '@/money';
-import { breakdown } from '@/pricing';
+import { priced } from '@/pricing';
 import { Head, Link, usePage, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
@@ -58,13 +58,12 @@ watch(
 const campaignTotal = computed(() => form.campaigns.reduce((s, c) => s + Math.round((Number(c.amount) || 0) * 100), 0));
 const previewUrl = computed(() => route('settings.templates.preview', { template: form.template, type: 'invoice' }));
 
-const isBudget = computed(() => form.billing === 'budget');
+const isBudget = computed(() => ['budget', 'commission'].includes(form.billing));
+const isCommission = computed(() => form.billing === 'commission');
 const pricing = computed(() => usePage().props.pricing);
 const budget = computed(() => {
     const cents = Math.round((Number(form.budget_amount) || 0) * 100);
-    return isBudget.value && cents && pricing.value
-        ? breakdown(cents, { ...pricing.value, commission_rate: Number(form.commission_rate) || 0 }, form.pass_fees)
-        : null;
+    return isBudget.value ? priced(form.billing, cents, pricing.value && { ...pricing.value, commission_rate: Number(form.commission_rate) || 0 }, form.pass_fees) : null;
 });
 const serviceLabel = computed(() => props.services.find((s) => s.value === form.service)?.label ?? 'Ads');
 
@@ -72,7 +71,13 @@ const lineTotal = (i) => Math.round((Number(i.amount) || 0) * 100) * (Number(i.q
 const previewLines = computed(() => {
     if (!isBudget.value) return form.items.map((i) => ({ description: i.description || 'Item description', quantity: Number(i.quantity) || 1, amount: lineTotal(i) }));
     if (!budget.value) return [];
-    const lines = [{ description: `${serviceLabel.value} budget`, quantity: 1, amount: budget.value.net }];
+    const lines = [{
+        description: isCommission.value
+            ? `Management commission — ${budget.value.commission_rate}% of ${money(budget.value.client_spend, props.currency)} ${serviceLabel.value} spend`
+            : `${serviceLabel.value} budget`,
+        quantity: 1,
+        amount: budget.value.net,
+    }];
     if (budget.value.processing_fee > 0) lines.push({ description: 'Card processing fee', quantity: 1, amount: budget.value.processing_fee });
     return lines;
 });
@@ -136,9 +141,9 @@ function setService(value) {
                     <div class="space-y-4 p-5 sm:p-6">
                         <BudgetFields :form="form" :amount="form.budget_amount" :currency="currency" :client-rate="client?.commission_rate ?? null" />
                         <div v-if="isBudget">
-                            <label class="label">You want to receive ({{ currency.toUpperCase() }}) *</label>
-                            <input v-model="form.budget_amount" type="number" step="0.01" min="1" class="input text-lg font-semibold" placeholder="500.00" required />
-                            <div class="hint">The net amount after Stripe and payout fees — the {{ serviceLabel }} budget including our commission.</div>
+                            <label class="label">{{ isCommission ? `Client's ${serviceLabel} spend` : 'You want to receive' }} ({{ currency.toUpperCase() }}) *</label>
+                            <input v-model="form.budget_amount" type="number" step="0.01" min="1" class="input text-lg font-semibold" :placeholder="isCommission ? '1000.00' : '500.00'" required />
+                            <div class="hint">{{ isCommission ? 'What they paid Meta/Google with their own card this period — you bill only your commission on it.' : `The net amount after Stripe and payout fees — the ${serviceLabel} budget including our commission.` }}</div>
                             <div v-if="form.errors.budget_amount" class="error">{{ form.errors.budget_amount }}</div>
                         </div>
                     </div>

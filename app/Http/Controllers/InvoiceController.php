@@ -83,6 +83,8 @@ class InvoiceController extends Controller
 
     public function store(Request $request, StripeService $stripe): RedirectResponse
     {
+        // Ad budget and commission only are priced from one amount; fixed price uses line items.
+        $priced = in_array($request->input('billing'), ['budget', 'commission'], true);
         $data = $request->validate([
             'client_id' => ['required', 'exists:clients,id'],
             'service' => ['nullable', Rule::in(array_keys(Catalog::SERVICES))],
@@ -90,12 +92,12 @@ class InvoiceController extends Controller
             'days_until_due' => ['required', 'integer', 'min:0', 'max:365'],
             'send' => ['boolean'],
             ...$this->budgetRules(),
-            'budget_amount' => ['required_if:billing,budget', 'nullable', 'numeric', 'min:1'],
-            'items' => ['exclude_if:billing,budget', 'required', 'array', 'min:1'],
-            'items.*.description' => ['exclude_if:billing,budget', 'required', 'string', 'max:250'],
-            'items.*.amount' => ['exclude_if:billing,budget', 'required', 'numeric', 'min:0.5'],
-            'items.*.quantity' => ['exclude_if:billing,budget', 'required', 'integer', 'min:1'],
-            'items.*.unit' => ['exclude_if:billing,budget', 'nullable', Rule::in(Catalog::UNITS)],
+            'budget_amount' => [Rule::requiredIf($priced), 'nullable', 'numeric', 'min:1'],
+            'items' => [Rule::excludeIf($priced), 'required', 'array', 'min:1'],
+            'items.*.description' => [Rule::excludeIf($priced), 'required', 'string', 'max:250'],
+            'items.*.amount' => [Rule::excludeIf($priced), 'required', 'numeric', 'min:0.5'],
+            'items.*.quantity' => [Rule::excludeIf($priced), 'required', 'integer', 'min:1'],
+            'items.*.unit' => [Rule::excludeIf($priced), 'nullable', Rule::in(Catalog::UNITS)],
             'template' => ['nullable', Rule::in(array_keys(Catalog::TEMPLATES))],
             'ad_account_id' => ['nullable', 'string', 'max:40'],
             'period_start' => ['nullable', 'date'],

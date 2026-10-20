@@ -63,6 +63,7 @@ class InvoiceDocument
             'description' => $invoice->description,
             'lines' => $lines,
             'campaigns' => $details['campaigns'] ?? [],
+            'client_spend' => $invoice->client_spend, // commission only: what the client paid the platform
             'ad_account_id' => $details['ad_account_id'] ?? null,
             'period_start' => isset($details['period_start']) ? Carbon::parse($details['period_start']) : null,
             'period_end' => isset($details['period_end']) ? Carbon::parse($details['period_end']) : null,

@@ -171,7 +171,7 @@ const marginPct = (s) => (s.revenue ? Math.round((s.margin / s.revenue) * 100) :
         <!-- KPI row -->
         <div class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5">
             <StatCard label="Commission earned" icon="chart" tone="good" :value="m(summary.commission)"
-                :hint="summary.budget_invoices ? `${summary.budget_invoices} ad-budget payments · ${m(summary.ad_budget_received)} ad budget` : 'From ad-budget invoices'"
+                :hint="summary.budget_invoices ? `${summary.budget_invoices} payments · ${m(summary.ad_budget_received)} ad budget${summary.client_spend ? ` · ${m(summary.client_spend)} client-paid spend` : ''}` : 'From ad-budget and commission invoices'"
                 :current="summary.commission" :previous="prev.commission ?? null" />
             <StatCard label="Gross collected" icon="trend" tone="brand" :value="m(summary.gross)" :hint="`${summary.payments_count} payments`"
                 :current="summary.gross" :previous="prev.gross ?? null" :spark="spark('gross')" spark-color="#2a78d6" />

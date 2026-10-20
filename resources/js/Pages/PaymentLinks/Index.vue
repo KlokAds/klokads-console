@@ -46,7 +46,7 @@ const whatsapp = (link) => `https://wa.me/?text=${encodeURIComponent(`${link.des
                     </div>
                     <BudgetFields :form="form" :amount="form.amount" :currency="currency" :client-rate="selectedClient?.commission_rate ?? null" compact />
                     <div>
-                        <label class="label">{{ form.billing === 'budget' ? 'You receive' : 'Amount' }} ({{ currency.toUpperCase() }}) *</label>
+                        <label class="label">{{ form.billing === 'budget' ? 'You receive' : form.billing === 'commission' ? "Client's ad spend" : 'Amount' }} ({{ currency.toUpperCase() }}) *</label>
                         <div class="relative">
                             <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-ink-400">{{ currency.toUpperCase() }}</span>
                             <input v-model="form.amount" type="number" step="0.01" min="0.5" class="input pl-14 font-semibold" placeholder="0.00" required />
