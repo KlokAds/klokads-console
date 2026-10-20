@@ -52,9 +52,12 @@ const m = (v) => money(v, props.currency);
 
         <template v-if="form.billing === 'budget' || isCommission">
             <div class="grid grid-cols-2 gap-3">
-                <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-line px-3 py-2.5 text-sm text-ink-700">
+                <label v-if="!isCommission" class="flex cursor-pointer items-center gap-2 rounded-xl border border-line px-3 py-2.5 text-sm text-ink-700">
                     <input v-model="form.pass_fees" type="checkbox" class="checkbox" /> Client pays card fees
                 </label>
+                <div v-else class="flex items-center gap-2 rounded-xl border border-line bg-ink-50 px-3 py-2.5 text-sm text-ink-700">
+                    <Icon name="check" :size="15" class="text-emerald-600" /> Client pays card fees
+                </div>
                 <div class="flex items-center gap-2">
                     <input v-model="form.commission_rate" type="number" step="0.5" min="0" max="100" class="input" />
                     <span class="text-sm text-ink-500">% ours</span>
@@ -72,8 +75,7 @@ const m = (v) => money(v, props.currency);
                 <div class="flex justify-between text-ink-500"><span>− Payout / bank fee (est.)</span><span class="tabular-nums">{{ m(-b.payout_fee) }}</span></div>
                 <div class="mt-1.5 flex justify-between border-t border-line pt-1.5 font-semibold text-ink-900"><span>You receive</span><span class="tabular-nums">{{ m(b.net) }}</span></div>
                 <template v-if="isCommission">
-                    <div class="mt-1.5 flex justify-between text-emerald-700"><span>↳ Commission recorded</span><span class="tabular-nums font-semibold">{{ m(b.commission) }}</span></div>
-                    <div v-if="b.commission > b.net" class="flex justify-between text-ink-500"><span>↳ Card fees you cover</span><span class="tabular-nums">{{ m(b.net - b.commission) }}</span></div>
+                    <div class="mt-1.5 flex justify-between text-emerald-700"><span>↳ Full commission, fees paid by client</span><span class="tabular-nums font-semibold">{{ m(b.commission) }}</span></div>
                     <p class="mt-2 flex items-start gap-1.5 text-[11px] text-ink-500">
                         <Icon name="receipt" :size="12" class="mt-0.5" /> Invoice shows "{{ b.commission_rate }}% of {{ m(b.client_spend) }} spend" = {{ m(b.commission) }}<template v-if="b.processing_fee"> + card fee {{ m(b.processing_fee) }}</template>, with the spend listed for reference.
                     </p>

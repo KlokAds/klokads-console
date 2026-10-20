@@ -44,9 +44,10 @@ abstract class Controller
             $pricing->commissionRate = (float) $request->input('commission_rate');
         }
 
-        // Commission only: the amount entered is the client's own ad spend.
+        // Commission only: the amount entered is the client's own ad spend, and the client
+        // always pays the card fees, so the full commission reaches us.
         return $request->input('billing') === 'commission'
-            ? $pricing->commissionOnly($net, $request->boolean('pass_fees', true))
+            ? $pricing->commissionOnly($net)
             : $pricing->breakdown($net, $request->boolean('pass_fees', true));
     }
 

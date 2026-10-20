@@ -65,13 +65,13 @@ class CommissionOnlyTest extends TestCase
 
         $this->mock(StripeService::class, fn (MockInterface $m) => $m->shouldReceive('createInvoice')->once()
             ->withArgs(fn ($c, $items, $opts) => $items === [] && $opts['budget']['client_spend'] === 100000
-                && $opts['budget']['charge'] === 20000 // fees absorbed: client pays exactly 200.00
-                && $opts['budget']['commission'] === 20000 && $opts['budget']['ad_budget'] === 0)
+                && $opts['budget']['charge'] > 20000 && $opts['budget']['processing_fee'] > 0 // client pays the card fee on top
+                && $opts['budget']['net'] === 20000 && $opts['budget']['commission'] === 20000 && $opts['budget']['ad_budget'] === 0)
             ->andReturn(new Invoice));
 
         $this->actingAs(User::factory()->create())->post('/invoices', [
             'client_id' => $client->id, 'service' => 'meta_ads', 'days_until_due' => 7, 'send' => false,
-            'billing' => 'commission', 'pass_fees' => false, 'commission_rate' => 20, 'budget_amount' => '1000',
+            'billing' => 'commission', 'pass_fees' => false, 'commission_rate' => 20, 'budget_amount' => '1000', // pass_fees is ignored here
         ])->assertSessionHasNoErrors()->assertSessionMissing('error')->assertRedirect('/invoices');
     }
 

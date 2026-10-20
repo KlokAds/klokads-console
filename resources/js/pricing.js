@@ -65,7 +65,8 @@ export function commissionOnly(spend, p, passFees = true) {
 /** What a form will charge for its billing type (budget, commission or a plain amount). */
 export function priced(billing, cents, p, passFees = true) {
     if (!p || !cents) return null;
-    if (billing === 'commission') return commissionOnly(cents, p, passFees);
+    // Commission only: the client always pays the card fees, so the full commission reaches us.
+    if (billing === 'commission') return commissionOnly(cents, p, true);
     if (billing === 'budget') return breakdown(cents, p, passFees);
     return null;
 }
