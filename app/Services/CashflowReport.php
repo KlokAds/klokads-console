@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Client;
+use App\Models\ClientBalanceEntry;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\RecurringPlan;
@@ -95,12 +96,22 @@ class CashflowReport
         $paid = Invoice::where('status', 'paid')->whereNotNull('net_amount')->whereBetween('paid_at', [$this->from, $this->to]);
 
         return [
-            'commission' => (int) (clone $paid)->sum('commission_amount'),
+            // Pay-later invoices carry their commission; prepaid clients earn it as each day is deducted.
+            'commission' => (int) (clone $paid)->sum('commission_amount') + $this->prepaidCommission()->sum(),
             'ad_budget_received' => (int) (clone $paid)->sum('ad_budget'),
             'budget_invoices' => (clone $paid)->count(),
             // Ad spend clients paid the platforms themselves, on commission-only invoices.
             'client_spend' => (int) (clone $paid)->sum('client_spend'),
         ];
+    }
+
+    /** Commission earned on prepaid balances in the period, by client. */
+    private function prepaidCommission(): Collection
+    {
+        return ClientBalanceEntry::where('kind', 'spend')
+            ->whereBetween('date', [$this->from->toDateString(), $this->to->toDateString()])
+            ->selectRaw('client_id, sum(commission) as total')->groupBy('client_id')->pluck('total', 'client_id')
+            ->map(fn ($v) => (int) $v);
     }
 
     /** Expense categories that are money spent on ad platforms on the client's behalf. */
@@ -238,6 +249,9 @@ class CashflowReport
         $commission = Invoice::where('status', 'paid')->whereNotNull('client_id')->whereNotNull('commission_amount')
             ->whereBetween('paid_at', [$this->from, $this->to])
             ->selectRaw('client_id, sum(commission_amount) as total')->groupBy('client_id')->pluck('total', 'client_id');
+        foreach ($this->prepaidCommission() as $clientId => $earned) {
+            $commission[$clientId] = ($commission[$clientId] ?? 0) + $earned;
+        }
         $budgets = self::budgetBalances();
 
         return Client::whereIn('id', $ids)->get()

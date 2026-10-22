@@ -72,6 +72,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/clients/{client}/meta', [SpendBillingController::class, 'update'])->name('clients.meta');
     Route::post('/clients/{client}/meta/sync', [SpendBillingController::class, 'sync'])->name('clients.meta.sync');
     Route::post('/clients/{client}/meta/charge', [SpendBillingController::class, 'charge'])->name('clients.meta.charge');
+    Route::post('/clients/{client}/meta/top-up', [SpendBillingController::class, 'topUp'])->name('clients.meta.topup');
+    Route::post('/clients/{client}/meta/adjust', [SpendBillingController::class, 'adjust'])->name('clients.meta.adjust');
     Route::post('/settings/meta', [SpendBillingController::class, 'saveToken'])->name('settings.meta');
     Route::post('/clients/{client}/cards/{paymentMethod}/default', [ClientCardController::class, 'makeDefault'])->name('clients.cards.default');
     Route::delete('/clients/{client}/cards/{paymentMethod}', [ClientCardController::class, 'destroy'])->name('clients.cards.destroy');

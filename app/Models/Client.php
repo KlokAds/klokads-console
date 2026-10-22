@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Client extends Model
 {
-    protected $fillable = ['name', 'company', 'email', 'phone', 'country', 'address', 'tax_id', 'meta_ad_account_id', 'meta_campaign_filter', 'spend_billing', 'spend_threshold', 'spend_billed_until', 'spend_synced_at', 'spend_attempted_at', 'spend_error', 'commission_rate', 'stripe_customer_id', 'stripe_test_customer_id', 'notes'];
+    protected $fillable = ['name', 'company', 'email', 'phone', 'country', 'address', 'tax_id', 'meta_ad_account_id', 'meta_campaign_filter', 'spend_billing', 'billing_mode', 'prepaid_buffer_days', 'prepaid_topup_days', 'prepaid_min_topup', 'spend_threshold', 'spend_billed_until', 'spend_synced_at', 'spend_attempted_at', 'spend_error', 'commission_rate', 'stripe_customer_id', 'stripe_test_customer_id', 'notes'];
 
     protected $casts = ['commission_rate' => 'float', 'spend_billing' => 'boolean', 'spend_billed_until' => 'date', 'spend_synced_at' => 'datetime', 'spend_attempted_at' => 'datetime'];
 
@@ -61,5 +61,11 @@ class Client extends Model
     public function getDisplayNameAttribute(): string
     {
         return $this->company ? "{$this->company} ({$this->name})" : $this->name;
+    }
+
+    /** Prepaid balance (cents): top-ups and adjustments minus spent days. */
+    public function balance(): int
+    {
+        return (int) ClientBalanceEntry::where('client_id', $this->id)->sum('amount');
     }
 }

@@ -37,7 +37,9 @@ class SpendBilling
         foreach (Client::whereNotNull('meta_ad_account_id')->get() as $client) {
             try {
                 $this->sync($client);
-                $done[$client->id] = $this->chargeIfDue($client)?->number ?? 'ok';
+                $done[$client->id] = ($client->billing_mode === 'prepaid'
+                    ? app(PrepaidBalance::class)->run($client->fresh())
+                    : $this->chargeIfDue($client->fresh()))?->number ?? 'ok';
             } catch (Throwable $e) {
                 $client->update(['spend_error' => mb_substr($e->getMessage(), 0, 500)]);
                 $done[$client->id] = 'error';
@@ -84,7 +86,7 @@ class SpendBilling
     /** Charge when unbilled spend reached the threshold. Returns the paid invoice, if any. */
     public function chargeIfDue(Client $client, bool $manual = false): ?Invoice
     {
-        if (! $client->spend_billing && ! $manual) {
+        if ($client->billing_mode === 'prepaid' || (! $client->spend_billing && ! $manual)) {
             return null;
         }
 
@@ -101,10 +103,10 @@ class SpendBilling
 
         $currency = strtolower($days->first()->currency);
         if ($currency !== $this->stripe->currency()) {
-            return $this->fail($client, "The ad account is in {$days->first()->currency} but Stripe charges in ".strtoupper($this->stripe->currency()).'. Charge this one manually.');
+            return $this->failed($client, "The ad account is in {$days->first()->currency} but Stripe charges in ".strtoupper($this->stripe->currency()).'. Charge this one manually.');
         }
         if (! $manual && $spend > $client->spend_threshold * self::SAFETY_MULTIPLE) {
-            return $this->fail($client, 'Unbilled spend '.number_format($spend / 100, 2).' is far above the threshold — check it and use "Charge now" on the client page.');
+            return $this->failed($client, 'Unbilled spend '.number_format($spend / 100, 2).' is far above the threshold — check it and use "Charge now" on the client page.');
         }
 
         $budget = self::spendBudget($spend, Pricing::forClient($client));
@@ -116,7 +118,7 @@ class SpendBilling
         try {
             $invoice = $this->stripe->chargeNow($client, $budget['charge'], "Meta Ads spend {$period}", 'meta_ads', null, $budget);
         } catch (Throwable $e) {
-            return $this->fail($client, 'Card charge failed: '.$e->getMessage());
+            return $this->failed($client, 'Card charge failed: '.$e->getMessage());
         }
 
         DB::transaction(function () use ($client, $days, $invoice, $from, $to, $spend) {
@@ -165,7 +167,7 @@ class SpendBilling
         return ['commission' => $commission, 'ad_budget' => $spend, 'spend' => $spend, 'mode' => 'spend'] + $b;
     }
 
-    private function fail(Client $client, string $message): null
+    public function failed(Client $client, string $message): null
     {
         $first = $client->spend_error !== $message;
         $client->update(['spend_error' => $message, 'spend_attempted_at' => now()]);
@@ -176,7 +178,7 @@ class SpendBilling
         return null;
     }
 
-    private function tell(string $title, string $body): void
+    public function tell(string $title, string $body): void
     {
         foreach (PushSubscription::all() as $sub) {
             try {
