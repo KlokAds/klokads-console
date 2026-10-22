@@ -7,7 +7,8 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { date, money } from '@/money';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { currentDeviceHash, pushStatus } from '@/push';
 
 const props = defineProps({
     currencies: Array,
@@ -66,6 +67,26 @@ const maxWhere = computed(() => Math.max(1, ...where.value.map((c) => c.amount))
 const maxMonth = computed(() => Math.max(1, ...s.value.months.flatMap((m) => [m.in, m.spent, Math.max(0, m.saved)])));
 const hover = ref(null);
 const budgetTone = (b) => (b.spent > b.limit ? 'bg-rose-500' : b.spent > b.limit * 0.8 ? 'bg-amber-500' : 'bg-emerald-500');
+
+// Nudge to turn on phone reminders where they would work but aren't on yet.
+const offerReminders = ref(false);
+onMounted(async () => {
+    let dismissed = false;
+    try {
+        dismissed = localStorage.getItem('klok-reminders-dismissed') === '1';
+    } catch {
+        /* ignore */
+    }
+    offerReminders.value = !dismissed && ['ready', 'install-first'].includes(pushStatus()) && !(await currentDeviceHash());
+});
+function dismissReminders() {
+    offerReminders.value = false;
+    try {
+        localStorage.setItem('klok-reminders-dismissed', '1');
+    } catch {
+        /* ignore */
+    }
+}
 
 // ---------------------------------------------------------------- budgets
 const showBudgets = ref(false);
@@ -161,6 +182,14 @@ const recent = computed(() => props.recent.filter((t) => t.account.currency.toUp
         </EmptyState>
 
         <template v-else>
+            <!-- Reminders nudge -->
+            <div v-if="offerReminders" class="mb-4 flex items-center gap-3 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3">
+                <span class="text-xl">🔔</span>
+                <div class="min-w-0 flex-1 text-sm text-ink-800"><b>Daily reminders?</b> 9 am: what's due · 9 pm: add today's spending.</div>
+                <Link :href="route('notifications.index')" class="btn-primary btn-sm">Turn on</Link>
+                <button class="icon-btn" title="Not now" @click="dismissReminders"><Icon name="close" :size="15" /></button>
+            </div>
+
             <!-- Currency -->
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div class="inline-flex rounded-xl border border-line bg-white p-1 shadow-sm">

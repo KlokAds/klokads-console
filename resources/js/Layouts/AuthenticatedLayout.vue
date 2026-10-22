@@ -22,7 +22,7 @@ const syncing = ref(false);
 const toast = ref(null);
 
 // Two sides of the app: the agency, and your own money. Each has its own dashboard and menu.
-const mode = computed(() => (route().current('personal.*') || (route().current('money.*') && page.props.scope === 'personal') ? 'personal' : 'business'));
+const mode = computed(() => (route().current('personal.*') || route().current('notifications.*') || (route().current('money.*') && page.props.scope === 'personal') ? 'personal' : 'business'));
 
 const businessSections = [
     {
@@ -58,6 +58,7 @@ const personalSections = [
         items: [
             { name: 'Dashboard', route: 'personal.dashboard', match: 'personal.*', icon: 'home' },
             { name: 'Money', route: 'money.index', params: { scope: 'personal' }, match: 'money.*', icon: 'wallet' },
+            { name: 'Reminders', route: 'notifications.index', match: 'notifications.*', icon: 'bolt' },
         ],
     },
 ];
@@ -228,6 +229,7 @@ router.on('navigate', () => {
                             <Icon :name="THEME_ICON[t]" :size="16" /> {{ t === 'system' ? 'Auto' : THEME_LABEL[t] }}
                         </button>
                     </div>
+                    <Link :href="route('notifications.index')" class="menu-item"><Icon name="bolt" :size="16" /> Phone reminders</Link>
                     <Link :href="route('profile.edit')" class="menu-item"><Icon name="user" :size="16" /> Profile & password</Link>
                     <Link :href="route('settings.edit')" class="menu-item"><Icon name="cog" :size="16" /> Settings</Link>
                     <Link :href="route('logout')" method="post" as="button" class="menu-item text-rose-600" @click="clearOffline"><Icon name="logout" :size="16" /> Log out</Link>

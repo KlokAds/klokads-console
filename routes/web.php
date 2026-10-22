@@ -9,6 +9,7 @@ use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\MoneyController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentLinkController;
 use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\PersonalDashboardController;
@@ -24,6 +25,9 @@ use Illuminate\Support\Facades\Route;
 Route::redirect('/', '/dashboard');
 
 Route::post('/stripe/webhook', StripeWebhookController::class)->name('stripe.webhook');
+
+// cron-job.org pings this every few minutes to send the morning / night reminders.
+Route::get('/reminders/ping/{token}', [NotificationController::class, 'ping'])->middleware('throttle:30,1')->name('reminders.ping');
 
 Route::get('/card-saved', [ClientCardController::class, 'saved'])->name('cards.saved');
 
@@ -44,6 +48,11 @@ Route::prefix('install')->name('install.')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('/notifications/subscribe', [NotificationController::class, 'subscribe'])->name('notifications.subscribe');
+    Route::put('/notifications/{subscription}', [NotificationController::class, 'update'])->name('notifications.update');
+    Route::delete('/notifications/{subscription}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
+    Route::post('/notifications/{subscription}/test', [NotificationController::class, 'test'])->name('notifications.test');
     Route::get('/search', SearchController::class)->middleware('throttle:120,1')->name('search');
     Route::get('/personal', PersonalDashboardController::class)->name('personal.dashboard');
     Route::post('/personal/budgets', [PlanningController::class, 'saveBudgets'])->name('personal.budgets');

@@ -2,7 +2,7 @@
  * - App files (build/, icons, fonts): cache first, they never change once built.
  * - Pages and page data: network first; the last copy is shown when offline.
  * Nothing is cached for public client pages, Stripe, exports, PDFs or the installer. */
-const ASSETS = 'klok-assets-v1';
+const ASSETS = 'klok-assets-v2';
 const PAGES = 'klok-pages-v1';
 const BASE = new URL(self.registration.scope).pathname; // "/" or "/console/"
 const SKIP = ['stripe/', 'install', 'logout', 'i/', 'card/', 'card-saved', 'money/export', 'cashflow/export', '/pdf', '/document', '/preview'];
@@ -85,3 +85,37 @@ const OFFLINE = `<!doctype html><meta charset="utf-8"><meta name="viewport" cont
 <p style="color:#5b6280;font-size:14px;line-height:1.5">This page hasn't been opened on this device yet. Open it once while online and it will work offline next time.</p>
 <button onclick="location.reload()" style="margin-top:12px;background:#5b45e8;color:#fff;border:0;border-radius:12px;padding:10px 18px;font-weight:600">Try again</button>
 </div></body>`;
+
+// ---------------------------------------------------------------- reminders (Web Push)
+self.addEventListener('push', (event) => {
+    let data = {};
+    try {
+        data = event.data ? event.data.json() : {};
+    } catch {
+        data = { body: event.data?.text() };
+    }
+    event.waitUntil(self.registration.showNotification(data.title || 'Klok Ads', {
+        body: data.body || '',
+        icon: BASE + 'icon-192.png',
+        badge: BASE + 'icon-192.png',
+        tag: data.tag || 'klok',
+        renotify: true,
+        data: { url: data.url || BASE + 'personal' },
+    }));
+});
+
+// Tap: open (or focus) the app on the right page.
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const url = event.notification.data?.url || BASE + 'personal';
+    event.waitUntil((async () => {
+        const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const win of windows) {
+            if (new URL(win.url).origin === location.origin && 'focus' in win) {
+                await win.focus();
+                return win.navigate(url);
+            }
+        }
+        return self.clients.openWindow(url);
+    })());
+});
