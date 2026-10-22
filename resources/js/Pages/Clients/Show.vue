@@ -1,4 +1,5 @@
 <script setup>
+import MetaSpendCard from '@/Components/MetaSpendCard.vue';
 import Avatar from '@/Components/Avatar.vue';
 import ClientCards from '@/Components/ClientCards.vue';
 import ClientFormModal from '@/Components/ClientFormModal.vue';
@@ -14,6 +15,8 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps({
+    meta: Object,
+    metaAccounts: { type: Object, default: null },
     client: Object,
     stripeCustomerId: String,
     currency: String,
@@ -67,8 +70,8 @@ async function destroy() {
         <!-- Profile header -->
         <div class="card flex flex-wrap items-center gap-5 p-5 sm:p-6">
             <Avatar :name="client.company || client.name" :size="56" />
-            <div class="min-w-0 flex-1">
-                <div class="font-display text-xl font-bold text-ink-900">{{ client.company || client.name }}</div>
+            <div class="min-w-0 flex-1 basis-48">
+                <div class="break-words font-display text-xl font-bold text-ink-900">{{ client.company || client.name }}</div>
                 <div class="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-sm text-ink-500">
                     <span class="flex items-center gap-1.5"><Icon name="user" :size="14" /> {{ client.name }}</span>
                     <a :href="`mailto:${client.email}`" class="flex items-center gap-1.5 hover:text-brand-700"><Icon name="send" :size="14" /> {{ client.email }}</a>
@@ -78,9 +81,10 @@ async function destroy() {
                 </div>
                 <p v-if="client.notes" class="mt-2 max-w-2xl text-sm text-ink-600">{{ client.notes }}</p>
             </div>
-            <div class="flex gap-2">
-                <button class="btn-secondary" @click="editing = true"><Icon name="pencil" :size="15" /> Edit</button>
-                <Link :href="route('invoices.create', { client_id: client.id })" class="btn-dark"><Icon name="invoice" :size="15" /> New invoice</Link>
+            <!-- On phones the buttons take their own full-width row instead of squeezing the name. -->
+            <div class="flex w-full gap-2 sm:w-auto">
+                <button class="btn-secondary flex-1 sm:flex-none" @click="editing = true"><Icon name="pencil" :size="15" /> Edit</button>
+                <Link :href="route('invoices.create', { client_id: client.id })" class="btn-dark flex-1 sm:flex-none"><Icon name="invoice" :size="15" /> New invoice</Link>
             </div>
         </div>
 
@@ -95,6 +99,7 @@ async function destroy() {
 
         <div class="mt-5">
             <ClientCards :client="client" :cards="cards ?? null" :connected="stripeConnected" :default-locked="defaultCardLocked" :currency="currency" :service-labels="serviceLabels" />
+            <MetaSpendCard class="mt-5" :client="client" :meta="meta" :accounts="metaAccounts ?? null" :commission-rate="commissionRate" :currency="currency" />
         </div>
 
         <div class="card mt-5">

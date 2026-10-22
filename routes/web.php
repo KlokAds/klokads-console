@@ -19,6 +19,7 @@ use App\Http\Controllers\PublicInvoiceController;
 use App\Http\Controllers\RecurringPlanController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SpendBillingController;
 use App\Http\Controllers\StripeWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -68,6 +69,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/clients/{client}/cards/link', [ClientCardController::class, 'link'])->name('clients.cards.link');
     Route::post('/clients/{client}/cards/enter', [ClientCardController::class, 'enter'])->name('clients.cards.enter');
     Route::post('/clients/{client}/charge', [ClientCardController::class, 'chargeNow'])->name('clients.charge');
+    Route::post('/clients/{client}/meta', [SpendBillingController::class, 'update'])->name('clients.meta');
+    Route::post('/clients/{client}/meta/sync', [SpendBillingController::class, 'sync'])->name('clients.meta.sync');
+    Route::post('/clients/{client}/meta/charge', [SpendBillingController::class, 'charge'])->name('clients.meta.charge');
+    Route::post('/settings/meta', [SpendBillingController::class, 'saveToken'])->name('settings.meta');
     Route::post('/clients/{client}/cards/{paymentMethod}/default', [ClientCardController::class, 'makeDefault'])->name('clients.cards.default');
     Route::delete('/clients/{client}/cards/{paymentMethod}', [ClientCardController::class, 'destroy'])->name('clients.cards.destroy');
     Route::post('/invoices/{invoice}/charge', [ClientCardController::class, 'charge'])->name('invoices.charge');

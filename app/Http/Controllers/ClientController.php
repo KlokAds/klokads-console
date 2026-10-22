@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\Setting;
 use App\Services\CashflowReport;
+use App\Services\MetaAds;
 use App\Services\StripeService;
 use App\Support\Catalog;
 use Illuminate\Http\RedirectResponse;
@@ -51,6 +52,9 @@ class ClientController extends Controller
             'expenses' => $client->expenses()->latest('spent_on')->limit(50)->get(),
             'serviceLabels' => Catalog::SERVICES,
             'categoryLabels' => Catalog::EXPENSE_CATEGORIES,
+            'meta' => SpendBillingController::summary($client) + ['connected' => MetaAds::configured()],
+            // Ad accounts the Meta token can see (for the picker); loaded after the page renders.
+            'metaAccounts' => Inertia::defer(fn () => SpendBillingController::accountsFor(app(MetaAds::class))),
             'stripeConnected' => StripeService::configured(),
             'defaultCardLocked' => StripeService::defaultCardLocked($client),
             // Loaded right after the page renders: listing cards is a Stripe API call.

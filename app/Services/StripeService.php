@@ -389,6 +389,20 @@ class StripeService
      */
     public static function budgetItems(array $budget, string $label): array
     {
+        // Pay-as-you-spend: the spend we fronted on Meta, then our commission on it.
+        if (($budget['mode'] ?? null) === 'spend') {
+            $rate = rtrim(rtrim(number_format((float) $budget['commission_rate'], 2), '0'), '.');
+            $items = [
+                ['description' => $label, 'amount' => $budget['spend'], 'quantity' => 1],
+                ['description' => "Management commission — {$rate}% of ad spend", 'amount' => $budget['commission'], 'quantity' => 1],
+            ];
+            if ($budget['processing_fee'] > 0) {
+                $items[] = ['description' => 'Card processing fee', 'amount' => $budget['processing_fee'], 'quantity' => 1];
+            }
+
+            return $items;
+        }
+
         $items = [['description' => isset($budget['client_spend']) ? self::commissionLine($budget, $label) : $label, 'amount' => $budget['net'], 'quantity' => 1]];
 
         if ($budget['processing_fee'] > 0) {

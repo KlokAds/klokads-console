@@ -6,6 +6,7 @@ use App\Models\PushSubscription;
 use App\Models\Setting;
 use App\Services\PushNotifier;
 use App\Services\Reminders;
+use App\Services\SpendBilling;
 use Carbon\CarbonImmutable;
 use DateTimeZone;
 use Illuminate\Http\JsonResponse;
@@ -96,10 +97,10 @@ class NotificationController extends Controller
     }
 
     /** cron-job.org calls this every few minutes; it sends whatever is due. */
-    public function ping(string $token, Reminders $reminders): JsonResponse
+    public function ping(string $token, Reminders $reminders, SpendBilling $billing): JsonResponse
     {
         abort_unless(hash_equals(PushNotifier::cronToken(), $token), 404);
 
-        return response()->json(['ok' => true] + $reminders->run());
+        return response()->json(['ok' => true] + $reminders->run() + ['billing' => $billing->runAll()]);
     }
 }
