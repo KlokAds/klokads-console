@@ -1,9 +1,11 @@
 <script setup>
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
+import CommandPalette from '@/Components/CommandPalette.vue';
 import ConfirmDialog from '@/Components/ConfirmDialog.vue';
 import Icon from '@/Components/Icon.vue';
 import { date } from '@/money';
 import { online, pending, syncEntries, syncState } from '@/offline';
+import { applyTheme, cycleTheme, setTheme, theme } from '@/theme';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
@@ -125,7 +127,11 @@ function autoSyncIfStale() {
     });
 }
 
+const THEME_ICON = { light: 'sun', dark: 'moon', system: 'monitor' };
+const THEME_LABEL = { light: 'Light', dark: 'Dark', system: 'Same as device' };
+
 onMounted(() => {
+    applyTheme();
     document.addEventListener('click', closeMenus);
     if (navigator.onLine) autoSyncIfStale();
     syncEntries();
@@ -147,7 +153,7 @@ router.on('navigate', () => {
     <div class="min-h-screen bg-canvas">
         <!-- Sidebar -->
         <aside
-            class="fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-ink-950 text-ink-300 transition-transform duration-200 lg:translate-x-0"
+            class="keep-dark fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-ink-950 text-ink-300 transition-transform duration-200 lg:translate-x-0"
             :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
         >
             <div class="flex h-[68px] items-center justify-between px-5">
@@ -215,6 +221,13 @@ router.on('navigate', () => {
                     <Icon name="chevron" :size="14" class="text-ink-500" />
                 </button>
                 <div v-if="userOpen" class="menu bottom-full left-3 right-3 mb-2">
+                    <div class="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-400">Theme</div>
+                    <div class="mb-1 grid grid-cols-3 gap-1 px-1.5">
+                        <button v-for="t in ['light', 'dark', 'system']" :key="t" type="button" class="flex flex-col items-center gap-1 rounded-lg py-2 text-[11px] font-semibold transition"
+                            :class="theme === t ? 'bg-brand-50 text-brand-700' : 'text-ink-500 hover:bg-ink-50'" @click.stop="setTheme(t)">
+                            <Icon :name="THEME_ICON[t]" :size="16" /> {{ t === 'system' ? 'Auto' : THEME_LABEL[t] }}
+                        </button>
+                    </div>
                     <Link :href="route('profile.edit')" class="menu-item"><Icon name="user" :size="16" /> Profile & password</Link>
                     <Link :href="route('settings.edit')" class="menu-item"><Icon name="cog" :size="16" /> Settings</Link>
                     <Link :href="route('logout')" method="post" as="button" class="menu-item text-rose-600" @click="clearOffline"><Icon name="logout" :size="16" /> Log out</Link>
@@ -234,6 +247,10 @@ router.on('navigate', () => {
                         <h1 class="truncate text-lg font-bold text-ink-900 sm:text-xl">{{ title }}</h1>
                         <p v-if="subtitle" class="hidden truncate text-xs text-ink-500 sm:block">{{ subtitle }}</p>
                     </div>
+                    <CommandPalette :mode="mode" />
+                    <button class="icon-btn" :title="`Theme: ${THEME_LABEL[theme]} (click to change)`" @click="cycleTheme">
+                        <Icon :name="THEME_ICON[theme]" :size="18" />
+                    </button>
                     <div class="flex items-center gap-2">
                         <slot name="actions" />
                         <div class="relative" data-menu>

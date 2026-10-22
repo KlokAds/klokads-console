@@ -267,7 +267,7 @@ function setService(value) {
             <div class="xl:col-span-5">
                 <div class="sticky top-24 space-y-4">
                     <div class="card overflow-hidden">
-                        <div class="bg-ink-950 px-6 py-5 text-white">
+                        <div class="keep-dark bg-ink-950 px-6 py-5 text-white">
                             <div class="flex items-center justify-between">
                                 <span class="font-display text-lg font-bold">{{ business }}</span>
                                 <span class="text-xs uppercase tracking-[0.14em] text-ink-400">Invoice</span>

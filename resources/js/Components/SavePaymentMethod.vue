@@ -22,7 +22,7 @@ onMounted(async () => {
     try {
         const Stripe = await loadStripeJs();
         stripe = Stripe(props.publishableKey);
-        elements = stripe.elements({ clientSecret: props.clientSecret, appearance });
+        elements = stripe.elements({ clientSecret: props.clientSecret, appearance: { ...appearance } });
         const el = elements.create('payment', { layout: paymentLayout });
         el.on('ready', () => (ready.value = true));
         el.mount(mountEl.value);

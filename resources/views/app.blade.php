@@ -1,9 +1,18 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-force-light="{{ str_starts_with($page['component'] ?? '', 'Public/') ? '1' : '0' }}">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#0b1020">
+
+        {{-- Theme before first paint (no flash). Client-facing pages always stay light. --}}
+        <script>
+            (function () {
+                var d = document.documentElement, t = 'system';
+                try { t = localStorage.getItem('klok-theme') || 'system'; } catch (e) {}
+                if (d.dataset.forceLight !== '1' && (t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches))) d.classList.add('dark');
+            })();
+        </script>
 
         <title inertia>{{ config('app.name', 'Klok Ads') }}</title>
         <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">

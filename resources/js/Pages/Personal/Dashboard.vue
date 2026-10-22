@@ -173,7 +173,7 @@ const recent = computed(() => props.recent.filter((t) => t.account.currency.toUp
             </div>
 
             <!-- Hero: total, split into savings and spending money -->
-            <div class="relative mt-4 overflow-hidden rounded-3xl bg-ink-950 p-6 text-white shadow-xl sm:p-8">
+            <div class="keep-dark relative mt-4 overflow-hidden rounded-3xl bg-ink-950 p-6 text-white shadow-xl sm:p-8">
                 <div class="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-600/30 blur-3xl"></div>
                 <div class="pointer-events-none absolute -bottom-28 left-10 h-64 w-64 rounded-full bg-emerald-500/20 blur-3xl"></div>
                 <div class="relative">
@@ -346,7 +346,7 @@ const recent = computed(() => props.recent.filter((t) => t.account.currency.toUp
                         <div class="mt-2 flex gap-2 sm:gap-4">
                             <div v-for="m in s.months" :key="m.month" class="flex-1 text-center text-xs" :class="m.month === cur.month ? 'font-semibold text-ink-900' : 'text-ink-500'">{{ m.label }}</div>
                         </div>
-                        <div v-if="hover" class="pointer-events-none absolute left-1/2 top-1 -translate-x-1/2 whitespace-nowrap rounded-xl bg-ink-950 px-3 py-2 text-xs text-white shadow-lg">
+                        <div v-if="hover" class="keep-dark pointer-events-none absolute left-1/2 top-1 -translate-x-1/2 whitespace-nowrap rounded-xl bg-ink-950 px-3 py-2 text-xs text-white shadow-lg">
                             <div class="font-semibold">{{ new Date(hover.month + '-01').toLocaleDateString('en-SG', { month: 'long', year: 'numeric' }) }}</div>
                             <div class="mt-1 tabular-nums">In {{ C(hover.in) }} · Spent {{ C(hover.spent) }} · Saved {{ C(hover.saved) }}</div>
                         </div>

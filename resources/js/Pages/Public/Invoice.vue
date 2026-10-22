@@ -37,7 +37,7 @@ onMounted(async () => {
         stripe = Stripe(props.payment.publishable_key);
         elements = stripe.elements({
             clientSecret: props.payment.client_secret,
-            appearance,
+            appearance: { ...appearance },
         });
         const el = elements.create('payment', { layout: paymentLayout });
         el.on('ready', () => (ready.value = true));
@@ -82,7 +82,7 @@ const pdfUrl = (type) => route('public.invoice.pdf', { token: props.token, type 
 
             <div class="card overflow-hidden">
                 <!-- Amount band -->
-                <div class="relative overflow-hidden bg-ink-950 px-6 py-7 text-white sm:px-8">
+                <div class="keep-dark relative overflow-hidden bg-ink-950 px-6 py-7 text-white sm:px-8">
                     <div class="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-brand-600/30 blur-3xl"></div>
                     <div class="relative flex flex-wrap items-end justify-between gap-4">
                         <div>

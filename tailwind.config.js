@@ -3,6 +3,7 @@ import forms from '@tailwindcss/forms';
 
 /** @type {import('tailwindcss').Config} */
 export default {
+    darkMode: 'class',
     content: [
         './vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php',
         './storage/framework/views/*.php',
@@ -18,21 +19,11 @@ export default {
                 display: ['"Plus Jakarta Sans"', 'Inter', ...defaultTheme.fontFamily.sans],
             },
             colors: {
-                canvas: '#f5f6fa',
-                line: '#e6e8ef',
-                ink: {
-                    50: '#f6f7fb',
-                    100: '#eceef5',
-                    200: '#d9dce8',
-                    300: '#b6bbcf',
-                    400: '#8b91aa',
-                    500: '#646a85',
-                    600: '#4a5069',
-                    700: '#353a52',
-                    800: '#1f2438',
-                    900: '#131729',
-                    950: '#0b1020',
-                },
+                // Neutrals come from CSS variables (resources/css/app.css) so dark mode flips them in one place.
+                canvas: 'rgb(var(--canvas) / <alpha-value>)',
+                line: 'rgb(var(--line) / <alpha-value>)',
+                surface: 'rgb(var(--surface) / <alpha-value>)',
+                ink: Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map((n) => [n, `rgb(var(--ink-${n}) / <alpha-value>)`])),
                 brand: {
                     50: '#f1f0ff',
                     100: '#e5e3ff',

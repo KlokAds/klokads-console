@@ -89,7 +89,7 @@ const marginPct = (s) => (s.revenue ? Math.round((s.margin / s.revenue) * 100) :
 
         <!-- Hero row -->
         <div class="grid gap-5 xl:grid-cols-12">
-            <div class="relative overflow-hidden rounded-2xl bg-ink-950 p-6 text-white shadow-lift sm:p-7 xl:col-span-7">
+            <div class="keep-dark relative overflow-hidden rounded-2xl bg-ink-950 p-6 text-white shadow-lift sm:p-7 xl:col-span-7">
                 <div class="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-600/35 blur-3xl"></div>
                 <div class="pointer-events-none absolute -bottom-32 left-1/3 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl"></div>
 

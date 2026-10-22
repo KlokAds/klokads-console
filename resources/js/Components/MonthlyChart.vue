@@ -33,7 +33,7 @@ function render() {
                     borderWidth: 2,
                     pointRadius: 4,
                     pointHoverRadius: 6,
-                    pointBorderColor: '#fff',
+                    pointBorderColor: css('--chart-surface'),
                     pointBorderWidth: 2,
                     tension: 0.25,
                     order: 0,
@@ -95,9 +95,15 @@ function render() {
     });
 }
 
-onMounted(render);
+onMounted(() => {
+    render();
+    window.addEventListener('klok-theme', render); // redraw with the new theme's colors
+});
 watch(() => props.months, render);
-onBeforeUnmount(() => chart?.destroy());
+onBeforeUnmount(() => {
+    window.removeEventListener('klok-theme', render);
+    chart?.destroy();
+});
 </script>
 
 <template>

@@ -16,6 +16,7 @@ use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicInvoiceController;
 use App\Http\Controllers\RecurringPlanController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\StripeWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -43,6 +44,7 @@ Route::prefix('install')->name('install.')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::get('/search', SearchController::class)->middleware('throttle:120,1')->name('search');
     Route::get('/personal', PersonalDashboardController::class)->name('personal.dashboard');
     Route::post('/personal/budgets', [PlanningController::class, 'saveBudgets'])->name('personal.budgets');
     Route::post('/personal/goals', [PlanningController::class, 'storeGoal'])->name('personal.goals.store');

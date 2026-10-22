@@ -17,7 +17,7 @@ const points = [
 <template>
     <div class="flex min-h-screen bg-white">
         <!-- Brand panel -->
-        <div class="relative hidden w-[46%] max-w-[640px] overflow-hidden bg-ink-950 p-12 text-white lg:flex lg:flex-col">
+        <div class="keep-dark relative hidden w-[46%] max-w-[640px] overflow-hidden bg-ink-950 p-12 text-white lg:flex lg:flex-col">
             <div class="pointer-events-none absolute -right-40 -top-40 h-[520px] w-[520px] rounded-full bg-brand-600/30 blur-3xl"></div>
             <div class="pointer-events-none absolute -bottom-48 -left-24 h-[420px] w-[420px] rounded-full bg-sky-500/10 blur-3xl"></div>
             <svg class="pointer-events-none absolute inset-0 h-full w-full opacity-[0.07]" aria-hidden="true">

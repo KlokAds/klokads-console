@@ -160,7 +160,7 @@ function submitTx() {
 }
 
 // ---------------------------------------------------------------- search & filters
-const q = ref('');
+const q = ref(typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('q') ?? '' : ''); // global search can open this page filtered
 const fAccount = ref('');
 const fKind = ref('');
 const filtered = computed(() => {

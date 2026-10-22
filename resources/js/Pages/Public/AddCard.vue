@@ -25,7 +25,7 @@ const canSave = props.setup.client_secret && props.setup.publishable_key;
             <div class="mb-6 flex justify-center"><ApplicationLogo :size="32" wordmark /></div>
 
             <div class="card overflow-hidden">
-                <div class="relative overflow-hidden bg-ink-950 px-6 py-6 text-white sm:px-8">
+                <div class="keep-dark relative overflow-hidden bg-ink-950 px-6 py-6 text-white sm:px-8">
                     <div class="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-brand-600/30 blur-3xl"></div>
                     <div class="relative">
                         <div class="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-300">Payment method</div>
