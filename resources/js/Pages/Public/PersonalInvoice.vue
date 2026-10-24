@@ -1,6 +1,7 @@
 <script setup>
 import CopyButton from '@/Components/CopyButton.vue';
 import Icon from '@/Components/Icon.vue';
+import Select from '@/Components/Ui/Select.vue';
 import { date, money } from '@/money';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
@@ -19,7 +20,8 @@ const thanks = computed(() => usePage().props.flash?.success);
 const ICON = { bank: 'bank', bkash: 'wallet', nagad: 'wallet', rocket: 'wallet', upay: 'wallet' };
 
 const showReport = ref(false);
-const form = useForm({ method: props.me.methods[0]?.type ?? 'bkash', amount: (props.invoice.due / 100).toString(), reference: '', from: '' });
+const methodOptions = Object.entries(props.methods).map(([value, label]) => ({ value, label }));
+const form = useForm({ method: props.me.methods[0]?.type ?? methodOptions[0]?.value, amount: (props.invoice.due / 100).toString(), reference: '', from: '' });
 const submit = () => form.post(route('personal.invoice.public.report', props.token), { preserveScroll: true, onSuccess: () => (showReport.value = false) });
 </script>
 
@@ -87,9 +89,7 @@ const submit = () => form.post(route('personal.invoice.public.report', props.tok
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="label">Paid by</label>
-                                <select v-model="form.method" class="input">
-                                    <option v-for="(label, key) in methods" :key="key" :value="key">{{ label }}</option>
-                                </select>
+                                <Select v-model="form.method" :options="methodOptions" />
                             </div>
                             <div>
                                 <label class="label">Amount</label>

@@ -7,6 +7,7 @@ import Pagination from '@/Components/Pagination.vue';
 import RowMenu from '@/Components/RowMenu.vue';
 import StatCard from '@/Components/StatCard.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
+import Select from '@/Components/Ui/Select.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { clientName, date, invoiceStatus, money } from '@/money';
 import { confirmDialog } from '@/confirm';
@@ -28,6 +29,13 @@ const statuses = [
     { value: 'overdue', label: 'Overdue' },
     { value: 'paid', label: 'Paid' },
     { value: 'void', label: 'Void' },
+];
+
+const clientFilter = computed(() => [{ value: '', label: 'All clients' }, ...props.clients.map((c) => ({ value: c.id, label: clientName(c) }))]);
+const types = [
+    { value: '', label: 'One-off & recurring' },
+    { value: 'one_off', label: 'One-off' },
+    { value: 'recurring', label: 'Recurring' },
 ];
 
 const templates = computed(() => props.templates ?? {});
@@ -76,15 +84,8 @@ const copyLink = (url) => navigator.clipboard?.writeText(url);
                     <button v-for="s in statuses" :key="s.value" :class="{ 'is-active': f.status === s.value }" @click="setStatus(s.value)">{{ s.label }}</button>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <select v-model="f.client_id" class="input input-sm w-auto" @change="apply">
-                        <option value="">All clients</option>
-                        <option v-for="c in clients" :key="c.id" :value="c.id">{{ clientName(c) }}</option>
-                    </select>
-                    <select v-model="f.type" class="input input-sm w-auto" @change="apply">
-                        <option value="">One-off & recurring</option>
-                        <option value="one_off">One-off</option>
-                        <option value="recurring">Recurring</option>
-                    </select>
+                    <Select v-model="f.client_id" :options="clientFilter" size="sm" class="w-44" @change="apply" />
+                    <Select v-model="f.type" :options="types" size="sm" class="w-44" @change="apply" />
                 </div>
             </div>
             <div v-if="invoices.data.length" class="overflow-x-auto">

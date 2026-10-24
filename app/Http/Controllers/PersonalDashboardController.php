@@ -24,6 +24,18 @@ class PersonalDashboardController extends Controller
 {
     public function __invoke(Request $request): Response
     {
+        return Inertia::render('Personal/Dashboard', $this->data($request));
+    }
+
+    /** Budgets, savings goals and monthly bills in one place. */
+    public function plan(Request $request): Response
+    {
+        return Inertia::render('Personal/Plan', $this->data($request));
+    }
+
+    /** @return array<string, mixed> */
+    private function data(Request $request): array
+    {
         $request->session()->put('mode', 'personal');
 
         $accounts = Account::where('scope', 'personal')->where('archived', false)->orderBy('name')->get();
@@ -71,7 +83,7 @@ class PersonalDashboardController extends Controller
 
         $paidBills = $monthTx->whereNotNull('bill_id')->keyBy('bill_id');
 
-        return Inertia::render('Personal/Dashboard', [
+        return [
             'currencies' => $currencies,
             'accounts' => $accounts->map(fn (Account $a) => [
                 ...$a->only('id', 'name', 'kind', 'purpose', 'provider'),
@@ -95,8 +107,8 @@ class PersonalDashboardController extends Controller
                 'paid_on' => $paidBills->get($b->id)?->occurred_on->toDateString(),
                 'overdue' => ! $paidBills->has($b->id) && $b->day < now()->day,
             ]),
-            'recent' => $transactions->take(10)->map(fn (MoneyTransaction $t) => [
-                ...$t->only('id', 'kind', 'amount', 'to_amount', 'fee', 'category', 'counterparty', 'description'),
+            'recent' => $transactions->take(8)->map(fn (MoneyTransaction $t) => [
+                ...$t->only('id', 'kind', 'account_id', 'to_account_id', 'amount', 'to_amount', 'fee', 'category', 'counterparty', 'description'),
                 'occurred_on' => $t->occurred_on->toDateString(),
                 'account' => $t->account,
                 'to_account' => $t->toAccount,
@@ -106,7 +118,7 @@ class PersonalDashboardController extends Controller
             'loans' => $this->loanSummary(),
             'spendCategories' => Catalog::options(Catalog::PERSONAL_CATEGORIES),
             'providers' => collect(Catalog::PROVIDERS)->flatMap(fn ($list) => collect($list)->map(fn ($p) => $p[0])),
-        ]);
+        ];
     }
 
     /**
@@ -143,7 +155,7 @@ class PersonalDashboardController extends Controller
      * @param  array<int, int>  $savingsIds
      * @return array{in: int, spent: int, saved: int, out: int, left: int, by_category: array<string, int>}
      */
-    private function summary(Collection $transactions, array $ids, array $savingsIds, string $currency): array
+    public function summary(Collection $transactions, array $ids, array $savingsIds, string $currency): array
     {
         $in = $spent = $saved = $out = 0;
         $byCategory = [];

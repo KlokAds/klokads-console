@@ -3,6 +3,7 @@ import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import CommandPalette from '@/Components/CommandPalette.vue';
 import ConfirmDialog from '@/Components/ConfirmDialog.vue';
 import Icon from '@/Components/Icon.vue';
+import Toast from '@/Components/Toast.vue';
 import { date } from '@/money';
 import { online, pending, syncEntries, syncState } from '@/offline';
 import { applyTheme, cycleTheme, setTheme, theme } from '@/theme';
@@ -19,7 +20,6 @@ const sidebarOpen = ref(false);
 const createOpen = ref(false);
 const userOpen = ref(false);
 const syncing = ref(false);
-const toast = ref(null);
 
 // Two sides of the app: the agency, and your own money. Each has its own dashboard and menu.
 const mode = computed(() => (route().current('personal.*') || route().current('notifications.*') || (route().current('money.*') && page.props.scope === 'personal') ? 'personal' : 'business'));
@@ -56,8 +56,9 @@ const personalSections = [
     {
         label: 'Personal',
         items: [
-            { name: 'Dashboard', route: 'personal.dashboard', match: 'personal.dashboard', icon: 'home' },
-            { name: 'Money', route: 'money.index', params: { scope: 'personal' }, match: 'money.*', icon: 'wallet' },
+            { name: 'Home', route: 'personal.dashboard', match: 'personal.dashboard', icon: 'home' },
+            { name: 'Activity', route: 'personal.activity', match: 'personal.activity', icon: 'wallet' },
+            { name: 'Plan', route: 'personal.plan', match: 'personal.plan', icon: 'chart' },
             { name: 'Dena-paona', route: 'personal.loans.index', match: 'personal.loans.*', icon: 'users' },
             { name: 'My invoices', route: 'personal.invoices.index', match: 'personal.invoices.*', icon: 'invoice' },
             { name: 'Auto entries', route: 'personal.inbox.index', match: 'personal.inbox.*', icon: 'bolt' },
@@ -71,13 +72,13 @@ const lockNow = () => router.post(route('personal.lock'));
 // Phone bottom bar on the personal side.
 const bottomNav = [
     { name: 'Home', route: 'personal.dashboard', match: 'personal.dashboard', icon: 'home' },
-    { name: 'Money', route: 'money.index', params: { scope: 'personal' }, match: 'money.*', icon: 'wallet' },
+    { name: 'Activity', route: 'personal.activity', match: 'personal.activity', icon: 'wallet' },
     { name: 'Invoices', route: 'personal.invoices.index', match: 'personal.invoices.*', icon: 'invoice' },
     { name: 'Dena', route: 'personal.loans.index', match: 'personal.loans.*', icon: 'users' },
 ];
 
 const personalCreate = [
-    { label: 'Spending', hint: 'What you paid, where and why', icon: 'card', href: () => route('money.index', { scope: 'personal', new: 1 }) },
+    { label: 'Spending', hint: 'What you paid, where and why', icon: 'card', href: () => route('personal.activity', { new: 1 }) },
 ];
 const businessCreate = [
     { label: 'Invoice', hint: 'One-off invoice, emailed by Stripe', icon: 'invoice', href: () => route('invoices.create') },
@@ -98,18 +99,7 @@ function sync() {
     router.post(route('settings.sync'), {}, { preserveScroll: true, onFinish: () => (syncing.value = false) });
 }
 
-let toastTimer;
-watch(
-    () => page.props.flash,
-    (f) => {
-        if (f?.success || f?.error) {
-            toast.value = f.error ? { type: 'error', text: f.error } : { type: 'success', text: f.success };
-            clearTimeout(toastTimer);
-            toastTimer = setTimeout(() => (toast.value = null), f.error ? 9000 : 5000);
-        }
-    },
-    { immediate: true, deep: true },
-);
+
 
 const closeMenus = (e) => {
     if (!e.target.closest('[data-menu]')) {
@@ -329,7 +319,7 @@ router.on('navigate', () => {
                             :class="route().current(item.match) && (item.route !== 'money.index' || page.props.scope === 'personal') ? 'text-brand-600' : 'text-ink-500'">
                             <Icon :name="item.icon" :size="20" /> {{ item.name }}
                         </Link>
-                        <Link v-if="k === 1" :href="route('money.index', { scope: 'personal', new: 1 })" class="-mt-5 flex flex-col items-center pb-1.5" aria-label="Add">
+                        <Link v-if="k === 1" :href="route('personal.activity', { new: 1 })" class="-mt-5 flex flex-col items-center pb-1.5" aria-label="Add">
                             <span class="flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/40"><Icon name="plus" :size="26" /></span>
                         </Link>
                     </template>
@@ -339,17 +329,6 @@ router.on('navigate', () => {
 
         <ConfirmDialog />
 
-        <!-- Toast -->
-        <transition enter-from-class="opacity-0 translate-y-3" leave-to-class="opacity-0 translate-y-3" enter-active-class="transition duration-200" leave-active-class="transition duration-200">
-            <div
-                v-if="toast"
-                class="fixed bottom-5 right-5 z-50 flex max-w-md items-start gap-3 rounded-2xl border px-4 py-3.5 text-sm shadow-lift"
-                :class="toast.type === 'error' ? 'border-rose-200 bg-white text-ink-800' : 'border-line bg-ink-900 text-white'"
-            >
-                <Icon :name="toast.type === 'error' ? 'alert' : 'check'" :class="toast.type === 'error' ? 'text-rose-500' : 'text-emerald-400'" />
-                <span class="flex-1">{{ toast.text }}</span>
-                <button class="opacity-60 hover:opacity-100" @click="toast = null"><Icon name="close" :size="16" /></button>
-            </div>
-        </transition>
+        <Toast />
     </div>
 </template>

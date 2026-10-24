@@ -5,6 +5,7 @@ import Modal from '@/Components/Modal.vue';
 import BudgetFields from '@/Components/BudgetFields.vue';
 import SavePaymentMethod from '@/Components/SavePaymentMethod.vue';
 import StatementField from '@/Components/StatementField.vue';
+import Select from '@/Components/Ui/Select.vue';
 import { confirmDialog } from '@/confirm';
 import { money } from '@/money';
 import { priced } from '@/pricing';
@@ -73,6 +74,8 @@ async function remove(card) {
     });
     if (ok) router.delete(route('clients.cards.destroy', [props.client.id, card.id]), opts(card.id));
 }
+const cardOptions = computed(() => items.value.map((c) => ({ value: c.id, label: `${label(c)}${c.is_default ? ' (default)' : ''}` })));
+const serviceOptions = computed(() => [{ value: '', label: '—' }, ...Object.entries(props.serviceLabels).map(([value, label]) => ({ value, label }))]);
 const expired = (c) => c.exp_year && new Date(c.exp_year, c.exp_month) < new Date();
 
 // Charge now
@@ -210,9 +213,7 @@ function submitCharge() {
                     </div>
                     <div>
                         <label class="label">Card</label>
-                        <select v-model="chargeForm.payment_method" class="input">
-                            <option v-for="c in items" :key="c.id" :value="c.id">{{ label(c) }}{{ c.is_default ? ' (default)' : '' }}</option>
-                        </select>
+                        <Select v-model="chargeForm.payment_method" :options="cardOptions" placeholder="Choose a card" />
                     </div>
                     <div class="col-span-2">
                         <label class="label">What is it for? *</label>
@@ -221,10 +222,7 @@ function submitCharge() {
                     </div>
                     <div class="col-span-2">
                         <label class="label">Service</label>
-                        <select v-model="chargeForm.service" class="input">
-                            <option value="">—</option>
-                            <option v-for="(name, key) in serviceLabels" :key="key" :value="key">{{ name }}</option>
-                        </select>
+                        <Select v-model="chargeForm.service" :options="serviceOptions" />
                     </div>
                     <div class="col-span-2">
                         <StatementField :form="chargeForm" :service="chargeForm.service" />

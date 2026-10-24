@@ -4,6 +4,8 @@ import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
 import RowMenu from '@/Components/RowMenu.vue';
 import StatCard from '@/Components/StatCard.vue';
+import DatePicker from '@/Components/Ui/DatePicker.vue';
+import Select from '@/Components/Ui/Select.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { date, money, wantsNew } from '@/money';
@@ -75,6 +77,11 @@ function setCurrency(c) {
     accountForm.currency = c;
     accountForm.provider = '';
 }
+const scopeOptions = [
+    { value: 'business', label: 'Business' },
+    { value: 'personal', label: 'Personal' },
+];
+const kindOptions = computed(() => props.kinds.map((k) => ({ value: k.value, label: k.label, icon: KIND_ICONS[k.value] })));
 const providerName = (a) => (a.provider && a.provider !== 'other' ? props.providers[a.currency]?.[a.provider]?.[0] : null);
 
 function openAccount(a = null) {
@@ -172,6 +179,14 @@ const filtered = computed(() => {
         return [t.counterparty, t.description, t.account?.name, t.to_account?.name, label(allCategories.value, t.category)].some((v) => v?.toLowerCase().includes(needle));
     });
 });
+const accountFilter = computed(() => [{ value: '', label: 'All accounts' }, ...scopeAccounts.value.map((a) => ({ value: a.id, label: a.name }))]);
+const kindFilter = [
+    { value: '', label: 'Everything' },
+    { value: 'expense', label: 'Spent' },
+    { value: 'income', label: 'Money in' },
+    { value: 'saved', label: 'Saved' },
+    { value: 'transfer', label: 'Moves / conversions' },
+];
 const filtering = computed(() => q.value || fAccount.value || fKind.value);
 const myPending = computed(() => pending.value.filter((e) => scopeAccounts.value.some((a) => a.id === Number(e.account_id))));
 const accountName = (id) => props.accounts.find((a) => a.id === Number(id))?.name ?? '—';
@@ -203,6 +218,12 @@ const effectiveRate = computed(() => {
     return converting.value && sent && got ? got / sent : null;
 });
 const foreignIncome = computed(() => txForm.kind === 'income' && fromAccount.value && !isBase(fromAccount.value.currency));
+// Account pickers, grouped Business / Personal; "to" leaves out the "from" account.
+const accountOption = (a) => ({ value: a.id, label: `${a.name} (${a.currency})`, icon: KIND_ICONS[a.kind], group: a.scope === 'business' ? 'Business' : 'Personal' });
+const byScope = (list) => ['business', 'personal'].flatMap((s) => list.filter((a) => a.scope === s));
+const fromOptions = computed(() => byScope(activeAccounts.value).map(accountOption));
+const toOptions = computed(() => byScope(activeAccounts.value.filter((a) => a.id !== Number(txForm.account_id))).map(accountOption));
+const categoryOptions = computed(() => props.categories[txForm.kind === 'income' ? 'income' : 'expense'].map((c) => ({ value: c.value, label: c.label })));
 const allCategories = computed(() => [...props.categories.expense, ...props.categories.income, ...(props.categories.loan ?? [])]);
 
 function describe(t) {
@@ -233,7 +254,7 @@ if (wantsNew()) openTx();
             <div class="text-sm font-semibold text-ink-700">{{ monthLabel }}</div>
             <div class="flex items-center gap-1">
                 <button class="icon-btn" title="Previous month" @click="shiftMonth(-1)"><Icon name="chevron" :size="16" class="rotate-90" /></button>
-                <input :value="month" type="month" class="input input-sm w-auto" @change="go({ month: $event.target.value })" />
+                <DatePicker :model-value="month" month size="sm" class="w-40" @change="(v) => go({ month: v })" />
                 <button class="icon-btn" title="Next month" @click="shiftMonth(1)"><Icon name="chevron" :size="16" class="-rotate-90" /></button>
             </div>
         </div>
@@ -327,17 +348,8 @@ if (wantsNew()) openTx();
                         <Icon name="search" :size="15" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
                         <input v-model="q" class="input input-sm pl-9" placeholder="Search shop, person, note…" />
                     </div>
-                    <select v-model="fAccount" class="input input-sm w-auto">
-                        <option value="">All accounts</option>
-                        <option v-for="a in scopeAccounts" :key="a.id" :value="a.id">{{ a.name }}</option>
-                    </select>
-                    <select v-model="fKind" class="input input-sm w-auto">
-                        <option value="">Everything</option>
-                        <option value="expense">Spent</option>
-                        <option value="income">Money in</option>
-                        <option value="saved">Saved</option>
-                        <option value="transfer">Moves / conversions</option>
-                    </select>
+                    <Select v-model="fAccount" :options="accountFilter" size="sm" class="w-44" />
+                    <Select v-model="fKind" :options="kindFilter" size="sm" class="w-44" />
                     <a :href="exportUrl" class="btn-ghost btn-sm" title="Download this month as a spreadsheet"><Icon name="download" :size="14" /> CSV</a>
                 </div>
 
@@ -412,25 +424,17 @@ if (wantsNew()) openTx();
 
                     <div :class="txForm.kind === 'transfer' ? '' : 'col-span-2 sm:col-span-1'">
                         <label class="label">{{ txForm.kind === 'income' ? 'Into account' : 'From account' }} *</label>
-                        <select v-model="txForm.account_id" class="input" required>
-                            <optgroup v-for="s in ['business', 'personal']" :key="s" :label="s === 'business' ? 'Business' : 'Personal'">
-                                <option v-for="a in activeAccounts.filter((x) => x.scope === s)" :key="a.id" :value="a.id">{{ a.name }} ({{ a.currency }})</option>
-                            </optgroup>
-                        </select>
+                        <Select v-model="txForm.account_id" :options="fromOptions" />
+                        <div v-if="txForm.errors.account_id" class="error">{{ txForm.errors.account_id }}</div>
                     </div>
                     <div v-if="txForm.kind === 'transfer'">
                         <label class="label">To account *</label>
-                        <select v-model="txForm.to_account_id" class="input" required>
-                            <option value="">Choose…</option>
-                            <optgroup v-for="s in ['business', 'personal']" :key="s" :label="s === 'business' ? 'Business' : 'Personal'">
-                                <option v-for="a in activeAccounts.filter((x) => x.scope === s && x.id !== Number(txForm.account_id))" :key="a.id" :value="a.id">{{ a.name }} ({{ a.currency }})</option>
-                            </optgroup>
-                        </select>
+                        <Select v-model="txForm.to_account_id" :options="toOptions" />
                         <div v-if="txForm.errors.to_account_id" class="error">{{ txForm.errors.to_account_id }}</div>
                     </div>
                     <div :class="txForm.kind === 'transfer' ? 'col-span-2 sm:col-span-1' : 'col-span-2 sm:col-span-1'">
                         <label class="label">Date *</label>
-                        <input v-model="txForm.occurred_on" type="date" class="input" required />
+                        <DatePicker v-model="txForm.occurred_on" />
                     </div>
 
                     <div>
@@ -456,9 +460,7 @@ if (wantsNew()) openTx();
 
                     <div v-if="txForm.kind !== 'transfer'" class="col-span-2">
                         <label class="label">Category</label>
-                        <select v-model="txForm.category" class="input">
-                            <option v-for="c in categories[txForm.kind === 'income' ? 'income' : 'expense']" :key="c.value" :value="c.value">{{ c.label }}</option>
-                        </select>
+                        <Select v-model="txForm.category" :options="categoryOptions" />
                         <div v-if="scope === 'business' && txForm.kind === 'expense'" class="hint">Business spending also shows on the Expenses page and in profit.</div>
                     </div>
                     <div v-if="txForm.kind !== 'transfer'">
@@ -490,10 +492,7 @@ if (wantsNew()) openTx();
                 <div class="grid grid-cols-2 gap-4 px-6 py-5">
                     <div>
                         <label class="label">Belongs to</label>
-                        <select v-model="accountForm.scope" class="input" @change="setScope">
-                            <option value="business">Business</option>
-                            <option value="personal">Personal</option>
-                        </select>
+                        <Select v-model="accountForm.scope" :options="scopeOptions" @change="setScope" />
                     </div>
                     <div>
                         <label class="label">Currency *</label>
@@ -533,9 +532,7 @@ if (wantsNew()) openTx();
                     </div>
                     <div>
                         <label class="label">Type</label>
-                        <select v-model="accountForm.kind" class="input">
-                            <option v-for="k in kinds" :key="k.value" :value="k.value">{{ k.label }}</option>
-                        </select>
+                        <Select v-model="accountForm.kind" :options="kindOptions" />
                     </div>
                     <div>
                         <label class="label">Balance today ({{ accountForm.currency || '—' }})</label>

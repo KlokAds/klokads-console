@@ -4,6 +4,7 @@ import Icon from '@/Components/Icon.vue';
 import Pagination from '@/Components/Pagination.vue';
 import StatCard from '@/Components/StatCard.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
+import Select from '@/Components/Ui/Select.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { date, money } from '@/money';
 import { Head, Link, useForm } from '@inertiajs/vue3';
@@ -30,6 +31,10 @@ const intervals = [
     { value: 'monthly', label: 'Monthly', hint: 'On one day of the month' },
     { value: 'manual', label: 'Manual', hint: 'Only when you click "Pay out now"' },
 ];
+
+const weekdayOptions = computed(() => props.weekdays.map((d) => ({ value: d, label: capitalize(d) })));
+const monthDayOptions = Array.from({ length: 31 }, (_, i) => ({ value: i + 1, label: String(i + 1) }));
+const bankAccountOptions = computed(() => [{ value: '', label: "— Don't track in Money —" }, ...(props.bank?.accounts ?? []).map((a) => ({ value: a.id, label: `${a.name} (${a.currency})` }))]);
 
 const scheduleForm = useForm({
     interval: props.settings?.interval ?? 'daily',
@@ -138,15 +143,11 @@ function payOut() {
 
                         <div v-if="scheduleForm.interval === 'weekly'">
                             <label class="label">Pay out every</label>
-                            <select v-model="scheduleForm.weekday" class="input">
-                                <option v-for="d in weekdays" :key="d" :value="d">{{ capitalize(d) }}</option>
-                            </select>
+                            <Select v-model="scheduleForm.weekday" :options="weekdayOptions" />
                         </div>
                         <div v-if="scheduleForm.interval === 'monthly'">
                             <label class="label">Pay out on day</label>
-                            <select v-model="scheduleForm.month_day" class="input">
-                                <option v-for="d in 31" :key="d" :value="d">{{ d }}</option>
-                            </select>
+                            <Select v-model="scheduleForm.month_day" :options="monthDayOptions" :searchable="false" />
                             <div class="hint">In shorter months, days 29–31 pay out on the last day of the month.</div>
                         </div>
                         <div v-for="field in ['interval', 'weekday', 'month_day']" :key="field">
@@ -217,10 +218,7 @@ function payOut() {
                     </div>
                     <div>
                         <label class="label">Payouts land in</label>
-                        <select v-model="bankForm.account_id" class="input">
-                            <option value="">— Don't track in Money —</option>
-                            <option v-for="a in bank.accounts" :key="a.id" :value="a.id">{{ a.name }} ({{ a.currency }})</option>
-                        </select>
+                        <Select v-model="bankForm.account_id" :options="bankAccountOptions" />
                         <div class="hint">
                             <template v-if="bank.accounts.length">Each paid payout is added there automatically, minus the fee.</template>
                             <template v-else>Add a business {{ currency.toUpperCase() }} account on the <Link :href="route('money.index')" class="text-brand-600 hover:underline">Money</Link> page first.</template>

@@ -23,14 +23,16 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class MoneyController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request): Response|RedirectResponse
     {
-        // Business and personal are two separate sides of the app; the sidebar switch picks one.
-        $scope = in_array($request->input('scope'), ['business', 'personal'], true) ? $request->input('scope') : $request->session()->get('mode', 'business');
-        $request->session()->put('mode', $scope);
-        if ($scope === 'personal') {
+        // This page is the business side's money; personal money lives on the personal Activity page.
+        if ($request->input('scope') === 'personal') {
             PersonalAccess::guard($request);
+
+            return redirect()->route('personal.activity', array_filter(['month' => $request->input('month'), 'q' => $request->input('q'), 'new' => $request->input('new')]));
         }
+        $scope = 'business';
+        $request->session()->put('mode', $scope);
         $month = preg_match('/^\d{4}-\d{2}$/', (string) $request->input('month')) ? $request->input('month') : now()->format('Y-m');
         $start = CarbonImmutable::createFromFormat('Y-m-d', "{$month}-01")->startOfDay();
 

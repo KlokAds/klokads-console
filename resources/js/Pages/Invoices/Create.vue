@@ -4,6 +4,8 @@ import Icon from '@/Components/Icon.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BudgetFields from '@/Components/BudgetFields.vue';
 import StatementField from '@/Components/StatementField.vue';
+import DatePicker from '@/Components/Ui/DatePicker.vue';
+import Select from '@/Components/Ui/Select.vue';
 import { clientName, money } from '@/money';
 import { priced } from '@/pricing';
 import { Head, Link, usePage, useForm } from '@inertiajs/vue3';
@@ -29,6 +31,11 @@ const form = useForm({
     campaigns: [],
     statement_descriptor: '',
 });
+
+const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: clientName(c) })));
+const serviceOptions = computed(() => [{ value: '', label: '—' }, ...props.services]);
+const unitOptions = computed(() => props.units.map((u) => ({ value: u, label: u })));
+const itemUnitOptions = computed(() => [{ value: '', label: '× price' }, ...unitOptions.value]);
 
 const showDetails = ref(false);
 const addCampaign = () => form.campaigns.push({ name: '', detail: '', quantity: '', unit: 'Impressions', amount: '' });
@@ -118,19 +125,13 @@ function setService(value) {
                     <div class="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
                         <div>
                             <label class="label">Client *</label>
-                            <select v-model="form.client_id" class="input" required>
-                                <option value="" disabled>Select a client…</option>
-                                <option v-for="c in clients" :key="c.id" :value="c.id">{{ clientName(c) }}</option>
-                            </select>
+                            <Select v-model="form.client_id" :options="clientOptions" placeholder="Select a client…" />
                             <div v-if="form.errors.client_id" class="error">{{ form.errors.client_id }}</div>
                             <Link v-if="!clients.length" :href="route('clients.index', { new: 1 })" class="btn-link mt-1.5 inline-block text-xs">Add a client first →</Link>
                         </div>
                         <div>
                             <label class="label">Service</label>
-                            <select :value="form.service" class="input" @change="setService($event.target.value)">
-                                <option value="">—</option>
-                                <option v-for="s in services" :key="s.value" :value="s.value">{{ s.label }}</option>
-                            </select>
+                            <Select :model-value="form.service" :options="serviceOptions" @change="setService" />
                             <div class="hint">Used for profit-by-service reports.</div>
                         </div>
                     </div>
@@ -165,10 +166,7 @@ function setService(value) {
                                 </div>
                                 <div class="col-span-4 sm:col-span-2">
                                     <input v-model="item.quantity" type="number" min="1" class="input" />
-                                    <select v-model="item.unit" class="input input-sm mt-1" title="With a unit, the price is the line total and the quantity is just shown (e.g. 1,151 Clicks)">
-                                        <option value="">× price</option>
-                                        <option v-for="u in units" :key="u" :value="u">{{ u }}</option>
-                                    </select>
+                                    <Select v-model="item.unit" :options="itemUnitOptions" size="sm" class="mt-1" title="With a unit, the price is the line total and the quantity is just shown (e.g. 1,151 Clicks)" />
                                 </div>
                                 <div class="col-span-6 sm:col-span-3">
                                     <input v-model="item.amount" type="number" step="0.01" min="0.5" class="input" placeholder="0.00" required />
@@ -209,11 +207,11 @@ function setService(value) {
                                 </div>
                                 <div>
                                     <label class="label">Period from</label>
-                                    <input v-model="form.period_start" type="date" class="input" />
+                                    <DatePicker v-model="form.period_start" clearable :max="form.period_end || null" />
                                 </div>
                                 <div>
                                     <label class="label">Period to</label>
-                                    <input v-model="form.period_end" type="date" class="input" />
+                                    <DatePicker v-model="form.period_end" clearable :min="form.period_start || null" />
                                     <div v-if="form.errors.period_end" class="error">{{ form.errors.period_end }}</div>
                                 </div>
                             </div>
@@ -230,9 +228,7 @@ function setService(value) {
                                         <input v-model="c.name" class="input input-sm col-span-12 sm:col-span-4" placeholder="Campaign name" required />
                                         <input v-model="c.detail" class="input input-sm col-span-6 sm:col-span-3" placeholder="Ad set (optional)" />
                                         <input v-model="c.quantity" type="number" min="0" class="input input-sm col-span-3 sm:col-span-1" placeholder="Qty" />
-                                        <select v-model="c.unit" class="input input-sm col-span-3 sm:col-span-2">
-                                            <option v-for="u in units" :key="u" :value="u">{{ u }}</option>
-                                        </select>
+                                        <Select v-model="c.unit" :options="unitOptions" size="sm" class="col-span-3 sm:col-span-2" />
                                         <input v-model="c.amount" type="number" step="0.01" class="input input-sm col-span-10 sm:col-span-1" placeholder="0.00" title="Use a minus amount for a credit, e.g. -1.83" required />
                                         <button type="button" class="icon-btn col-span-2 sm:col-span-1 hover:text-rose-600" @click="removeCampaign(i)"><Icon name="trash" :size="15" /></button>
                                     </div>

@@ -8,6 +8,8 @@ import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
 import StatCard from '@/Components/StatCard.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
+import DatePicker from '@/Components/Ui/DatePicker.vue';
+import Select from '@/Components/Ui/Select.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { clientName, date, money, wantsNew } from '@/money';
@@ -32,6 +34,12 @@ const form = useForm({
     commission_rate: 20,
     statement_descriptor: '',
 });
+const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: clientName(c) })));
+const intervals = [
+    { value: 'week', label: 'week(s)' },
+    { value: 'month', label: 'month(s)' },
+    { value: 'year', label: 'year(s)' },
+];
 const selectedClient = computed(() => props.clients.find((c) => c.id === Number(form.client_id)));
 
 const active = computed(() => props.plans.filter((p) => ['active', 'trialing', 'past_due', 'incomplete'].includes(p.status)));
@@ -147,10 +155,7 @@ async function cancel(plan) {
                 <div class="grid grid-cols-2 gap-4 px-6 py-5">
                     <div class="col-span-2">
                         <label class="label">Client *</label>
-                        <select v-model="form.client_id" class="input" required>
-                            <option value="" disabled>Select…</option>
-                            <option v-for="c in clients" :key="c.id" :value="c.id">{{ clientName(c) }}</option>
-                        </select>
+                        <Select v-model="form.client_id" :options="clientOptions" placeholder="Select…" />
                         <div v-if="form.errors.client_id" class="error">{{ form.errors.client_id }}</div>
                         <Link v-if="!clients.length" :href="route('clients.index', { new: 1 })" class="btn-link mt-1.5 inline-block text-xs">Add a client first →</Link>
                     </div>
@@ -161,9 +166,7 @@ async function cancel(plan) {
                     </div>
                     <div>
                         <label class="label">Service</label>
-                        <select v-model="form.service" class="input">
-                            <option v-for="s in services" :key="s.value" :value="s.value">{{ s.label }}</option>
-                        </select>
+                        <Select v-model="form.service" :options="services" />
                     </div>
                     <div>
                         <label class="label">{{ form.billing === 'budget' ? 'You receive each cycle' : form.billing === 'commission' ? "Client's ad spend each cycle" : 'Amount' }} ({{ currency.toUpperCase() }}) *</label>
@@ -181,16 +184,12 @@ async function cancel(plan) {
                         <label class="label">Bill every</label>
                         <div class="flex gap-2">
                             <input v-model="form.interval_count" type="number" min="1" max="12" class="input w-20" />
-                            <select v-model="form.interval" class="input">
-                                <option value="week">week(s)</option>
-                                <option value="month">month(s)</option>
-                                <option value="year">year(s)</option>
-                            </select>
+                            <Select v-model="form.interval" :options="intervals" class="flex-1" />
                         </div>
                     </div>
                     <div>
                         <label class="label">First billing date</label>
-                        <input v-model="form.start_date" type="date" class="input" />
+                        <DatePicker v-model="form.start_date" clearable placeholder="Today" />
                         <div class="hint">Leave empty to start today</div>
                         <div v-if="form.errors.start_date" class="error">{{ form.errors.start_date }}</div>
                     </div>

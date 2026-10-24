@@ -3,7 +3,10 @@ import EmptyState from '@/Components/EmptyState.vue';
 import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
 import RowMenu from '@/Components/RowMenu.vue';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import DatePicker from '@/Components/Ui/DatePicker.vue';
+import Select from '@/Components/Ui/Select.vue';
+import Suggest from '@/Components/Ui/Suggest.vue';
+import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { date, money, wantsNew } from '@/money';
 import { Head, router, useForm } from '@inertiajs/vue3';
@@ -20,14 +23,22 @@ const tab = ref('open'); // open | settled
 const side = ref('all'); // all | lent | borrowed
 const shown = computed(() => props.loans.filter((l) => (tab.value === 'open' ? l.outstanding > 0 : l.outstanding === 0) && (side.value === 'all' || l.direction === side.value)));
 const pct = (l) => Math.min(100, (l.repaid / Math.max(1, l.principal)) * 100);
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const currencies = computed(() => Object.keys(props.totals));
+// Account choices for one currency, with "not tracked" (cash in hand) first.
+const accountOptions = (currency) => [
+    { value: '', label: 'Not a tracked account', hint: 'e.g. cash in hand', icon: '💵' },
+    ...props.accounts.filter((a) => a.currency.toUpperCase() === currency).map((a) => ({ value: a.id, label: a.name, icon: 'wallet' })),
+];
 
 // ---------------------------------------------------------------- add / edit
 const showForm = ref(false);
 const editing = ref(null);
-const blank = (direction = 'lent') => ({ direction, person: '', phone: '', currency: 'BDT', principal: '', account_id: '', started_on: today(), due_on: '', note: '' });
+const blank = (direction = 'lent') => ({ direction, person: '', phone: '', currency: currencies.value[0], principal: '', account_id: '', started_on: today(), due_on: '', note: '' });
 const form = useForm(blank());
-const accountsFor = computed(() => props.accounts.filter((a) => a.currency.toUpperCase() === form.currency));
 function open(l = null, direction = 'lent') {
     editing.value = l;
     form.defaults(l ? { ...blank(), ...l, principal: (l.principal / 100).toFixed(2), account_id: l.account_id ?? '', due_on: l.due_on ?? '', phone: l.phone ?? '', note: l.note ?? '' } : blank(direction));
@@ -65,7 +76,7 @@ if (wantsNew()) open();
 <template>
     <Head title="Dena-paona" />
 
-    <AuthenticatedLayout title="Dena-paona" subtitle="Who owes you, and who you owe">
+    <PersonalLayout title="Dena-paona" subtitle="Who owes you, and who you owe">
         <template #actions>
             <button class="btn-secondary hidden sm:inline-flex" @click="open(null, 'borrowed')">− I borrowed</button>
             <button class="btn-primary hidden sm:inline-flex" @click="open(null, 'lent')"><Icon name="plus" :size="16" /> I lent</button>
@@ -160,8 +171,7 @@ if (wantsNew()) open();
                     </div>
                     <div>
                         <label class="label">Person *</label>
-                        <input v-model="form.person" class="input" list="loan-people" placeholder="Name" required />
-                        <datalist id="loan-people"><option v-for="p in people" :key="p" :value="p" /></datalist>
+                        <Suggest v-model="form.person" :suggestions="people" placeholder="Name" />
                         <div v-if="form.errors.person" class="error">{{ form.errors.person }}</div>
                     </div>
                     <div>
@@ -171,29 +181,26 @@ if (wantsNew()) open();
                     <div>
                         <label class="label">Currency</label>
                         <div class="grid grid-cols-2 gap-1 rounded-xl bg-ink-100 p-1">
-                            <button v-for="c in ['BDT', 'SGD']" :key="c" type="button" class="rounded-lg py-2 text-sm font-semibold" :class="form.currency === c ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500'" @click="form.currency = c; form.account_id = ''">{{ c }}</button>
+                            <button v-for="c in currencies" :key="c" type="button" class="rounded-lg py-2 text-sm font-semibold" :class="form.currency === c ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500'" @click="form.currency = c; form.account_id = ''">{{ c }}</button>
                         </div>
                     </div>
                     <div>
                         <label class="label">Amount *</label>
-                        <input v-model="form.principal" type="number" step="0.01" min="0.01" class="input font-semibold" required />
+                        <input v-model="form.principal" inputmode="decimal" class="input font-semibold tabular-nums" required />
                         <div v-if="form.errors.principal" class="error">{{ form.errors.principal }}</div>
                     </div>
                     <div class="col-span-2">
                         <label class="label">{{ form.direction === 'lent' ? 'Paid from' : 'Received into' }}</label>
-                        <select v-model="form.account_id" class="input">
-                            <option value="">Not from a tracked account (e.g. cash)</option>
-                            <option v-for="a in accountsFor" :key="a.id" :value="a.id">{{ a.name }}</option>
-                        </select>
+                        <Select v-model="form.account_id" :options="accountOptions(form.currency)" />
                         <div v-if="form.errors.account_id" class="error">{{ form.errors.account_id }}</div>
                     </div>
                     <div>
                         <label class="label">Date *</label>
-                        <input v-model="form.started_on" type="date" class="input" required />
+                        <DatePicker v-model="form.started_on" :max="today()" />
                     </div>
                     <div>
                         <label class="label">Pay back by</label>
-                        <input v-model="form.due_on" type="date" class="input" />
+                        <DatePicker v-model="form.due_on" :min="form.started_on" :shortcuts="false" clearable placeholder="No date" />
                         <div v-if="form.errors.due_on" class="error">{{ form.errors.due_on }}</div>
                     </div>
                     <div class="col-span-2">
@@ -218,18 +225,15 @@ if (wantsNew()) open();
                 <div class="grid grid-cols-2 gap-4 px-6 py-5">
                     <div>
                         <label class="label">Amount *</label>
-                        <input v-model="payForm.amount" type="number" step="0.01" min="0.01" class="input font-semibold" required />
+                        <input v-model="payForm.amount" inputmode="decimal" class="input font-semibold tabular-nums" required />
                     </div>
                     <div>
                         <label class="label">Date *</label>
-                        <input v-model="payForm.paid_on" type="date" class="input" required />
+                        <DatePicker v-model="payForm.paid_on" :max="today()" />
                     </div>
                     <div class="col-span-2">
                         <label class="label">{{ paying.direction === 'lent' ? 'Received into' : 'Paid from' }}</label>
-                        <select v-model="payForm.account_id" class="input">
-                            <option value="">Not a tracked account (e.g. cash)</option>
-                            <option v-for="a in accounts.filter((x) => x.currency.toUpperCase() === paying.currency)" :key="a.id" :value="a.id">{{ a.name }}</option>
-                        </select>
+                        <Select v-model="payForm.account_id" :options="accountOptions(paying.currency)" />
                         <div v-if="payForm.errors.account_id" class="error">{{ payForm.errors.account_id }}</div>
                     </div>
                     <div class="col-span-2">
@@ -243,5 +247,5 @@ if (wantsNew()) open();
                 </div>
             </form>
         </Modal>
-    </AuthenticatedLayout>
+    </PersonalLayout>
 </template>

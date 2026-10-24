@@ -4,6 +4,8 @@ import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
 import Pagination from '@/Components/Pagination.vue';
 import RowMenu from '@/Components/RowMenu.vue';
+import DatePicker from '@/Components/Ui/DatePicker.vue';
+import Select from '@/Components/Ui/Select.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { clientName, date, methodLabel, money, wantsNew } from '@/money';
@@ -22,6 +24,12 @@ const props = defineProps({
 });
 
 const CATEGORY_ICONS = { meta_ads: 'megaphone', google_ads: 'search', tiktok_ads: 'megaphone', seo: 'trend', software: 'bolt', salary: 'users', office: 'home', tax: 'receipt', other: 'card' };
+
+const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: clientName(c) })));
+const categoryFilter = computed(() => [{ value: '', label: 'All categories' }, ...props.categories.map((c) => ({ value: c.value, label: c.label, icon: CATEGORY_ICONS[c.value] }))]);
+const clientFilter = computed(() => [{ value: '', label: 'All clients' }, ...clientOptions.value]);
+const paidViaOptions = computed(() => [{ value: '', label: '—' }, ...props.paidVia]);
+const clientField = computed(() => [{ value: '', label: 'Agency overhead (no client)' }, ...clientOptions.value]);
 
 const label = (list, value) => list.find((o) => o.value === value)?.label ?? value;
 const f = reactive({ category: props.filters.category ?? '', client_id: props.filters.client_id ?? '', month: props.filters.month ?? '' });
@@ -134,15 +142,9 @@ const categoryTotals = computed(() =>
         <div class="card mt-5">
             <div class="card-head flex-wrap">
                 <div class="flex flex-wrap gap-2">
-                    <select v-model="f.category" class="input input-sm w-auto" @change="apply">
-                        <option value="">All categories</option>
-                        <option v-for="c in categories" :key="c.value" :value="c.value">{{ c.label }}</option>
-                    </select>
-                    <select v-model="f.client_id" class="input input-sm w-auto" @change="apply">
-                        <option value="">All clients</option>
-                        <option v-for="c in clients" :key="c.id" :value="c.id">{{ clientName(c) }}</option>
-                    </select>
-                    <input v-model="f.month" type="month" class="input input-sm w-auto" @change="apply" />
+                    <Select v-model="f.category" :options="categoryFilter" size="sm" class="w-44" @change="apply" />
+                    <Select v-model="f.client_id" :options="clientFilter" size="sm" class="w-44" @change="apply" />
+                    <DatePicker v-model="f.month" month clearable size="sm" placeholder="Any month" class="w-40" @change="apply" />
                     <button v-if="f.category || f.client_id || f.month" class="btn-ghost btn-sm" @click="clear">Clear</button>
                 </div>
                 <button class="btn-dark btn-sm" @click="open()"><Icon name="plus" :size="14" /> Add expense</button>
@@ -216,7 +218,7 @@ const categoryTotals = computed(() =>
                     </div>
                     <div>
                         <label class="label">Date *</label>
-                        <input v-model="form.spent_on" type="date" class="input" required />
+                        <DatePicker v-model="form.spent_on" />
                     </div>
                     <div>
                         <label class="label">Vendor</label>
@@ -224,17 +226,11 @@ const categoryTotals = computed(() =>
                     </div>
                     <div>
                         <label class="label">Paid via</label>
-                        <select v-model="form.paid_via" class="input">
-                            <option value="">—</option>
-                            <option v-for="p in paidVia" :key="p.value" :value="p.value">{{ p.label }}</option>
-                        </select>
+                        <Select v-model="form.paid_via" :options="paidViaOptions" />
                     </div>
                     <div class="col-span-2">
                         <label class="label">For client</label>
-                        <select v-model="form.client_id" class="input">
-                            <option value="">Agency overhead (no client)</option>
-                            <option v-for="c in clients" :key="c.id" :value="c.id">{{ clientName(c) }}</option>
-                        </select>
+                        <Select v-model="form.client_id" :options="clientField" />
                         <div class="hint">Linking spend to a client shows their real margin.</div>
                     </div>
                     <div class="col-span-2 rounded-xl border border-dashed border-line p-4">

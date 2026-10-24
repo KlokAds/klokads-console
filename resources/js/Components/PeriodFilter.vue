@@ -1,4 +1,5 @@
 <script setup>
+import DatePicker from '@/Components/Ui/DatePicker.vue';
 import { PERIODS } from '@/money';
 import { router } from '@inertiajs/vue3';
 import { reactive } from 'vue';
@@ -34,9 +35,9 @@ function pick(value) {
             </button>
         </div>
         <div v-if="state.period === 'custom'" class="flex items-center gap-2">
-            <input v-model="state.from" type="date" class="input input-sm w-auto" />
+            <DatePicker v-model="state.from" size="sm" placeholder="From" :max="state.to || null" class="w-40" />
             <span class="text-xs text-ink-400">to</span>
-            <input v-model="state.to" type="date" class="input input-sm w-auto" />
+            <DatePicker v-model="state.to" size="sm" placeholder="To" :min="state.from || null" class="w-40" />
             <button class="btn-dark btn-sm" @click="apply">Apply</button>
         </div>
     </div>

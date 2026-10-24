@@ -2,7 +2,9 @@
 import CopyButton from '@/Components/CopyButton.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import Icon from '@/Components/Icon.vue';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import Select from '@/Components/Ui/Select.vue';
+import PersonalLayout from '@/Layouts/PersonalLayout.vue';
+import { cat } from '@/personal';
 import { date, money } from '@/money';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
@@ -23,7 +25,9 @@ const showSetup = ref(!props.setup.last_sms && !props.setup.imap.checked_at);
 // Pick account / category for one message
 const picks = reactive({});
 const pick = (m) => (picks[m.id] ??= { account_id: m.account_id ?? props.accounts.find((a) => a.provider === m.parsed?.provider && a.currency.toUpperCase() === m.parsed?.currency)?.id ?? '', category: '' });
-const accountsFor = (m) => props.accounts.filter((a) => !m.parsed || a.currency.toUpperCase() === m.parsed.currency);
+const accountOptions = (m) => props.accounts.filter((a) => !m.parsed || a.currency.toUpperCase() === m.parsed.currency)
+    .map((a) => ({ value: a.id, label: a.name, hint: `${a.currency.toUpperCase()}${a.scope === 'business' ? ' · business' : ''}`, group: a.scope === 'business' ? 'Business' : 'Personal' }));
+const categoryOptions = (m) => [{ value: '', label: 'Auto category', icon: '✨' }, ...props.categories[m.parsed.direction === 'in' ? 'income' : 'expense'].map((c) => ({ ...c, icon: cat(c.value)[0] }))];
 const add = (m) => router.post(route('personal.inbox.add', m.id), pick(m), { preserveScroll: true });
 const ignore = (m) => router.post(route('personal.inbox.ignore', m.id), {}, { preserveScroll: true });
 const undo = (m) => router.post(route('personal.inbox.undo', m.id), {}, { preserveScroll: true });
@@ -51,7 +55,7 @@ const smsOk = computed(() => props.setup.last_sms && Date.now() - new Date(props
 <template>
     <Head title="Auto entries" />
 
-    <AuthenticatedLayout title="Auto entries" subtitle="Bank & wallet SMS and emails, turned into entries">
+    <PersonalLayout title="Auto entries" subtitle="Bank & wallet SMS and emails, turned into entries">
         <template #actions>
             <button class="btn-secondary" @click="showSetup = !showSetup"><Icon name="cog" :size="16" /> <span class="hidden sm:inline">Setup</span></button>
         </template>
@@ -135,14 +139,8 @@ const smsOk = computed(() => props.setup.last_sms && Date.now() - new Date(props
                     </div>
 
                     <div v-if="m.status === 'review' && m.parsed" class="mt-3 flex flex-wrap items-center gap-2">
-                        <select v-model="pick(m).account_id" class="input input-sm w-auto min-w-[150px]">
-                            <option value="">Account…</option>
-                            <option v-for="a in accountsFor(m)" :key="a.id" :value="a.id">{{ a.name }} ({{ a.currency }}{{ a.scope === 'business' ? ' · business' : '' }})</option>
-                        </select>
-                        <select v-model="pick(m).category" class="input input-sm w-auto">
-                            <option value="">Auto category</option>
-                            <option v-for="c in categories[m.parsed.direction === 'in' ? 'income' : 'expense']" :key="c.value" :value="c.value">{{ c.label }}</option>
-                        </select>
+                        <Select v-model="pick(m).account_id" :options="accountOptions(m)" placeholder="Account…" size="sm" class="min-w-[170px]" />
+                        <Select v-model="pick(m).category" :options="categoryOptions(m)" size="sm" class="min-w-[160px]" />
                         <button class="btn-primary btn-sm" :disabled="!pick(m).account_id" @click="add(m)">Add</button>
                         <button class="btn-ghost btn-sm" @click="ignore(m)">Ignore</button>
                     </div>
@@ -154,5 +152,5 @@ const smsOk = computed(() => props.setup.last_sms && Date.now() - new Date(props
             </ul>
             <EmptyState v-else compact icon="check" :title="status === 'review' ? 'Nothing needs a look' : 'Nothing here'" text="Bank and wallet alerts appear here as they arrive. Clear ones are added on their own." />
         </div>
-    </AuthenticatedLayout>
+    </PersonalLayout>
 </template>

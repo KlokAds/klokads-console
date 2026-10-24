@@ -7,12 +7,15 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { clientName, date, money } from '@/money';
 import BudgetFields from '@/Components/BudgetFields.vue';
 import StatementField from '@/Components/StatementField.vue';
+import Select from '@/Components/Ui/Select.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
 const props = defineProps({ links: Array, clients: Array, services: Array, serviceLabels: Object, currency: String });
 
 const form = useForm({ client_id: '', description: '', service: 'meta_ads', amount: '', billing: 'budget', pass_fees: true, commission_rate: 20, statement_descriptor: '' });
+const serviceOptions = computed(() => [{ value: '', label: '—' }, ...props.services]);
+const clientOptions = computed(() => [{ value: '', label: 'Anyone with the link' }, ...props.clients.map((c) => ({ value: c.id, label: clientName(c) }))]);
 const selectedClient = computed(() => props.clients.find((c) => c.id === Number(form.client_id)));
 
 function submit() {
@@ -55,17 +58,11 @@ const whatsapp = (link) => `https://wa.me/?text=${encodeURIComponent(`${link.des
                     </div>
                     <div>
                         <label class="label">Service</label>
-                        <select v-model="form.service" class="input">
-                            <option value="">—</option>
-                            <option v-for="s in services" :key="s.value" :value="s.value">{{ s.label }}</option>
-                        </select>
+                        <Select v-model="form.service" :options="serviceOptions" />
                     </div>
                     <div>
                         <label class="label">Client</label>
-                        <select v-model="form.client_id" class="input">
-                            <option value="">Anyone with the link</option>
-                            <option v-for="c in clients" :key="c.id" :value="c.id">{{ clientName(c) }}</option>
-                        </select>
+                        <Select v-model="form.client_id" :options="clientOptions" />
                         <div class="hint">Payments are credited to this client in reports.</div>
                     </div>
                     <StatementField :form="form" :service="form.service" />

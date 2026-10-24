@@ -1,6 +1,7 @@
 <script setup>
 import CopyButton from '@/Components/CopyButton.vue';
 import Icon from '@/Components/Icon.vue';
+import Select from '@/Components/Ui/Select.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { date, money } from '@/money';
@@ -33,6 +34,12 @@ const mailForm = useForm({
     auto_invoices: props.mail.auto_invoices,
 });
 const gstForm = useForm({ enabled: props.gst.enabled, rate: props.gst.rate, reg_no: props.gst.reg_no ?? '', label: props.gst.label });
+const portOptions = [
+    { value: 465, label: '465 — SSL (Hostinger)' },
+    { value: 587, label: '587 — STARTTLS' },
+];
+// "Classic — Clean and simple" → name with the description underneath.
+const templateOptions = computed(() => props.templates.options.map((t) => ({ value: t.value, label: t.label.split(' — ')[0], hint: t.label.split(' — ')[1] })));
 const templateForm = useForm({ template_for: Object.fromEntries(props.templates.defaults.map((d) => [d.service, d.template])) });
 const pricingForm = useForm({
     commission_rate: props.pricing.commission_rate,
@@ -342,10 +349,7 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                             </div>
                             <div>
                                 <label class="label">Port</label>
-                                <select v-model="mailForm.port" class="input">
-                                    <option :value="465">465 — SSL (Hostinger)</option>
-                                    <option :value="587">587 — STARTTLS</option>
-                                </select>
+                                <Select v-model="mailForm.port" :options="portOptions" />
                             </div>
                             <div>
                                 <label class="label">Username</label>
@@ -401,9 +405,7 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                         <div class="divide-y divide-line/70">
                             <div v-for="d in templates.defaults" :key="d.service" class="grid items-center gap-3 px-5 py-3 sm:grid-cols-[10rem_1fr] sm:px-6">
                                 <span class="text-sm font-semibold text-ink-900">{{ d.label }}</span>
-                                <select v-model="templateForm.template_for[d.service]" class="input input-sm">
-                                    <option v-for="t in templates.options" :key="t.value" :value="t.value">{{ t.label }}</option>
-                                </select>
+                                <Select v-model="templateForm.template_for[d.service]" :options="templateOptions" size="sm" />
                             </div>
                         </div>
                         <div class="flex items-center justify-end gap-3 border-t border-line bg-ink-50/60 px-6 py-4">

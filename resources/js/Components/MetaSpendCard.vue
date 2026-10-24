@@ -1,6 +1,7 @@
 <script setup>
 import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
+import Select from '@/Components/Ui/Select.vue';
 import { date, money } from '@/money';
 import { useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
@@ -18,6 +19,7 @@ const props = defineProps({
 });
 
 const s = computed(() => props.meta.settings);
+const accountOptions = computed(() => [{ value: '', label: '— Choose —' }, ...Object.entries(props.accounts?.accounts ?? {}).map(([id, label]) => ({ value: id, label, hint: id }))]);
 const cur = computed(() => (props.meta.currency || props.currency).toLowerCase());
 const m = (v) => money(v, cur.value);
 const pct = computed(() => Math.min(100, (props.meta.unbilled / Math.max(1, s.value.spend_threshold)) * 100));
@@ -101,10 +103,7 @@ const charge = () => chargeForm.post(route('clients.meta.charge', props.client.i
             <form v-if="showSettings" class="grid gap-4 border-b border-line bg-ink-50/60 p-5 sm:grid-cols-2 sm:p-6" @submit.prevent="save">
                 <div class="sm:col-span-2">
                     <label class="label">Ad account *</label>
-                    <select v-if="accounts?.accounts && Object.keys(accounts.accounts).length" v-model="form.meta_ad_account_id" class="input">
-                        <option value="">— Choose —</option>
-                        <option v-for="(label, id) in accounts.accounts" :key="id" :value="id">{{ label }} · {{ id }}</option>
-                    </select>
+                    <Select v-if="accountOptions.length > 1" v-model="form.meta_ad_account_id" :options="accountOptions" />
                     <input v-else v-model="form.meta_ad_account_id" class="input font-mono" placeholder="act_1170923540578070" />
                     <div v-if="accounts?.error" class="error">{{ accounts.error }}</div>
                     <div v-if="form.errors.meta_ad_account_id" class="error">{{ form.errors.meta_ad_account_id }}</div>

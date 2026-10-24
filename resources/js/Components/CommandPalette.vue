@@ -23,7 +23,7 @@ let seq = 0;
 
 const pages = [
     { title: 'Dashboard', sub: 'Business overview', icon: 'home', url: () => route('dashboard') },
-    { title: 'Personal dashboard', sub: 'Your own money', icon: 'user', url: () => route('personal.dashboard') },
+    { title: 'Personal home', sub: 'Your own money', icon: 'user', url: () => route('personal.dashboard') },
     { title: 'Cashflow', sub: 'Money in and out by month', icon: 'flow', url: () => route('cashflow.index') },
     { title: 'Payouts', sub: 'Stripe payouts and bank fee', icon: 'bank', url: () => route('payouts.index') },
     { title: 'Invoices', icon: 'invoice', url: () => route('invoices.index') },
@@ -32,7 +32,8 @@ const pages = [
     { title: 'Clients', icon: 'users', url: () => route('clients.index') },
     { title: 'Expenses', icon: 'card', url: () => route('expenses.index') },
     { title: 'Business bank & money', icon: 'wallet', url: () => route('money.index', { scope: 'business' }) },
-    { title: 'Personal money', icon: 'wallet', url: () => route('money.index', { scope: 'personal' }) },
+    { title: 'Personal activity', sub: 'Entries and accounts', icon: 'wallet', url: () => route('personal.activity') },
+    { title: 'Budgets, goals & bills', sub: 'Personal plan', icon: 'chart', url: () => route('personal.plan') },
     { title: 'Dena-paona', sub: 'Loans given and taken', icon: 'users', url: () => route('personal.loans.index') },
     { title: 'My invoices', sub: 'Personal invoices in BDT', icon: 'invoice', url: () => route('personal.invoices.index') },
     { title: 'Auto entries', sub: 'Bank & wallet SMS / email', icon: 'bolt', url: () => route('personal.inbox.index') },
@@ -46,7 +47,7 @@ const actions = [
     { title: 'New payment link', icon: 'plus', url: () => route('payment-links.index') },
     { title: 'New client', icon: 'plus', url: () => route('clients.index', { new: 1 }) },
     { title: 'Add business expense', icon: 'plus', url: () => route('expenses.index', { new: 1 }) },
-    { title: 'Add personal spending', icon: 'plus', url: () => route('money.index', { scope: 'personal', new: 1 }) },
+    { title: 'Add personal spending', icon: 'plus', url: () => route('personal.activity', { new: 1 }) },
     { title: 'Add business money entry', sub: 'Transfer, conversion, salary', icon: 'plus', url: () => route('money.index', { scope: 'business', new: 1 }) },
     { title: 'Switch theme', sub: () => `Now: ${theme.value}`, icon: 'moon', run: cycleTheme, keep: true },
 ];

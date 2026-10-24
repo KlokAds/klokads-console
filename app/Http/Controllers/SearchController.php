@@ -76,27 +76,29 @@ class SearchController extends Controller
                 ->latest('occurred_on')->limit(self::LIMIT)->get()->map(fn (MoneyTransaction $t) => [
                     'title' => $t->counterparty ?: $t->description ?: ucfirst($t->kind),
                     'sub' => $t->occurred_on->format('j M Y').' · '.$t->account->name.' · '.$amount((int) $t->amount, $t->account->currency),
-                    'url' => route('money.index', ['scope' => $t->account->scope, 'month' => $t->occurred_on->format('Y-m'), 'q' => $q]),
+                    'url' => $t->account->scope === 'personal'
+                        ? route('personal.activity', ['month' => $t->occurred_on->format('Y-m'), 'q' => $q])
+                        : route('money.index', ['scope' => 'business', 'month' => $t->occurred_on->format('Y-m'), 'q' => $q]),
                     'icon' => 'wallet',
                     'scope' => $t->account->scope,
                 ]),
             'Accounts' => $any(Account::query(), ['name', 'notes'])->limit(self::LIMIT)->get()->map(fn (Account $a) => [
                 'title' => $a->name,
                 'sub' => ucfirst($a->scope).' · '.strtoupper($a->currency).($a->archived ? ' · archived' : ''),
-                'url' => route('money.index', ['scope' => $a->scope]),
+                'url' => $a->scope === 'personal' ? route('personal.activity', ['tab' => 'accounts']) : route('money.index', ['scope' => 'business']),
                 'icon' => 'bank',
                 'scope' => $a->scope,
             ]),
             'Bills & goals' => $any(Bill::query(), ['name', 'counterparty'])->limit(self::LIMIT)->get()->map(fn (Bill $b) => [
                 'title' => $b->name,
                 'sub' => 'Monthly bill · day '.$b->day,
-                'url' => route('personal.dashboard'),
+                'url' => route('personal.plan'),
                 'icon' => 'clock',
                 'scope' => 'personal',
             ])->concat($any(Goal::query(), ['name'])->limit(self::LIMIT)->get()->map(fn (Goal $g) => [
                 'title' => $g->name,
                 'sub' => 'Savings goal',
-                'url' => route('personal.dashboard'),
+                'url' => route('personal.plan'),
                 'icon' => 'shield',
                 'scope' => 'personal',
             ])),

@@ -82,11 +82,13 @@ class MoneyLedgerTest extends TestCase
         $this->assertSame(750000, Ledger::balance($wallet));
         $this->assertSame(0, Expense::count());
 
-        $this->get('/money?scope=personal')->assertOk()
-            ->assertInertia(fn ($page) => $page->component('Money/Index')
-                ->where('summary.spent', 2750)              // ৳2,500 at S$0.011
-                ->where('summary.by_category.food', 2750)
-                ->where('accounts.2.balance', 750000));
+        $this->get('/money?scope=personal')->assertRedirect(route('personal.activity'));
+        $this->get('/personal/activity')->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Personal/Activity')
+                ->where('totals.BDT.spent', 250000)          // in taka, never converted
+                ->where('totals.BDT.by_category.food', 250000)
+                ->where('entries.0.counterparty', 'Shwapno')
+                ->where('accounts.0.balance', 750000));
     }
 
     public function test_moving_business_money_to_personal_is_an_owner_draw_not_an_expense(): void
@@ -97,14 +99,13 @@ class MoneyLedgerTest extends TestCase
 
         $this->assertSame(0, Expense::count());
         $this->get('/money?scope=business')->assertInertia(fn ($page) => $page->where('summary.sent_out', 20000)->where('summary.net', 30000));
-        $this->get('/money?scope=personal')->assertInertia(fn ($page) => $page->where('summary.came_in', 20000));
+        $this->get('/personal/activity')->assertInertia(fn ($page) => $page->where('totals.SGD.in', 20000));
     }
 
-    public function test_the_last_chosen_tab_is_remembered(): void
+    public function test_the_money_page_is_business_only_and_personal_goes_to_activity(): void
     {
-        $this->get('/money?scope=personal')->assertInertia(fn ($page) => $page->where('scope', 'personal'));
-        $this->get('/money')->assertInertia(fn ($page) => $page->where('scope', 'personal'));
-        $this->get('/money?scope=business')->assertInertia(fn ($page) => $page->where('scope', 'business'));
+        $this->get('/money?scope=personal&month=2026-09&q=rent')->assertRedirect(route('personal.activity', ['month' => '2026-09', 'q' => 'rent']));
+        $this->get('/money')->assertInertia(fn ($page) => $page->component('Money/Index')->where('scope', 'business'));
     }
 
     public function test_personal_dashboard_keeps_sgd_and_bdt_apart_and_shows_where_spending_came_from(): void
@@ -135,10 +136,25 @@ class MoneyLedgerTest extends TestCase
             ->has('stats.SGD.months', 6)
             ->where('recent.0.account.name', fn ($name) => in_array($name, ['DBS Savings', 'bKash'], true)));
 
-        // The Money link then opens on the personal side.
-        $this->get('/money')->assertInertia(fn ($page) => $page->where('scope', 'personal'));
-        $this->get('/dashboard');
-        $this->get('/money')->assertInertia(fn ($page) => $page->where('scope', 'business'));
+        // Plan shows the same numbers; Activity lists only the chosen month.
+        $this->get('/personal/plan')->assertOk()->assertInertia(fn ($page) => $page->component('Personal/Plan')->where('stats.SGD.current.spent', 12000));
+        $this->get('/personal/activity')->assertInertia(fn ($page) => $page->has('entries', 3)->where('totals.SGD.spent', 12000));
+        $this->get('/personal/activity?month='.now()->subMonthNoOverflow()->format('Y-m'))
+            ->assertInertia(fn ($page) => $page->has('entries', 1)->where('entries.0.category', 'home')->where('totals.SGD.spent', 8000));
+    }
+
+    public function test_quick_add_offers_my_accounts_categories_and_past_payees(): void
+    {
+        $bkash = Account::create(['name' => 'bKash', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'currency' => 'bdt', 'opening_balance' => 100000]);
+        $this->post('/money', ['kind' => 'expense', 'account_id' => $bkash->id, 'amount' => 300, 'category' => 'transport', 'counterparty' => 'Pathao', 'occurred_on' => now()->toDateString()]);
+
+        $quick = $this->getJson('/personal/quick')->assertOk()
+            ->assertJsonCount(1, 'accounts')
+            ->assertJsonPath('accounts.0.currency', 'BDT')
+            ->assertJsonPath('accounts.0.balance', 70000)
+            ->assertJsonPath('payees.0.name', 'Pathao')
+            ->assertJsonPath('last_account_id', $bkash->id);
+        $this->assertNotContains('bank_fees', array_column($quick->json('categories.expense'), 'value'));
     }
 
     public function test_personal_accounts_are_sgd_or_bdt_and_keep_their_bank(): void

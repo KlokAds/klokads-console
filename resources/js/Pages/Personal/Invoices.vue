@@ -4,7 +4,9 @@ import EmptyState from '@/Components/EmptyState.vue';
 import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
 import RowMenu from '@/Components/RowMenu.vue';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import DatePicker from '@/Components/Ui/DatePicker.vue';
+import Select from '@/Components/Ui/Select.vue';
+import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { date, money, wantsNew } from '@/money';
 import { Head, router, useForm } from '@inertiajs/vue3';
@@ -27,8 +29,17 @@ const STATUS = { unpaid: ['Unpaid', 'bg-amber-50 text-amber-700'], partial: ['Pa
 const methodLabel = (m) => props.methods.find((x) => x.value === m)?.label ?? m;
 const shown = computed(() => props.invoices.filter((i) => (filter.value === 'open' ? ['unpaid', 'partial'].includes(i.status) : filter.value === 'paid' ? i.status === 'paid' : true)));
 const clientName = (c) => c?.company || c?.name || '—';
-const today = () => new Date().toISOString().slice(0, 10);
-const plusDays = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const today = () => iso(new Date());
+const plusDays = (n) => iso(new Date(Date.now() + n * 864e5));
+const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: c.company || c.name, hint: c.company ? c.name : c.phone })));
+const methodOptions = computed(() => props.methods.map((m) => ({ value: m.value, label: m.label })));
+// Ways a client can send money to me (cash and QR are not account details).
+const payableMethods = computed(() => methodOptions.value.filter((m) => !['cash', 'qr'].includes(m.value)));
+const accountOptions = (currency) => [
+    { value: '', label: 'Not a tracked account', icon: '💵' },
+    ...props.accounts.filter((a) => a.currency.toUpperCase() === currency).map((a) => ({ value: a.id, label: a.name, icon: 'wallet' })),
+];
 
 // ---------------------------------------------------------------- invoice editor
 const showInv = ref(false);
@@ -60,11 +71,11 @@ async function removeInv(i) {
 // ---------------------------------------------------------------- payment
 const showPay = ref(false);
 const payingInv = ref(null);
-const payForm = useForm({ amount: '', paid_on: today(), method: 'bkash', reference: '', account_id: '' });
+const payForm = useForm({ amount: '', paid_on: today(), method: props.methods[0]?.value ?? '', reference: '', account_id: '' });
 function openPay(i, fromReport = false) {
     payingInv.value = i;
     const r = fromReport ? i.reported : null;
-    const method = r?.method ?? 'bkash';
+    const method = r?.method ?? props.methods[0]?.value;
     payForm.defaults({
         amount: ((r?.amount ?? i.due) / 100).toString(), paid_on: today(), method, reference: r?.reference ?? '',
         account_id: props.accounts.find((a) => a.currency.toUpperCase() === i.currency && a.provider === method)?.id ?? props.accounts.find((a) => a.currency.toUpperCase() === i.currency)?.id ?? '',
@@ -124,7 +135,7 @@ const profileForm = useForm({
     methods: (props.profile.methods ?? []).map((m) => ({ type: m.type, label: m.label ?? '', name: m.name ?? '', number: m.number ?? '', extra: m.extra ?? '' })),
     qr: null, remove_qr: false,
 });
-const addMethod = () => profileForm.methods.push({ type: 'bkash', label: '', name: profileForm.name, number: '', extra: '' });
+const addMethod = () => profileForm.methods.push({ type: payableMethods.value[0]?.value ?? '', label: '', name: profileForm.name, number: '', extra: '' });
 const saveProfile = () => profileForm.post(route('personal.invoices.profile'), { preserveScroll: true, forceFormData: true, onSuccess: () => (profileForm.qr = null) });
 
 if (wantsNew()) openInv();
@@ -133,7 +144,7 @@ if (wantsNew()) openInv();
 <template>
     <Head title="My invoices" />
 
-    <AuthenticatedLayout title="My invoices" subtitle="Invoices for my own work — paid by bank, bKash, Nagad, Rocket, Upay or Bangla QR">
+    <PersonalLayout title="My invoices" subtitle="Invoices for my own work — paid by bank, bKash, Nagad, Rocket, Upay or Bangla QR">
         <template #actions>
             <button class="btn-primary" :disabled="!clients.length" @click="openInv()"><Icon name="plus" :size="16" /> <span class="hidden sm:inline">New invoice</span></button>
         </template>
@@ -261,9 +272,7 @@ if (wantsNew()) openInv();
                 <div class="sm:col-span-2">
                     <div class="mb-2 flex items-center justify-between"><span class="label mb-0">Payment methods</span><button type="button" class="btn-secondary btn-sm" @click="addMethod"><Icon name="plus" :size="14" /> Add</button></div>
                     <div v-for="(m, k) in profileForm.methods" :key="k" class="mb-2 grid grid-cols-12 gap-2 rounded-xl border border-line p-2.5">
-                        <select v-model="m.type" class="input input-sm col-span-5 sm:col-span-3">
-                            <option v-for="o in methods.filter((x) => !['cash', 'qr'].includes(x.value))" :key="o.value" :value="o.value">{{ o.label }}</option>
-                        </select>
+                        <Select v-model="m.type" :options="payableMethods" size="sm" class="col-span-5 sm:col-span-3" />
                         <input v-model="m.number" class="input input-sm col-span-7 sm:col-span-4" :placeholder="m.type === 'bank' ? 'Account number' : '01XXXXXXXXX'" />
                         <input v-model="m.name" class="input input-sm col-span-6 sm:col-span-4" placeholder="Account name" />
                         <button type="button" class="icon-btn col-span-1 hover:text-rose-600" @click="profileForm.methods.splice(k, 1)"><Icon name="trash" :size="14" /></button>
@@ -298,9 +307,8 @@ if (wantsNew()) openInv();
                 <div class="grid grid-cols-2 gap-4 px-6 py-5">
                     <div class="col-span-2">
                         <label class="label">Client *</label>
-                        <select v-model="invForm.personal_client_id" class="input" required>
-                            <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.company || c.name }}</option>
-                        </select>
+                        <Select v-model="invForm.personal_client_id" :options="clientOptions" placeholder="Choose client" />
+                        <div v-if="invForm.errors.personal_client_id" class="error">{{ invForm.errors.personal_client_id }}</div>
                     </div>
                     <div class="col-span-2 space-y-2">
                         <span class="label">Items</span>
@@ -315,8 +323,8 @@ if (wantsNew()) openInv();
                             <span class="text-sm">Total <b class="tabular-nums">{{ T(invTotal) }}</b></span>
                         </div>
                     </div>
-                    <div><label class="label">Date *</label><input v-model="invForm.issued_on" type="date" class="input" required /></div>
-                    <div><label class="label">Due</label><input v-model="invForm.due_on" type="date" class="input" /></div>
+                    <div><div class="label">Date *</div><DatePicker v-model="invForm.issued_on" /></div>
+                    <div><div class="label">Due</div><DatePicker v-model="invForm.due_on" :min="invForm.issued_on" :shortcuts="false" clearable placeholder="No due date" /></div>
                     <div class="col-span-2"><label class="label">Note on the invoice</label><textarea v-model="invForm.note" rows="2" class="input" placeholder="Thank you for your business"></textarea></div>
                     <label v-if="!editingInv" class="col-span-2 flex items-center gap-2 text-sm text-ink-700"><input v-model="invForm.send" type="checkbox" class="checkbox" /> Email it to the client now (needs their email)</label>
                 </div>
@@ -336,18 +344,15 @@ if (wantsNew()) openInv();
                 </div>
                 <div class="grid grid-cols-2 gap-4 px-6 py-5">
                     <div><label class="label">Amount *</label><input v-model="payForm.amount" type="number" step="0.01" min="0.01" class="input font-semibold" required /></div>
-                    <div><label class="label">Date *</label><input v-model="payForm.paid_on" type="date" class="input" required /></div>
+                    <div><div class="label">Date *</div><DatePicker v-model="payForm.paid_on" :max="today()" /></div>
                     <div>
                         <label class="label">Paid by</label>
-                        <select v-model="payForm.method" class="input"><option v-for="m in methods" :key="m.value" :value="m.value">{{ m.label }}</option></select>
+                        <Select v-model="payForm.method" :options="methodOptions" />
                     </div>
                     <div><label class="label">TrxID / ref</label><input v-model="payForm.reference" class="input" /></div>
                     <div class="col-span-2">
                         <label class="label">Landed in</label>
-                        <select v-model="payForm.account_id" class="input">
-                            <option value="">Not a tracked account</option>
-                            <option v-for="a in accounts.filter((x) => x.currency.toUpperCase() === payingInv.currency)" :key="a.id" :value="a.id">{{ a.name }}</option>
-                        </select>
+                        <Select v-model="payForm.account_id" :options="accountOptions(payingInv.currency)" />
                         <div v-if="payForm.errors.account_id" class="error">{{ payForm.errors.account_id }}</div>
                     </div>
                 </div>
@@ -383,7 +388,8 @@ if (wantsNew()) openInv();
                 <div class="grid grid-cols-2 gap-4 px-6 py-5">
                     <div class="col-span-2">
                         <label class="label">Client *</label>
-                        <select v-model="recForm.personal_client_id" class="input" required><option v-for="c in clients" :key="c.id" :value="c.id">{{ c.company || c.name }}</option></select>
+                        <Select v-model="recForm.personal_client_id" :options="clientOptions" placeholder="Choose client" />
+                        <div v-if="recForm.errors.personal_client_id" class="error">{{ recForm.errors.personal_client_id }}</div>
                     </div>
                     <div class="col-span-2 space-y-2">
                         <span class="label">Items</span>
@@ -410,5 +416,5 @@ if (wantsNew()) openInv();
                 </div>
             </form>
         </Modal>
-    </AuthenticatedLayout>
+    </PersonalLayout>
 </template>

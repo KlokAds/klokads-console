@@ -1,12 +1,17 @@
 <script setup>
 import CopyButton from '@/Components/CopyButton.vue';
 import Icon from '@/Components/Icon.vue';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import Select from '@/Components/Ui/Select.vue';
+import TimePicker from '@/Components/Ui/TimePicker.vue';
+import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { date } from '@/money';
 import { currentDeviceHash, disablePushHere, enablePush, pushStatus } from '@/push';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, onMounted, reactive, ref } from 'vue';
+
+// Every time zone this browser knows, for the reminder clock.
+const zones = (Intl.supportedValuesOf?.('timeZone') ?? [Intl.DateTimeFormat().resolvedOptions().timeZone]).map((z) => ({ value: z, label: z.replace(/_/g, ' ') }));
 
 const props = defineProps({
     publicKey: String,
@@ -77,7 +82,7 @@ const wokeHealthy = computed(() => props.cron.woke_at && Date.now() - new Date(p
 <template>
     <Head title="Reminders" />
 
-    <AuthenticatedLayout title="Reminders" subtitle="Morning and night notifications on your phone">
+    <PersonalLayout title="Reminders" subtitle="Morning and night notifications on your phone">
         <div class="grid gap-5 xl:grid-cols-3">
             <div class="min-w-0 space-y-5 xl:col-span-2">
                 <!-- This device -->
@@ -128,13 +133,13 @@ const wokeHealthy = computed(() => props.cron.woke_at && Date.now() - new Date(p
                                 <label class="flex items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm text-ink-700">
                                     <input v-model="formFor(d).morning" type="checkbox" class="checkbox" /> Morning
                                 </label>
-                                <input v-model="formFor(d).morning_at" type="time" class="input" :disabled="!formFor(d).morning" />
+                                <TimePicker v-model="formFor(d).morning_at" :disabled="!formFor(d).morning" />
                                 <label class="flex items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm text-ink-700">
                                     <input v-model="formFor(d).evening" type="checkbox" class="checkbox" /> Night
                                 </label>
-                                <input v-model="formFor(d).evening_at" type="time" class="input" :disabled="!formFor(d).evening" />
+                                <TimePicker v-model="formFor(d).evening_at" :disabled="!formFor(d).evening" />
                                 <div class="col-span-2 flex items-center gap-2 sm:col-span-4">
-                                    <input v-model="formFor(d).timezone" class="input input-sm flex-1" placeholder="Asia/Singapore" />
+                                    <Select v-model="formFor(d).timezone" :options="zones" size="sm" class="flex-1" placeholder="Time zone" />
                                     <button class="btn-dark btn-sm" :disabled="formFor(d).processing || !formFor(d).isDirty">Save times</button>
                                 </div>
                             </form>
@@ -209,5 +214,5 @@ const wokeHealthy = computed(() => props.cron.woke_at && Date.now() - new Date(p
                 </div>
             </div>
         </div>
-    </AuthenticatedLayout>
+    </PersonalLayout>
 </template>

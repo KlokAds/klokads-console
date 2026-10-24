@@ -154,7 +154,7 @@ class Reminders
         $tomorrow = $local->addDay()->day;
         $bills = Bill::where('active', true)->where('day', $tomorrow)->pluck('name');
         $billLine = $bills->isNotEmpty() ? "\n📌 Tomorrow: ".$bills->take(3)->implode(', ') : '';
-        $url = route('money.index', ['scope' => 'personal', 'new' => 1]);
+        $url = route('personal.activity', ['new' => 1]);
 
         if ($entries->isEmpty()) {
             return [
