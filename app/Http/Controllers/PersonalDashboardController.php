@@ -6,6 +6,7 @@ use App\Models\Account;
 use App\Models\Bill;
 use App\Models\Budget;
 use App\Models\Goal;
+use App\Models\Loan;
 use App\Models\MoneyTransaction;
 use App\Support\Catalog;
 use App\Support\Ledger;
@@ -101,10 +102,32 @@ class PersonalDashboardController extends Controller
                 'to_account' => $t->toAccount,
                 'direction' => Ledger::direction($t, $ids),
             ])->values(),
-            'categories' => Catalog::PERSONAL_CATEGORIES + Catalog::INCOME_CATEGORIES['personal'],
+            'categories' => Catalog::PERSONAL_CATEGORIES + Catalog::INCOME_CATEGORIES['personal'] + Catalog::LOAN_CATEGORIES,
+            'loans' => $this->loanSummary(),
             'spendCategories' => Catalog::options(Catalog::PERSONAL_CATEGORIES),
             'providers' => collect(Catalog::PROVIDERS)->flatMap(fn ($list) => collect($list)->map(fn ($p) => $p[0])),
         ]);
+    }
+
+    /**
+     * Dena-paona at a glance: totals per currency and what is due soon or overdue.
+     *
+     * @return array<string, mixed>
+     */
+    private function loanSummary(): array
+    {
+        $open = Loan::with('payments')->get()->filter(fn (Loan $l) => $l->outstanding() > 0);
+
+        return [
+            'totals' => collect(Catalog::PERSONAL_CURRENCIES)->mapWithKeys(fn ($c) => [$c => [
+                'to_receive' => (int) $open->where('direction', 'lent')->where('currency', $c)->sum(fn ($l) => $l->outstanding()),
+                'to_pay' => (int) $open->where('direction', 'borrowed')->where('currency', $c)->sum(fn ($l) => $l->outstanding()),
+            ]]),
+            'soon' => $open->filter(fn ($l) => $l->due_on && $l->due_on->lte(today()->addDays(7)))->sortBy('due_on')->take(5)
+                ->map(fn ($l) => [...$l->only('id', 'direction', 'person', 'currency'), 'outstanding' => $l->outstanding(),
+                    'due_on' => $l->due_on->toDateString(), 'overdue' => $l->due_on->lt(today())])->values(),
+            'count' => $open->count(),
+        ];
     }
 
     /**
@@ -130,6 +153,10 @@ class PersonalDashboardController extends Controller
         };
 
         foreach ($transactions as $t) {
+            // Dena-paona moves money but is neither spending nor income.
+            if ($t->kind !== 'transfer' && array_key_exists((string) $t->category, Catalog::LOAN_CATEGORIES)) {
+                continue;
+            }
             $fromMine = in_array($t->account_id, $ids, true) && strtoupper($t->account->currency) === $currency;
             $toMine = $t->to_account_id && in_array($t->to_account_id, $ids, true) && strtoupper($t->toAccount->currency) === $currency;
             $fromSavings = in_array($t->account_id, $savingsIds, true);

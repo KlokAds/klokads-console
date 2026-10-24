@@ -77,6 +77,8 @@ class Catalog
             'youtrip' => ['YouTrip', 'wallet'],
             'revolut' => ['Revolut', 'wallet'],
             'grabpay' => ['GrabPay', 'wallet'],
+            'nsave' => ['nSave', 'wallet'],
+            'rizon' => ['Rizon', 'wallet'],
             'cash' => ['Cash', 'cash'],
             'other' => ['Other', 'bank'],
         ],
@@ -84,6 +86,7 @@ class Catalog
             'bkash' => ['bKash', 'wallet'],
             'nagad' => ['Nagad', 'wallet'],
             'rocket' => ['Rocket', 'wallet'],
+            'upay' => ['Upay', 'wallet'],
             'city' => ['City Bank', 'bank'],
             'brac' => ['BRAC Bank', 'bank'],
             'dbbl' => ['Dutch-Bangla Bank', 'bank'],
@@ -92,6 +95,17 @@ class Catalog
             'cash' => ['Cash', 'cash'],
             'other' => ['Other', 'bank'],
         ],
+    ];
+
+    /**
+     * Money that moves because of dena-paona: it changes balances but is neither
+     * spending nor income, so month totals leave it out.
+     */
+    public const LOAN_CATEGORIES = [
+        'loan_given' => 'Loan given',
+        'loan_taken' => 'Loan taken',
+        'loan_repaid_to_me' => 'Loan repaid to me',
+        'loan_repaid_by_me' => 'Loan repaid by me',
     ];
 
     /** The personal side only keeps these currencies. */

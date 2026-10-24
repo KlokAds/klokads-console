@@ -7,6 +7,7 @@ use App\Models\Bill;
 use App\Models\Budget;
 use App\Models\Goal;
 use App\Models\Invoice;
+use App\Models\Loan;
 use App\Models\MoneyTransaction;
 use App\Models\PushSubscription;
 use App\Models\Setting;
@@ -95,6 +96,17 @@ class Reminders
             $lines[] = "💼 {$dueToday} client invoice".($dueToday === 1 ? '' : 's').' due today';
         }
 
+        // Dena-paona due within 3 days or overdue.
+        foreach (Loan::with('payments')->whereNotNull('due_on')->where('due_on', '<=', $local->addDays(3)->toDateString())->orderBy('due_on')->get() as $loan) {
+            if (($left = $loan->outstanding()) <= 0 || count($lines) >= 6) {
+                continue;
+            }
+            $when = $loan->due_on->lt($local->startOfDay()) ? 'overdue' : ($loan->due_on->isSameDay($local) ? 'due today' : 'due '.$loan->due_on->format('j M'));
+            $lines[] = $loan->direction === 'lent'
+                ? "🤝 {$loan->person} owes you ".$this->money($left, $loan->currency)." ({$when})"
+                : "🤝 Pay {$loan->person} ".$this->money($left, $loan->currency)." ({$when})";
+        }
+
         // A goal deadline within a month.
         $goal = Goal::with('account')->where('done', false)->whereNotNull('due_on')
             ->whereBetween('due_on', [$local->toDateString(), $local->addDays(30)->toDateString()])->orderBy('due_on')->first();
@@ -122,7 +134,7 @@ class Reminders
         $ids = Account::where('scope', 'personal')->pluck('id');
         $entries = MoneyTransaction::with('account:id,currency')->whereIn('account_id', $ids)
             ->whereDate('occurred_on', $local->toDateString())->get();
-        $spent = $entries->where('kind', 'expense')
+        $spent = $entries->where('kind', 'expense')->reject(fn ($t) => array_key_exists((string) $t->category, Catalog::LOAN_CATEGORIES))
             ->groupBy(fn ($t) => strtoupper($t->account->currency))
             ->map(fn (Collection $list, $currency) => $this->money((int) $list->sum(fn ($t) => $t->amount + $t->fee), $currency));
 

@@ -8,6 +8,7 @@ use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\LoanController;
 use App\Http\Controllers\MoneyController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentLinkController;
@@ -64,6 +65,12 @@ Route::middleware('auth')->group(function () {
     Route::put('/personal/bills/{bill}', [PlanningController::class, 'updateBill'])->name('personal.bills.update');
     Route::delete('/personal/bills/{bill}', [PlanningController::class, 'destroyBill'])->name('personal.bills.destroy');
     Route::post('/personal/bills/{bill}/pay', [PlanningController::class, 'payBill'])->name('personal.bills.pay');
+    Route::get('/personal/loans', [LoanController::class, 'index'])->name('personal.loans.index');
+    Route::post('/personal/loans', [LoanController::class, 'store'])->name('personal.loans.store');
+    Route::put('/personal/loans/{loan}', [LoanController::class, 'update'])->name('personal.loans.update');
+    Route::delete('/personal/loans/{loan}', [LoanController::class, 'destroy'])->name('personal.loans.destroy');
+    Route::post('/personal/loans/{loan}/payments', [LoanController::class, 'pay'])->name('personal.loans.pay');
+    Route::delete('/personal/loan-payments/{payment}', [LoanController::class, 'destroyPayment'])->name('personal.loans.payments.destroy');
 
     Route::resource('clients', ClientController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
     Route::post('/clients/{client}/cards/link', [ClientCardController::class, 'link'])->name('clients.cards.link');

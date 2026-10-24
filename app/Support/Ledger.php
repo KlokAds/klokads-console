@@ -212,6 +212,10 @@ class Ledger
         $byCategory = [];
 
         foreach ($transactions as $t) {
+            // Dena-paona moves money but is neither spending nor income.
+            if ($t->kind !== 'transfer' && array_key_exists((string) $t->category, Catalog::LOAN_CATEGORIES)) {
+                continue;
+            }
             $fee = $t->fee ? self::value($t->account, $t->fee, $t->id) : 0;
             $from = in_array($t->account_id, $ids, true);
             $to = $t->to_account_id && in_array($t->to_account_id, $ids, true);

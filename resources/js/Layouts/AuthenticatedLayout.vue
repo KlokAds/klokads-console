@@ -56,8 +56,9 @@ const personalSections = [
     {
         label: 'Personal',
         items: [
-            { name: 'Dashboard', route: 'personal.dashboard', match: 'personal.*', icon: 'home' },
+            { name: 'Dashboard', route: 'personal.dashboard', match: 'personal.dashboard', icon: 'home' },
             { name: 'Money', route: 'money.index', params: { scope: 'personal' }, match: 'money.*', icon: 'wallet' },
+            { name: 'Dena-paona', route: 'personal.loans.index', match: 'personal.loans.*', icon: 'users' },
             { name: 'Reminders', route: 'notifications.index', match: 'notifications.*', icon: 'bolt' },
         ],
     },

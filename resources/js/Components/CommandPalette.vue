@@ -33,6 +33,7 @@ const pages = [
     { title: 'Expenses', icon: 'card', url: () => route('expenses.index') },
     { title: 'Business bank & money', icon: 'wallet', url: () => route('money.index', { scope: 'business' }) },
     { title: 'Personal money', icon: 'wallet', url: () => route('money.index', { scope: 'personal' }) },
+    { title: 'Dena-paona', sub: 'Loans given and taken', icon: 'users', url: () => route('personal.loans.index') },
     { title: 'Phone reminders', sub: 'Morning and night notifications', icon: 'bolt', url: () => route('notifications.index') },
     { title: 'Settings', icon: 'cog', url: () => route('settings.edit') },
     { title: 'Profile & password', icon: 'user', url: () => route('profile.edit') },

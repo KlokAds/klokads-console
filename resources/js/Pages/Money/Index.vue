@@ -203,7 +203,7 @@ const effectiveRate = computed(() => {
     return converting.value && sent && got ? got / sent : null;
 });
 const foreignIncome = computed(() => txForm.kind === 'income' && fromAccount.value && !isBase(fromAccount.value.currency));
-const allCategories = computed(() => [...props.categories.expense, ...props.categories.income]);
+const allCategories = computed(() => [...props.categories.expense, ...props.categories.income, ...(props.categories.loan ?? [])]);
 
 function describe(t) {
     if (t.kind === 'transfer') return `${t.account.name} → ${t.to_account?.name}`;

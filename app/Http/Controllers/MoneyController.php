@@ -62,6 +62,7 @@ class MoneyController extends Controller
             'categories' => [
                 'expense' => Catalog::options($scope === 'business' ? Catalog::EXPENSE_CATEGORIES : Catalog::PERSONAL_CATEGORIES),
                 'income' => Catalog::options(Catalog::INCOME_CATEGORIES[$scope]),
+                'loan' => Catalog::options(Catalog::LOAN_CATEGORIES), // labels only (entries come from Dena-paona)
             ],
             'kinds' => Catalog::options(Catalog::ACCOUNT_KINDS),
             'providers' => Catalog::PROVIDERS,

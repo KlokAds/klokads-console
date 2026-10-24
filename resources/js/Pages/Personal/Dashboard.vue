@@ -19,6 +19,7 @@ const props = defineProps({
     recent: Array,
     categories: Object,
     spendCategories: Array,
+    loans: { type: Object, default: () => ({ totals: {}, soon: [], count: 0 }) },
     providers: Object,
 });
 
@@ -320,6 +321,23 @@ const recent = computed(() => props.recent.filter((t) => t.account.currency.toUp
                     <div v-else class="px-6 py-8 text-sm text-ink-500">Saving for a trip, a laptop, an emergency fund? Add a goal and link its savings account.</div>
                 </div>
             </div>
+
+            <!-- Dena-paona -->
+            <Link :href="route('personal.loans.index')" class="card mt-5 flex flex-wrap items-center gap-4 p-5 transition hover:border-brand-300 sm:p-6">
+                <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><Icon name="users" /></span>
+                <div class="min-w-0 flex-1">
+                    <div class="card-title">Dena-paona</div>
+                    <div class="mt-0.5 text-sm text-ink-600">
+                        <span class="text-emerald-700">They owe me <b>{{ money(loans.totals[pick]?.to_receive ?? 0, pick) }}</b></span>
+                        <span class="mx-1.5 text-ink-300">·</span>
+                        <span class="text-rose-700">I owe <b>{{ money(loans.totals[pick]?.to_pay ?? 0, pick) }}</b></span>
+                    </div>
+                    <div v-for="l in loans.soon" :key="l.id" class="mt-1 text-xs" :class="l.overdue ? 'font-semibold text-rose-600' : 'text-ink-500'">
+                        {{ l.direction === 'lent' ? `${l.person} owes` : `Pay ${l.person}` }} {{ money(l.outstanding, l.currency) }} · {{ l.overdue ? 'overdue' : 'due ' + date(l.due_on) }}
+                    </div>
+                </div>
+                <Icon name="chevron" :size="16" class="-rotate-90 text-ink-400" />
+            </Link>
 
             <!-- Bills -->
             <div class="card mt-5 min-w-0">
