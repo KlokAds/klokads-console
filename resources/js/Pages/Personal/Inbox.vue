@@ -52,7 +52,7 @@ async function tryIt() {
 
 const parsedLine = (p) => p ? `${p.direction === 'in' ? '+' : '−'}${money(p.amount, p.currency)}${p.counterparty ? (p.direction === 'in' ? ' from ' : ' to ') + p.counterparty : ''}${p.reference ? ' · ' + p.reference : ''}` : '';
 const STATUS_STYLE = { added: 'bg-emerald-50 text-emerald-700', matched: 'bg-brand-50 text-brand-700', review: 'bg-amber-50 text-amber-700', ignored: 'bg-ink-100 text-ink-500', skipped: 'bg-ink-100 text-ink-500' };
-// Senders, wallet apps and ignore words: the same list the Klok phone app shows and edits.
+// Senders, wallet apps and ignore words: the same list the MH-Pilot app shows and edits.
 const rulesForm = useForm({ senders: props.rules.senders.map((x) => ({ ...x })), ignore: [...props.rules.ignore], whitelist: props.rules.whitelist });
 const senderTab = ref('sms');
 const newSender = ref('');
@@ -84,10 +84,10 @@ const smsOk = computed(() => props.setup.last_sms && Date.now() - new Date(props
         <div v-if="showSetup" class="grid gap-5 lg:grid-cols-2">
             <div class="card p-5 sm:p-6">
                 <div class="flex items-center justify-between">
-                    <div class="card-title">📱 Klok phone app</div>
+                    <div class="card-title">📱 MH-Pilot phone app</div>
                     <span class="badge" :class="smsOk ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ smsOk ? 'Working' : setup.last_sms ? 'Quiet lately' : 'Not set up' }}</span>
                 </div>
-                <p class="mt-2 text-sm text-ink-600">The Klok Android app sends bank SMS and wallet-app notifications here by itself — only from the senders switched on below. Last message: <b>{{ setup.last_sms ? date(setup.last_sms, true) : 'never' }}</b>.</p>
+                <p class="mt-2 text-sm text-ink-600">The MH-Pilot app sends bank SMS and wallet-app notifications here by itself — only from the senders switched on below. Last message: <b>{{ setup.last_sms ? date(setup.last_sms, true) : 'never' }}</b>.</p>
                 <details class="mt-3 text-xs text-ink-500">
                     <summary class="cursor-pointer font-semibold">Using another forwarder app instead?</summary>
                     <p class="mt-2">Send POST JSON <code>{"from": sender, "text": message}</code> to this private link:</p>

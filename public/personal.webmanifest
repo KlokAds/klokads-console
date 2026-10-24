@@ -1,6 +1,6 @@
 {
-    "name": "Klok Personal",
-    "short_name": "Personal",
+    "name": "MH-Pilot",
+    "short_name": "MH-Pilot",
     "description": "My money, dena-paona, invoices and reminders — private, works offline.",
     "id": "./personal",
     "start_url": "./personal",

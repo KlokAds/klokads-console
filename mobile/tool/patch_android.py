@@ -1,4 +1,4 @@
-"""Turns the android/ folder that `flutter create` makes into the Klok app: the package name,
+"""Turns the android/ folder that `flutter create` makes into the MH-Pilot app: the package name,
 signing (the same key every time, so a new APK installs over the old one), permissions, the
 SMS receiver, the wallet-notification listener and our Kotlin. Run from mobile/."""
 
@@ -71,13 +71,13 @@ patch(manifest, r'(\n(\s*)<activity)', r'''
             </intent-filter>
         </receiver>
         <receiver android:exported="false" android:name=".UpdateReceiver" />
-        <service android:name=".WalletListener" android:exported="false" android:label="Klok wallet alerts"
+        <service android:name=".WalletListener" android:exported="false" android:label="MH-Pilot wallet alerts"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>\1''')
-patch(manifest, r'android:label="[^"]*"', 'android:label="Klok"')
+patch(manifest, r'android:label="[^"]*"', 'android:label="MH-Bot"')
 # Tapping a notification brings the running app forward with its link (no second copy).
 patch(manifest, r'android:launchMode="[^"]*"', 'android:launchMode="singleTask"')
 patch(manifest, r'(<queries>)', r'''\1
@@ -98,12 +98,11 @@ for source in Path('android-src').glob('*.kt'):
 
 res = Path('android/app/src/main/res')
 (res / 'drawable').mkdir(parents=True, exist_ok=True)
-# The K in white on nothing: Android tints small notification icons itself.
+# The MH mark in white on nothing: Android tints small notification icons itself.
 (res / 'drawable' / 'ic_notification.xml').write_text('''<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="64" android:viewportHeight="64">
-    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="7" android:strokeLineCap="round" android:strokeLineJoin="round"
-        android:pathData="M21,16L21,48M21,34L34,17M27,28L38,48" />
-    <path android:fillColor="#FFFFFFFF" android:pathData="M45,20m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M12,44L12,21L20,33L28,21L28,44M37,21L37,44M51,21L51,44M37,32.5L51,32.5" />
 </vector>
 ''', encoding='utf8')
 print('android patched')

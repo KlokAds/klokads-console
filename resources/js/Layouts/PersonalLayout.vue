@@ -1,5 +1,5 @@
 <script setup>
-import ApplicationLogo from '@/Components/ApplicationLogo.vue';
+import PilotLogo from '@/Components/Personal/PilotLogo.vue';
 import CommandPalette from '@/Components/CommandPalette.vue';
 import ConfirmDialog from '@/Components/ConfirmDialog.vue';
 import Icon from '@/Components/Icon.vue';
@@ -39,7 +39,7 @@ const active = (item) => item && !item.more && route().current(item.match);
 const moreActive = computed(() => NAV.slice(2).some((i) => i.route !== 'personal.invoices.index' && active(i)));
 
 const lock = () => router.post(route('personal.lock'));
-// Inside the Klok Android app: its own settings (SMS, wallet alerts, notifications).
+// Inside the MH-Pilot app: its own settings (SMS, wallet alerts, notifications).
 const inApp = typeof navigator !== 'undefined' && navigator.userAgent.includes('KlokApp');
 const appSettings = () => window.flutter_inappwebview?.callHandler('appSettings');
 onMounted(() => {
@@ -54,9 +54,9 @@ router.on('navigate', () => (more.value = false));
         <!-- Desktop rail -->
         <aside class="fixed inset-y-0 left-0 z-30 hidden w-[240px] flex-col border-r border-line/70 bg-surface/70 px-3 py-5 backdrop-blur-xl lg:flex">
             <Link :href="route('personal.dashboard')" class="mb-6 flex items-center gap-2.5 px-2">
-                <ApplicationLogo :size="32" />
+                <PilotLogo :size="32" />
                 <span>
-                    <span class="block font-display text-[15px] font-extrabold leading-none text-ink-900">Klok Personal</span>
+                    <span class="block font-display text-[15px] font-extrabold leading-none text-ink-900">MH-Pilot</span>
                     <span class="mt-1 block text-[11px] text-ink-500">Only you can see this</span>
                 </span>
             </Link>
@@ -86,7 +86,7 @@ router.on('navigate', () => (more.value = false));
             <header class="sticky top-0 z-20 border-b border-line/60 bg-canvas/80 backdrop-blur-xl">
                 <div class="mx-auto flex h-[64px] max-w-5xl items-center gap-2 px-4 sm:px-6">
                     <Link v-if="back" :href="route(back)" class="icon-btn -ml-1 lg:hidden"><Icon name="chevron" :size="18" class="rotate-90" /></Link>
-                    <Link v-else :href="route('personal.dashboard')" class="lg:hidden"><ApplicationLogo :size="30" /></Link>
+                    <Link v-else :href="route('personal.dashboard')" class="lg:hidden"><PilotLogo :size="30" /></Link>
                     <div class="min-w-0 flex-1 pl-1">
                         <h1 class="truncate font-display text-[17px] font-extrabold text-ink-900 sm:text-xl">{{ title }}</h1>
                         <p v-if="subtitle" class="hidden truncate text-xs text-ink-500 sm:block">{{ subtitle }}</p>
@@ -94,7 +94,7 @@ router.on('navigate', () => (more.value = false));
                     <slot name="actions" />
                     <CommandPalette mode="personal" />
                     <NotificationBell />
-                    <button v-if="inApp" class="icon-btn" title="Phone: messages, senders, settings" @click="appSettings"><Icon name="send" :size="18" /></button>
+                    <button v-if="inApp" class="icon-btn" title="App settings: lock, theme, messages, senders" @click="appSettings"><Icon name="cog" :size="18" /></button>
                     <button class="icon-btn lg:hidden" :title="`Theme: ${theme}`" @click="cycleTheme"><Icon :name="THEME_ICON[theme]" :size="18" /></button>
                     <button class="btn hidden bg-gradient-to-r from-teal-500 to-brand-600 text-white shadow-md shadow-teal-500/20 hover:brightness-110 sm:inline-flex lg:hidden" @click="quickAdd()"><Icon name="plus" :size="16" /> Add</button>
                 </div>

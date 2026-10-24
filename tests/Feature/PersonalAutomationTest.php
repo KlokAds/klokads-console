@@ -193,6 +193,15 @@ class PersonalAutomationTest extends TestCase
             ->where('accounts.1.guide', fn ($text) => str_contains($text, 'Rizon app')));
     }
 
+    public function test_a_test_notification_goes_to_the_feed_from_the_app_or_the_panel(): void
+    {
+        $this->postJson('/app/test/'.AutoEntries::token())->assertOk();
+        $this->postJson('/personal/app/test')->assertOk();
+        $this->postJson('/app/test/wrong')->assertNotFound();
+
+        $this->assertSame(2, AppNotification::where('title', '🔔 MH-Pilot test')->count());
+    }
+
     public function test_the_bell_shows_notifications_and_marks_them_read(): void
     {
         AppNotification::create(['kind' => 'credit', 'title' => '💰 bKash +৳500']);

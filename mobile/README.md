@@ -1,4 +1,4 @@
-# Klok — Android app
+# MH-Pilot — Android app
 
 The console (personal side first, business one tap away) inside a Flutter app, plus what only a
 phone can do:

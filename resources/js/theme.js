@@ -22,13 +22,35 @@ export function isDark() {
     return document.documentElement.classList.contains('dark');
 }
 
+// Inside the phone app the WebView may not see the phone's dark mode: the app tells us.
+let appSystemDark = null;
+const systemDark = () => appSystemDark ?? !!media?.matches;
+
 export function applyTheme() {
-    const dark = !forcedLight() && (theme.value === 'dark' || (theme.value === 'system' && media?.matches));
+    const dark = !forcedLight() && (theme.value === 'dark' || (theme.value === 'system' && systemDark()));
     if (dark !== isDark()) {
         document.documentElement.classList.toggle('dark', dark);
         window.dispatchEvent(new Event('klok-theme'));
     }
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0a0d18' : '#0b1020');
+    tellApp(dark);
+}
+
+/** Inside the MH-Pilot app: the phone's status and navigation bars take the page's colour. */
+function tellApp(dark = isDark()) {
+    if (!window.flutter_inappwebview?.callHandler) return;
+    window.flutter_inappwebview.callHandler('theme', dark ? 'dark' : 'light', getComputedStyle(document.body).backgroundColor);
+}
+window.addEventListener('flutterInAppWebViewPlatformReady', () => tellApp());
+
+if (typeof window !== 'undefined') {
+    /** Called by the app: the phone's own light/dark, and (from its settings) my choice. */
+    window.klokSystemTheme = (dark) => {
+        appSystemDark = !!dark;
+        applyTheme();
+    };
+    window.klokSetTheme = (value) => setTheme(value);
+    window.klokTheme = () => theme.value;
 }
 
 export function setTheme(value) {

@@ -44,6 +44,7 @@ Route::get('/reminders/ping/{token}', [NotificationController::class, 'ping'])->
 // An Android SMS-forwarder app posts bank / wallet SMS here (secret token in the URL).
 Route::post('/inbox/sms/{token}', [InboxController::class, 'sms'])->middleware('throttle:120,1')->name('inbox.sms');
 Route::get('/app/feed/{token}', [PhoneAppController::class, 'feed'])->middleware('throttle:60,1')->name('app.feed');
+Route::post('/app/test/{token}', [PhoneAppController::class, 'test'])->middleware('throttle:10,1')->name('app.test');
 Route::match(['get', 'put'], '/app/config/{token}', [PhoneAppController::class, 'config'])->middleware('throttle:60,1')->name('app.config');
 Route::post('/hooks/app-release/{token}', [AppReleaseController::class, 'upload'])->middleware('throttle:10,1')->name('hooks.app-release');
 Route::get('/app/get', [AppReleaseController::class, 'get'])->middleware('throttle:10,1')->name('app.get');
@@ -97,6 +98,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/personal/feed', [NotificationFeedController::class, 'index'])->middleware('personal')->name('personal.feed');
     Route::post('/personal/feed/read', [NotificationFeedController::class, 'read'])->middleware('personal')->name('personal.feed.read');
     Route::post('/personal/app/pair', [PhoneAppController::class, 'pair'])->middleware('personal')->name('personal.app.pair');
+    Route::post('/personal/app/test', [PhoneAppController::class, 'test'])->middleware(['personal', 'throttle:10,1'])->name('personal.app.test');
     Route::get('/app/latest', [AppReleaseController::class, 'latest'])->middleware('throttle:30,1')->name('app.latest');
     Route::get('/personal/activity', PersonalActivityController::class)->middleware('personal')->name('personal.activity');
     Route::get('/personal/quick', PersonalQuickController::class)->middleware('personal')->name('personal.quick');

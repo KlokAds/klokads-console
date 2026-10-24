@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'lock.dart';
 import 'main.dart';
 
 // ---------------------------------------------------------------------------
@@ -121,7 +122,7 @@ class _PhonePageState extends State<PhonePage> {
       initialIndex: widget.tab,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Phone', style: TextStyle(fontWeight: FontWeight.w800)),
+          title: const Text('MH-Pilot', style: TextStyle(fontWeight: FontWeight.w800)),
           bottom: const TabBar(tabs: [Tab(text: 'Messages'), Tab(text: 'Senders'), Tab(text: 'Settings')]),
         ),
         body: TabBarView(
@@ -182,13 +183,13 @@ class _MessagesTabState extends State<MessagesTab> {
     return switch (m['state']) {
       'pending' => (text: 'Waiting for internet', color: const Color(0xFFB45309)),
       'failed' => (text: '${m['error'] ?? 'Failed'}', color: const Color(0xFFE11D48)),
-      'skipped' => (text: '${m['note'] ?? 'Not a transaction'}', color: Colors.black45),
+      'skipped' => (text: '${m['note'] ?? 'Not a transaction'}', color: Colors.grey),
       _ => switch (m['result']) {
           'added' => (text: account != null ? 'Added to $account${(m['note'] as String?)?.isNotEmpty == true ? ' · ${m['note']}' : ''}' : 'Added', color: const Color(0xFF047857)),
           'matched' => (text: '${m['note'] ?? 'Invoice paid'}', color: const Color(0xFF047857)),
           'review' => (text: 'Needs a look: ${m['note'] ?? 'which account?'}', color: const Color(0xFFB45309)),
-          'ignored' => (text: '${m['note'] ?? 'Already recorded'}', color: Colors.black54),
-          'skipped' => (text: 'Not a transaction', color: Colors.black45),
+          'ignored' => (text: '${m['note'] ?? 'Already recorded'}', color: Colors.grey),
+          'skipped' => (text: 'Not a transaction', color: Colors.grey),
           _ => (text: 'Sent', color: const Color(0xFF047857)),
         },
     };
@@ -249,7 +250,7 @@ class _MessagesTabState extends State<MessagesTab> {
       final at = (m['at'] as num).toInt();
       final d = day(at);
       if (d != lastDay) {
-        rows.add(Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 6), child: Text(d, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.black54))));
+        rows.add(Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 6), child: Text(d, style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.grey))));
         lastDay = d;
       }
       final look = stateLook[m['state']] ?? stateLook['sent']!;
@@ -257,7 +258,7 @@ class _MessagesTabState extends State<MessagesTab> {
       rows.add(Card(
         margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
         elevation: 0,
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
@@ -265,7 +266,7 @@ class _MessagesTabState extends State<MessagesTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Icon(m['source'] == 'app' ? Icons.notifications_outlined : Icons.sms_outlined, size: 16, color: Colors.black45),
+                Icon(m['source'] == 'app' ? Icons.notifications_outlined : Icons.sms_outlined, size: 16, color: Colors.grey),
                 const SizedBox(width: 6),
                 Expanded(child: Text('${m['from']}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5))),
                 Container(
@@ -275,11 +276,11 @@ class _MessagesTabState extends State<MessagesTab> {
                 ),
               ]),
               const SizedBox(height: 6),
-              Text('${m['text']}', maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black87, height: 1.35)),
+              Text('${m['text']}', maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.35)),
               const SizedBox(height: 8),
               Row(children: [
                 Expanded(child: Text(result.text, style: TextStyle(color: result.color, fontSize: 12.5, fontWeight: FontWeight.w600))),
-                Text(time(at), style: const TextStyle(color: Colors.black38, fontSize: 12)),
+                Text(time(at), style: const TextStyle(color: Colors.grey, fontSize: 12)),
                 if (m['state'] == 'failed' || m['state'] == 'pending') ...[
                   const SizedBox(width: 8),
                   TextButton.icon(
@@ -344,7 +345,7 @@ class _MessagesTabState extends State<MessagesTab> {
           if (shown.isEmpty)
             const Padding(
               padding: EdgeInsets.all(40),
-              child: Text('এখনো কিছু নেই। Bank বা bKash-এর SMS এলে এখানে দেখাবে — কোনটা গেছে, কোথায় যোগ হলো।', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
+              child: Text('এখনো কিছু নেই। Bank বা bKash-এর SMS এলে এখানে দেখাবে — কোনটা গেছে, কোথায় যোগ হলো।', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
             ),
           ...rows,
         ],
@@ -445,7 +446,7 @@ class _SendersTabState extends State<SendersTab> {
           if (type == 'app')
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text('এদের notification থেকে টাকা আসা-যাওয়া নেওয়া হয় — Settings-এ "Notification access" চালু থাকতে হবে।', style: TextStyle(color: Colors.black54, fontSize: 12.5)),
+              child: Text('এদের notification থেকে টাকা আসা-যাওয়া নেওয়া হয় — Settings-এ "Notification access" চালু থাকতে হবে।', style: TextStyle(color: Colors.grey, fontSize: 12.5)),
             ),
           for (final s in shown)
             Dismissible(
@@ -459,7 +460,7 @@ class _SendersTabState extends State<SendersTab> {
               child: SwitchListTile(
                 value: s.on,
                 title: Text(s.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(s.on ? 'চালু — হিসাবে যাচ্ছে' : 'বন্ধ', style: TextStyle(color: s.on ? const Color(0xFF047857) : Colors.black45)),
+                subtitle: Text(s.on ? 'চালু — হিসাবে যাচ্ছে' : 'বন্ধ', style: TextStyle(color: s.on ? const Color(0xFF047857) : Colors.grey)),
                 onChanged: saving
                     ? null
                     : (v) {
@@ -471,7 +472,7 @@ class _SendersTabState extends State<SendersTab> {
           if (shown.isEmpty) const Padding(padding: EdgeInsets.all(32), child: Text('এখানে কিছু নেই — Add চাপুন।', textAlign: TextAlign.center)),
           const Padding(
             padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
-            child: Text('বাম দিকে টানলে মুছে যাবে। এই তালিকা admin panel-এর Auto entries › Setup-এও একই।', style: TextStyle(color: Colors.black45, fontSize: 12)),
+            child: Text('বাম দিকে টানলে মুছে যাবে। এই তালিকা admin panel-এর Auto entries › Setup-এও একই।', style: TextStyle(color: Colors.grey, fontSize: 12)),
           ),
         ],
       ),
@@ -499,7 +500,9 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
   bool notify = false;
   bool wallet = false;
   bool battery = false;
-  bool lock = false;
+  String lockMode = 'off';
+  int lockAfter = 1;
+  String theme = 'system';
   DateTime? lastSent;
   String version = '';
 
@@ -532,7 +535,9 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
       notify: await Permission.notification.isGranted,
       wallet: await nativeChannel.invokeMethod<bool>('walletAccess') ?? false,
       battery: await nativeChannel.invokeMethod<bool>('batteryFree') ?? false,
-      lock: await Lock.on(),
+      lockMode: await Lock.mode(),
+      lockAfter: await Lock.after(),
+      theme: await widget.site.theme(),
     );
     if (!mounted) return;
     setState(() {
@@ -541,7 +546,9 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
       notify = values.notify;
       wallet = values.wallet;
       battery = values.battery;
-      lock = values.lock;
+      lockMode = values.lockMode;
+      lockAfter = values.lockAfter;
+      theme = values.theme;
       lastSent = last != null ? DateTime.fromMillisecondsSinceEpoch(last) : null;
       version = '${info.version} (${info.buildNumber})';
     });
@@ -557,6 +564,40 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
       subtitle: Text(text),
       trailing: ok || action == null ? null : FilledButton.tonal(onPressed: onTap, child: Text(action)),
     );
+  }
+
+  /// Changing the lock asks for the current one first.
+  Future<void> changeLock(String next) async {
+    if (next == lockMode || !await confirmIdentity(context, 'Lock বদলাতে')) return;
+    var ok = true;
+    if (next == 'bio') ok = await Lock.finger('আঙুলের ছাপ চালু করতে');
+    if (next == 'pin' && mounted) ok = await newPin(context);
+    if (!ok) return;
+    await Lock.setMode(next);
+    setState(() => lockMode = next);
+  }
+
+  /// From the server, through the feed, to this phone: proves the whole chain.
+  Future<void> testNotification() async {
+    final prefs = await SharedPreferences.getInstance();
+    final config = prefs.getString('config.url');
+    final messenger = ScaffoldMessenger.of(context);
+    if (config == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('আগে যুক্ত হতে হবে — personal side খুলুন।')));
+      return;
+    }
+    if (!await Permission.notification.isGranted && !(await Permission.notification.request()).isGranted) {
+      messenger.showSnackBar(const SnackBar(content: Text('Notification-এর অনুমতি নেই — উপরে দিন।')));
+      return;
+    }
+    try {
+      final res = await http.post(Uri.parse(config.replaceFirst('/app/config/', '/app/test/')), headers: {'Accept': 'application/json'}).timeout(const Duration(seconds: 12));
+      if (res.statusCode != 200) throw Exception('${res.statusCode}');
+      await nativeChannel.invokeMethod('poll');
+      messenger.showSnackBar(const SnackBar(content: Text('পাঠানো হলো — কয়েক সেকেন্ডে notification আসবে।')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Server-এ পৌঁছানো গেল না ($e)।')));
+    }
   }
 
   Future<void> addWord() async {
@@ -587,6 +628,66 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
             padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
             child: Text('নিচের সবগুলো চালু থাকলে bank SMS আর wallet-এর টাকা নিজে থেকে হিসাবে উঠবে, আর প্রতিটা credit/debit আর reminder phone-এ আসবে।'),
           ),
+        const _Heading('Security'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'off', label: Text('বন্ধ'), icon: Icon(Icons.lock_open)),
+              ButtonSegment(value: 'bio', label: Text('আঙুলের ছাপ'), icon: Icon(Icons.fingerprint)),
+              ButtonSegment(value: 'pin', label: Text('PIN'), icon: Icon(Icons.pin_outlined)),
+            ],
+            selected: {lockMode},
+            onSelectionChanged: (v) => changeLock(v.first),
+          ),
+        ),
+        if (lockMode != 'off') ...[
+          const Padding(padding: EdgeInsets.fromLTRB(20, 12, 20, 6), child: Text('বাইরে গেলে lock হবে', style: TextStyle(fontWeight: FontWeight.w600))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SegmentedButton<int>(
+              segments: [for (final a in Lock.afters.entries) ButtonSegment(value: a.key, label: Text(a.value))],
+              selected: {lockAfter},
+              onSelectionChanged: (v) async {
+                await Lock.setAfter(v.first);
+                setState(() => lockAfter = v.first);
+              },
+            ),
+          ),
+        ],
+        if (lockMode == 'pin')
+          ListTile(
+            leading: const Icon(Icons.password),
+            title: const Text('PIN বদলান'),
+            onTap: () async {
+              if (await confirmIdentity(context, 'PIN বদলাতে') && context.mounted && await newPin(context) && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('নতুন PIN রাখা হলো।')));
+              }
+            },
+          ),
+        const _Heading('Theme'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'system', label: Text('Phone-এর মতো'), icon: Icon(Icons.brightness_auto)),
+              ButtonSegment(value: 'light', label: Text('Light'), icon: Icon(Icons.light_mode_outlined)),
+              ButtonSegment(value: 'dark', label: Text('Dark'), icon: Icon(Icons.dark_mode_outlined)),
+            ],
+            selected: {theme},
+            onSelectionChanged: (v) async {
+              await widget.site.setTheme(v.first);
+              setState(() => theme = v.first);
+            },
+          ),
+        ),
+        const _Heading('Notifications'),
+        ListTile(
+          leading: const Icon(Icons.notifications_active_outlined),
+          title: const Text('Test notification পাঠান'),
+          subtitle: const Text('Server থেকে phone পর্যন্ত সব ঠিক আছে কিনা — কয়েক সেকেন্ডে আসবে'),
+          onTap: testNotification,
+        ),
         const _Heading('Permissions'),
         row(icon: Icons.link, title: 'আমার হিসাবের সাথে যুক্ত', text: paired ? 'Messages যাচ্ছে, notification আসছে' : 'Personal side খুলুন (PIN দিয়ে) — নিজে থেকে যুক্ত হবে', ok: paired),
         row(
@@ -603,7 +704,7 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
         row(
           icon: Icons.account_balance_wallet_outlined,
           title: 'Wallet app notification',
-          text: 'nSave, Rizon, Elevate Pay… — "Notification access"-এ Klok চালু করুন',
+          text: 'nSave, Rizon, Elevate Pay… — "Notification access"-এ MH-Pilot চালু করুন',
           ok: wallet,
           action: 'চালু করুন',
           onTap: () => nativeChannel.invokeMethod('openWalletAccess'),
@@ -627,23 +728,10 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
           action: 'বাদ দিন',
           onTap: () => nativeChannel.invokeMethod('openBattery'),
         ),
-        const _Heading('Security'),
-        SwitchListTile(
-          value: lock,
-          secondary: const Icon(Icons.fingerprint),
-          title: const Text('আঙুলের ছাপ দিয়ে খোলা', style: TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: const Text('খুললে আর ১ মিনিট বাইরে থাকলে'),
-          onChanged: (v) async {
-            if (await Lock.check(v ? 'Lock চালু করতে' : 'Lock বন্ধ করতে')) {
-              await Lock.set(v);
-              setState(() => lock = v);
-            }
-          },
-        ),
         const _Heading('Ignore words'),
         const Padding(
           padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-          child: Text('এই শব্দ থাকলে message কখনো যায় না (TrxID থাকলে ছাড়া)। Admin panel-এও একই।', style: TextStyle(color: Colors.black54, fontSize: 12.5)),
+          child: Text('এই শব্দ থাকলে message কখনো যায় না (TrxID থাকলে ছাড়া)। Admin panel-এও একই।', style: TextStyle(color: Colors.grey, fontSize: 12.5)),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -696,6 +784,6 @@ class _Heading extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
-        child: Text(text.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.1, color: Colors.black45)),
+        child: Text(text.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.1, color: Colors.grey)),
       );
 }

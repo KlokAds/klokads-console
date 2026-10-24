@@ -1,6 +1,6 @@
 name: Android app
 
-# Builds the Klok Android app (mobile/) in the cloud. Only when its version in
+# Builds the MH-Pilot Android app (mobile/) in the cloud. Only when its version in
 # mobile/pubspec.yaml is raised (a new +number), or by hand from the Actions tab: the pages
 # inside the app come from the site, so most changes need no new APK at all. The APK goes up
 # as a release and to the server, where the app finds it and installs it itself.
@@ -65,8 +65,8 @@ jobs:
         if: steps.version.outputs.build == 'yes'
         with:
           tag_name: klok-app-v${{ steps.version.outputs.number }}
-          name: Klok app ${{ steps.version.outputs.name }}
-          body: "Klok — my own Android app. Install over the earlier one; sign-in and settings stay."
+          name: MH-Pilot ${{ steps.version.outputs.name }}
+          body: "MH-Pilot — my own Android app. Install over the earlier one; sign-in and settings stay."
           files: mobile/klok.apk
           make_latest: true
 

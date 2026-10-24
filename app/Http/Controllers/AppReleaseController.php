@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * The Klok Android app's own updates. The pages inside it come from this site and are always
+ * The MH-Pilot Android app's own updates. The pages inside it come from this site and are always
  * new; only the phone side (SMS, notifications, lock) needs a new APK. GitHub builds it and
  * sends it here; the app asks whether there is a newer one and installs it itself.
  */

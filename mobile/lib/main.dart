@@ -1,4 +1,4 @@
-// Klok — my own app: the console (personal side first, business one tap away) inside, plus
+// MH-Pilot — my own app: the console (personal side first, business one tap away) inside, plus
 // what only a phone can do: read bank SMS and wallet-app notifications so money is booked by
 // itself, show every credit, debit and reminder as a phone notification, and let me see and
 // control all of it here (Phone: messages, senders, settings).
@@ -8,12 +8,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'lock.dart';
 import 'phone.dart';
 
 const site = 'https://console.klokads.com';
@@ -35,132 +35,13 @@ class KlokApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Klok',
+      title: 'MH-Pilot',
       debugShowCheckedModeBanner: false,
+      // The app follows the phone: light or dark.
+      themeMode: ThemeMode.system,
       theme: ThemeData(colorSchemeSeed: teal, useMaterial3: true, scaffoldBackgroundColor: const Color(0xFFF6F7FB)),
+      darkTheme: ThemeData(colorSchemeSeed: teal, useMaterial3: true, brightness: Brightness.dark, scaffoldBackgroundColor: const Color(0xFF0A0D18)),
       home: const LockGate(child: SitePage()),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// The lock. Off until I turn it on: after the first sign-in the app asks whether to use my
-// fingerprint. Once on, it asks every time the app opens and after a minute away.
-// ---------------------------------------------------------------------------
-
-class Lock {
-  static Future<bool> on() async => (await SharedPreferences.getInstance()).getBool('lock.on') ?? false;
-
-  static Future<void> set(bool value) async => (await SharedPreferences.getInstance()).setBool('lock.on', value);
-
-  /// My fingerprint, or the phone's own PIN/pattern behind it. A phone with no screen lock passes.
-  static Future<bool> check(String reason) async {
-    final auth = LocalAuthentication();
-    try {
-      if (!await auth.isDeviceSupported()) {
-        return true;
-      }
-      return await auth.authenticate(localizedReason: reason, options: const AuthenticationOptions(stickyAuth: true));
-    } on PlatformException catch (e) {
-      return e.code == 'NotAvailable' || e.code == 'PasscodeNotSet' || e.code == 'NotEnrolled';
-    }
-  }
-}
-
-class LockGate extends StatefulWidget {
-  const LockGate({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  State<LockGate> createState() => _LockGateState();
-}
-
-class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
-  bool locked = false;
-  bool asking = false;
-  DateTime? leftAt;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    Lock.on().then((on) {
-      if (on) {
-        setState(() => locked = true);
-        unlock();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) async {
-    // The fingerprint prompt itself sends the app to the background for a moment.
-    if (asking) {
-      return;
-    }
-    if (state == AppLifecycleState.paused) {
-      leftAt = DateTime.now();
-    } else if (state == AppLifecycleState.resumed && leftAt != null) {
-      final away = DateTime.now().difference(leftAt!);
-      leftAt = null;
-      if (away >= const Duration(minutes: 1) && await Lock.on()) {
-        setState(() => locked = true);
-        unlock();
-      }
-      unawaited(nativeChannel.invokeMethod('poll').catchError((_) => null));
-    }
-  }
-
-  Future<void> unlock() async {
-    if (asking) {
-      return;
-    }
-    asking = true;
-    final ok = await Lock.check('Klok খুলতে');
-    asking = false;
-    if (mounted) {
-      setState(() => locked = !ok);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        widget.child,
-        if (locked)
-          Positioned.fill(
-            child: Material(
-              color: ink,
-              child: SafeArea(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.fingerprint, size: 76, color: Color(0xFF5EEAD4)),
-                      const SizedBox(height: 18),
-                      const Text('Klok', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Colors.white)),
-                      const SizedBox(height: 28),
-                      FilledButton.icon(
-                        style: FilledButton.styleFrom(backgroundColor: teal, padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14)),
-                        onPressed: unlock,
-                        icon: const Icon(Icons.lock_open),
-                        label: const Text('খুলুন'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
     );
   }
 }
@@ -177,13 +58,34 @@ class SitePage extends StatefulWidget {
   State<SitePage> createState() => SitePageState();
 }
 
-class SitePageState extends State<SitePage> {
+class SitePageState extends State<SitePage> with WidgetsBindingObserver {
   InAppWebViewController? web;
   PullToRefreshController? refresh;
   double progress = 0;
   bool failed = false;
   bool pairing = false;
   DateTime? checkedUpdate;
+  // The page's own background: the phone's bars above and below take it (dark page, dark bars).
+  Color pageColor = ink;
+
+  void setBars(List<dynamic> args) {
+    final dark = args.isNotEmpty && args[0] == 'dark';
+    var color = dark ? ink : Colors.white;
+    final match = RegExp(r'rgba?\((\d+),\s*(\d+),\s*(\d+)').firstMatch(args.length > 1 ? '${args[1]}' : '');
+    if (match != null) {
+      color = Color.fromARGB(255, int.parse(match[1]!), int.parse(match[2]!), int.parse(match[3]!));
+    }
+    final icons = dark ? Brightness.light : Brightness.dark;
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      statusBarColor: color,
+      statusBarIconBrightness: icons,
+      systemNavigationBarColor: color,
+      systemNavigationBarIconBrightness: icons,
+    ));
+    if (mounted && color != pageColor) {
+      setState(() => pageColor = color);
+    }
+  }
 
   @override
   void initState() {
@@ -195,7 +97,28 @@ class SitePageState extends State<SitePage> {
       }
     });
     unawaited(Rules.sync());
+    WidgetsBinding.instance.addObserver(this);
   }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// The phone switched light/dark: the page follows (when its theme is "system").
+  @override
+  void didChangePlatformBrightness() => tellTheme();
+
+  void tellTheme() {
+    final dark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    web?.evaluateJavascript(source: 'window.klokSystemTheme && window.klokSystemTheme($dark)');
+  }
+
+  /// My theme choice from the app's settings: system, light or dark.
+  Future<String> theme() async => '${await web?.evaluateJavascript(source: "window.klokTheme ? window.klokTheme() : 'system'") ?? 'system'}';
+
+  Future<void> setTheme(String value) async => web?.evaluateJavascript(source: "window.klokSetTheme && window.klokSetTheme('$value')");
 
   void open(String url) {
     final target = url.startsWith('http') ? url : '$site${url.startsWith('/') ? '' : '/'}$url';
@@ -262,22 +185,35 @@ class SitePageState extends State<SitePage> {
     }
   }
 
-  /// Asked once, after the first sign-in: should Klok open with my fingerprint?
+  /// Asked once, after the first sign-in: how should the app open?
   Future<void> askLock() async {
-    final yes = await showDialog<bool>(
+    final choice = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.fingerprint, size: 40, color: teal),
-        title: const Text('আঙুলের ছাপ দিয়ে খুলবেন?'),
-        content: const Text('চালু করলে Klok খুলতে প্রতিবার আপনার আঙুলের ছাপ (বা phone-এর lock) লাগবে। পরে Phone › Settings থেকে বদলানো যায়।'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('এখন না')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('চালু করুন')),
-        ],
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 0, 24, 6),
+              child: Text('MH-Pilot কীভাবে খুলবে?', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
+              child: Text('পরে Phone › Settings › Security থেকে বদলাতে পারবেন।', style: TextStyle(color: Colors.grey)),
+            ),
+            ListTile(leading: const Icon(Icons.fingerprint), title: const Text('আঙুলের ছাপ'), subtitle: const Text('Phone-এর lock পিছনে থাকে'), onTap: () => Navigator.pop(context, 'bio')),
+            ListTile(leading: const Icon(Icons.pin_outlined), title: const Text('App-এর নিজের PIN'), subtitle: const Text('৪-৬ সংখ্যা'), onTap: () => Navigator.pop(context, 'pin')),
+            ListTile(leading: const Icon(Icons.lock_open), title: const Text('এখন না'), subtitle: const Text('Lock বন্ধ থাকবে'), onTap: () => Navigator.pop(context, 'off')),
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
-    if (yes == true && await Lock.check('Klok-এর lock চালু করতে')) {
-      await Lock.set(true);
+    if (choice == 'bio' && await Lock.finger('Lock চালু করতে')) {
+      await Lock.setMode('bio');
+    } else if (choice == 'pin' && mounted && await newPin(context)) {
+      await Lock.setMode('pin');
     }
   }
 
@@ -347,7 +283,7 @@ class SitePageState extends State<SitePage> {
         }
       },
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: pageColor,
         body: SafeArea(
           child: Stack(
             children: [
@@ -369,6 +305,7 @@ class SitePageState extends State<SitePage> {
                   web = controller;
                   // The site's "Phone app" button opens the native screens.
                   controller.addJavaScriptHandler(handlerName: 'appSettings', callback: (_) => openPhone());
+                  controller.addJavaScriptHandler(handlerName: 'theme', callback: setBars);
                   // Opened by tapping a notification: go straight to its page.
                   final first = await nativeChannel.invokeMethod<String>('launchUrl');
                   if (first != null && first.isNotEmpty) {
@@ -401,6 +338,13 @@ class SitePageState extends State<SitePage> {
                   if (failed) {
                     setState(() => failed = false);
                   }
+                  tellTheme();
+                  // Pages without the site's theme code (sign-in) still colour the bars.
+                  final look = await controller.evaluateJavascript(
+                      source: "[document.documentElement.classList.contains('dark') ? 'dark' : 'light', getComputedStyle(document.body).backgroundColor]");
+                  if (look is List) {
+                    setBars(look);
+                  }
                   await pair(url);
                   unawaited(checkUpdate());
                   unawaited(nativeChannel.invokeMethod('poll').catchError((_) => null));
@@ -416,7 +360,7 @@ class SitePageState extends State<SitePage> {
               if (failed)
                 Positioned.fill(
                   child: ColoredBox(
-                    color: Colors.white,
+                    color: pageColor,
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(28),

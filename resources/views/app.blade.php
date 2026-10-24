@@ -17,7 +17,7 @@
 
         <title inertia>{{ config('app.name', 'Klok Ads') }}</title>
         <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
-        {{-- Installed from the personal side it becomes its own app: "Klok Personal". --}}
+        {{-- Installed from the personal side it becomes its own app: "MH-Pilot". --}}
         <link rel="manifest" href="{{ asset(str_starts_with($page['component'] ?? '', 'Personal/') ? 'personal.webmanifest' : 'manifest.webmanifest') }}">
         <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
         <meta name="apple-mobile-web-app-capable" content="yes">
