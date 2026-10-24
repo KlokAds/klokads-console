@@ -69,8 +69,9 @@ const ago = (iso) => {
 };
 const beatAgo = computed(() => ago(props.cron.heartbeat_at));
 const pingAgo = computed(() => ago(props.cron.last_ping));
-const beatHealthy = computed(() => props.cron.heartbeat_at && Date.now() - new Date(props.cron.heartbeat_at) < 6 * 3600e3);
+const beatHealthy = computed(() => props.cron.heartbeat_at && Date.now() - new Date(props.cron.heartbeat_at) < 20 * 60000);
 const showBackup = ref(false);
+const wokeHealthy = computed(() => props.cron.woke_at && Date.now() - new Date(props.cron.woke_at) < 15 * 60000);
 </script>
 
 <template>
@@ -190,7 +191,12 @@ const showBackup = ref(false);
                         <span class="badge" :class="beatHealthy ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ beatHealthy ? 'Working' : 'Waiting for a visit' }}</span>
                     </div>
                     <p class="mt-2 text-sm text-ink-600">Reminders, alert emails, monthly invoices and Meta billing run by themselves every 5 minutes whenever the app is used — a page open, an SMS forwarded, a Stripe update. No outside cron needed.</p>
-                    <p class="mt-2 text-xs text-ink-500">Last run: <b>{{ beatAgo ?? 'not yet' }}</b>. If nothing touches the app around 9 pm, the night reminder goes out with the next visit or SMS.</p>
+                    <p class="mt-2 text-xs text-ink-500">
+                        Last run: <b>{{ beatAgo ?? 'not yet' }}</b> ·
+                        <template v-if="wokeHealthy">self-wake <b class="text-emerald-700">on</b> (last {{ ago(cron.woke_at) }}) — runs every 5 minutes even with no visits.</template>
+                        <template v-else-if="cron.chain && cron.chain.startsWith('off')">self-wake is blocked on this server ({{ cron.chain }}); jobs run with each visit or SMS.</template>
+                        <template v-else>self-wake starts with the next visit.</template>
+                    </p>
                     <button type="button" class="btn-link mt-2 text-xs" @click="showBackup = !showBackup">{{ showBackup ? 'Hide' : 'Exact times every day? Optional backup' }}</button>
                     <div v-if="showBackup" class="mt-2">
                         <p class="text-xs text-ink-600">Any free uptime / cron service (e.g. cron-job.org) can call this link every 5 minutes to keep times exact:</p>

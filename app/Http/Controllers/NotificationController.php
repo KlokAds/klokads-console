@@ -32,6 +32,8 @@ class NotificationController extends Controller
                 'url' => route('reminders.ping', PushNotifier::cronToken()),
                 'last_ping' => Setting::get('cron_last_ping'),
                 'heartbeat_at' => Setting::get('heartbeat_at'),
+                'woke_at' => Setting::get('heartbeat_woke_at'),
+                'chain' => Setting::get('heartbeat_chain'),
             ],
         ]);
     }
@@ -99,12 +101,23 @@ class NotificationController extends Controller
     }
 
     /** cron-job.org calls this every few minutes; it sends whatever is due. */
-    /** Optional outside trigger (e.g. cron-job.org) — the app already runs this itself. */
-    public function ping(string $token, Heartbeat $heartbeat): JsonResponse
+    /**
+     * The app's own wake-up call (and an optional outside trigger, e.g. cron-job.org):
+     * run what is due, then leave the next wake-up.
+     */
+    public function ping(Request $request, string $token, Heartbeat $heartbeat): JsonResponse
     {
         abort_unless(hash_equals(PushNotifier::cronToken(), $token), 404);
-        Setting::put('cron_last_ping', now()->toIso8601String());
 
-        return response()->json(['ok' => true] + ($heartbeat->maybeRun() ?? ['skipped' => 'ran less than 5 minutes ago']));
+        if ($request->boolean('wake')) {
+            $heartbeat->woke();
+        } else {
+            Setting::put('cron_last_ping', now()->toIso8601String());
+        }
+
+        $result = $heartbeat->maybeRun() ?? ['skipped' => 'ran less than 4 minutes ago'];
+        $heartbeat->scheduleNext();
+
+        return response()->json(['ok' => true] + $result);
     }
 }

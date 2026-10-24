@@ -7,6 +7,7 @@ use App\Models\Setting;
 use App\Services\EmailInbox;
 use App\Services\Heartbeat;
 use App\Services\PersonalInvoicing;
+use App\Services\PushNotifier;
 use App\Services\Reminders;
 use App\Services\SpendBilling;
 use Illuminate\Contracts\Http\Kernel;
@@ -50,5 +51,21 @@ class HeartbeatTest extends TestCase
     {
         $this->assertContains(RunHeartbeat::class, app(Kernel::class)->getMiddlewareGroups()['web']);
         $this->assertTrue(method_exists(RunHeartbeat::class, 'terminate'), 'runs after the response is sent');
+    }
+
+    public function test_wake_up_call_runs_jobs_and_is_never_doubled(): void
+    {
+        $this->mock(Reminders::class, fn (MockInterface $m) => $m->shouldReceive('run')->andReturn(['sent' => 0, 'checked' => 0]));
+        $this->mock(SpendBilling::class, fn (MockInterface $m) => $m->shouldReceive('runAll')->andReturn([]));
+        $this->mock(EmailInbox::class, fn (MockInterface $m) => $m->shouldReceive('poll')->andReturn(0));
+        $this->mock(PersonalInvoicing::class, fn (MockInterface $m) => $m->shouldReceive('runRecurring')->andReturn(0));
+
+        $url = '/reminders/ping/'.PushNotifier::cronToken();
+        $this->getJson($url.'?wake=1')->assertOk()->assertJsonPath('reminders.checked', 0);
+        $this->assertNotNull(Setting::get('heartbeat_woke_at'));
+        $this->assertNull(Setting::get('cron_last_ping'), 'a wake-up is not an outside ping');
+
+        $this->getJson($url.'?wake=1')->assertOk()->assertJsonPath('skipped', 'ran less than 4 minutes ago');
+        $this->assertFalse(Heartbeat::canWake(), 'no background commands in tests');
     }
 }

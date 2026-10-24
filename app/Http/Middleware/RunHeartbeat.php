@@ -28,6 +28,9 @@ class RunHeartbeat
         }
 
         ignore_user_abort(true);
-        app(Heartbeat::class)->maybeRun();
+        $heartbeat = app(Heartbeat::class);
+        $heartbeat->maybeRun();
+        // Watchdog: if the wake-up chain has stopped, this visit starts it again.
+        $heartbeat->scheduleNext();
     }
 }

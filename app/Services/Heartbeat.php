@@ -8,19 +8,25 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Everything that has to happen on its own — the app's built-in clock:
- * morning / night reminders, Meta spend + auto-charge / top-ups, alert emails,
- * monthly personal invoices. Runs right after a page or webhook is served
- * (at most every 5 minutes), so no outside cron is needed.
+ * The app's built-in clock — reminders, Meta billing, alert emails, monthly invoices.
+ *
+ * It keeps itself going: after each run it leaves a small wake-up on the server
+ * ("call me again in 5 minutes"), so jobs run on time even when nobody opens the app.
+ * If that chain ever breaks (server restart), the next page visit, SMS or webhook
+ * runs the jobs and starts a new chain — so nothing is missed for long.
  */
 class Heartbeat
 {
-    public const EVERY_MINUTES = 5;
+    /** Jobs run at most this often. */
+    public const EVERY_SECONDS = 240;
 
-    /** Run if the last run was more than 5 minutes ago. */
+    /** The wake-up calls back after this long. */
+    public const WAKE_AFTER_SECONDS = 300;
+
+    /** Run if the last run was long enough ago. */
     public function maybeRun(): ?array
     {
-        if (! Cache::add('heartbeat', 1, now()->addMinutes(self::EVERY_MINUTES))) {
+        if (! Cache::add('heartbeat', 1, self::EVERY_SECONDS)) {
             return null;
         }
 
@@ -50,5 +56,50 @@ class Heartbeat
         Setting::put('heartbeat_at', now()->toIso8601String());
 
         return $result;
+    }
+
+    /**
+     * Leave the next wake-up, unless one is already waiting. Returns true when one was set.
+     * The wake-up is a tiny background `sleep; curl` on the server that calls the ping URL.
+     */
+    public function scheduleNext(): bool
+    {
+        if (! self::canWake() || ! Cache::add('heartbeat-next', now()->timestamp + self::WAKE_AFTER_SECONDS, self::WAKE_AFTER_SECONDS + 60)) {
+            return false;
+        }
+
+        $url = route('reminders.ping', ['token' => PushNotifier::cronToken(), 'wake' => 1]);
+        $command = sprintf('nohup sh -c %s >/dev/null 2>&1 &', escapeshellarg('sleep '.self::WAKE_AFTER_SECONDS.'; curl -fsS -m 150 '.escapeshellarg($url).' >/dev/null 2>&1'));
+
+        try {
+            exec($command);
+            Setting::put('heartbeat_chain', 'on');
+
+            return true;
+        } catch (Throwable $e) {
+            Cache::forget('heartbeat-next');
+            Setting::put('heartbeat_chain', 'off: '.mb_substr($e->getMessage(), 0, 120));
+
+            return false;
+        }
+    }
+
+    /** The wake-up arrived: it is no longer pending, so the next one can be set. */
+    public function woke(): void
+    {
+        Cache::forget('heartbeat-next');
+        Setting::put('heartbeat_woke_at', now()->toIso8601String());
+    }
+
+    /** Linux server with background commands allowed (not on Windows dev machines, not in tests). */
+    public static function canWake(): bool
+    {
+        if (app()->runningUnitTests() || PHP_OS_FAMILY === 'Windows' || ! function_exists('exec')) {
+            return false;
+        }
+
+        $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
+
+        return ! in_array('exec', $disabled, true);
     }
 }
