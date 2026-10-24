@@ -148,7 +148,7 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
   /// On the unlocked personal side, once: the URLs, then permissions, then (if I want) the lock.
   Future<void> pair(WebUri? url) async {
     final prefs = await SharedPreferences.getInstance();
-    final paired = prefs.getString('feed.url') != null && prefs.getString('config.url') != null && prefs.getString('inbox.error') == null;
+    final paired = prefs.getString('feed.url') != null && prefs.getString('config.url') != null && prefs.getString('followups.url') != null && prefs.getString('inbox.error') == null;
     if (paired || pairing || url == null || url.host != Uri.parse(site).host) {
       return;
     }
@@ -166,6 +166,7 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
       await prefs.setString('inbox.url', body['inbox'] as String);
       await prefs.setString('feed.url', body['feed'] as String);
       await prefs.setString('config.url', body['config'] as String);
+      await prefs.setString('followups.url', body['followups'] as String);
       if (first) {
         await prefs.setInt('feed.last', (body['last_id'] as num?)?.toInt() ?? 0);
       }
@@ -177,7 +178,7 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
         await Permission.notification.request();
         await Permission.sms.request();
         if (mounted) {
-          await openPhone(tab: 2, firstTime: true);
+          await openPhone(tab: 3, firstTime: true);
         }
       }
     } finally {

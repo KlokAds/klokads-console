@@ -46,6 +46,7 @@ class Heartbeat
             'personal_invoices' => fn () => app(PersonalInvoicing::class)->runRecurring(),
             'personal_reminders' => fn () => app(PersonalReminders::class)->run(),
             'envelopes' => fn () => app(Envelopes::class)->remindDue(),
+            'follow_ups' => fn () => app(FollowUps::class)->run(),
         ] as $job => $task) {
             try {
                 $result[$job] = $task();

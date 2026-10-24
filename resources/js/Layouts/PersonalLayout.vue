@@ -28,15 +28,16 @@ const NAV = [
     { name: 'Home', route: 'personal.dashboard', match: 'personal.dashboard', icon: 'home' },
     { name: 'Activity', route: 'personal.activity', match: 'personal.activity', icon: 'flow' },
     { name: 'Plan', route: 'personal.plan', match: 'personal.plan', icon: 'chart', hint: 'Budgets, goals, bills' },
+    { name: 'Follow-ups', route: 'personal.followups.index', match: 'personal.followups.*', icon: 'bell', hint: 'Unseen messages, missed calls' },
     { name: 'Dena-paona', route: 'personal.loans.index', match: 'personal.loans.*', icon: 'users' },
     { name: 'Invoices', route: 'personal.invoices.index', match: 'personal.invoices.*', icon: 'invoice' },
     { name: 'Auto entries', route: 'personal.inbox.index', match: 'personal.inbox.*', icon: 'bolt' },
     { name: 'Reminders & lock', route: 'notifications.index', match: 'notifications.*', icon: 'clock' },
 ];
-const TABS = [NAV[0], NAV[1], null, NAV[4], { name: 'More', icon: 'menu', more: true }];
+const TABS = [NAV[0], NAV[1], null, NAV[3], { name: 'More', icon: 'menu', more: true }];
 const THEME_ICON = { light: 'sun', dark: 'moon', system: 'monitor' };
 const active = (item) => item && !item.more && route().current(item.match);
-const moreActive = computed(() => NAV.slice(2).some((i) => i.route !== 'personal.invoices.index' && active(i)));
+const moreActive = computed(() => NAV.slice(2).some((i) => i.route !== 'personal.followups.index' && active(i)));
 
 const lock = () => router.post(route('personal.lock'));
 // Inside the MH-Bot app: its own settings (SMS, wallet alerts, notifications).

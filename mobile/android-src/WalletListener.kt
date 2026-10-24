@@ -10,6 +10,10 @@ import android.service.notification.StatusBarNotification
  * this after I turn on "Notification access" for Klok in the phone's settings.
  */
 class WalletListener : NotificationListenerService() {
+    override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap, reason: Int) {
+        FollowUps.onRemoved(this, sbn, reason)
+    }
+
     companion object {
         /** Words in a wallet app's package or name; set from the app (Settings), these by default. */
         val DEFAULT_APPS = listOf("nsave", "rizon", "elevatepay", "worldfirst", "airwallex", "payoneer")
@@ -22,7 +26,15 @@ class WalletListener : NotificationListenerService() {
             ?: DEFAULT_APPS
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        if (sbn.packageName == packageName || Forwarder.url(this) == null) {
+        if (sbn.packageName == packageName) {
+            return
+        }
+        // WhatsApp / Messenger / IMO: work follow-ups, not money.
+        if (FollowUps.CHAT_APPS.containsKey(sbn.packageName)) {
+            FollowUps.onPosted(this, sbn)
+            return
+        }
+        if (Forwarder.url(this) == null) {
             return
         }
         val label = try {

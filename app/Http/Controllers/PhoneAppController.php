@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\AppNotification;
+use App\Models\FollowUp;
 use App\Services\AutoEntries;
+use App\Services\FollowUps;
 use App\Services\Notify;
 use App\Services\PersonalReminders;
 use App\Support\InboxRules;
@@ -27,6 +29,7 @@ class PhoneAppController extends Controller
             'feed' => route('app.feed', ['token' => AutoEntries::token()]),
             'inbox' => route('inbox.sms', ['token' => AutoEntries::token()]),
             'config' => route('app.config', ['token' => AutoEntries::token()]),
+            'followups' => route('app.followups', ['token' => AutoEntries::token()]),
             'last_id' => (int) AppNotification::max('id'),
         ]);
     }
@@ -65,6 +68,53 @@ class PhoneAppController extends Controller
         $note = $notify->send('info', '🔔 MH-Bot test', 'If this is on your phone, notifications work. Sent '.now()->setTimezone(PersonalReminders::timezone())->format('g:i a').'.', route('personal.dashboard'), 'klok-test');
 
         return response()->json(['ok' => true, 'id' => $note->id]);
+    }
+
+    /** Chat notifications and calls from the phone: new, seen, called back. Sent in batches. */
+    public function followUps(Request $request, FollowUps $followUps, string $token): JsonResponse
+    {
+        abort_unless(hash_equals(AutoEntries::token(), $token), 404);
+        $data = $request->validate([
+            'events' => ['required', 'array', 'max:100'],
+            'events.*.action' => ['required', 'in:new,seen,called_back'],
+            'events.*.source' => ['required', 'in:'.implode(',', array_keys(FollowUps::SOURCES))],
+            'events.*.kind' => ['nullable', 'in:message,missed_call'],
+            'events.*.person' => ['nullable', 'string', 'max:190'],
+            'events.*.phone' => ['nullable', 'string', 'max:30'],
+            'events.*.text' => ['nullable', 'string', 'max:2000'],
+            'events.*.at' => ['nullable', 'integer'],
+        ]);
+        foreach ($data['events'] as $event) {
+            $followUps->record($event);
+        }
+
+        return response()->json(['ok' => true, 'open' => FollowUp::open()->count()]);
+    }
+
+    /** The follow-ups list for the app's own screen. */
+    public function followUpList(FollowUps $followUps, string $token): JsonResponse
+    {
+        abort_unless(hash_equals(AutoEntries::token(), $token), 404);
+
+        return response()->json([
+            'open' => FollowUp::open()->latest('last_at')->limit(100)->get()->map(fn ($f) => $followUps->row($f)),
+            'closed' => FollowUp::where(fn ($q) => $q->whereNotNull('seen_at')->orWhereNotNull('done_at'))->latest('updated_at')->limit(30)->get()->map(fn ($f) => $followUps->row($f)),
+            'sources' => FollowUps::SOURCES,
+        ]);
+    }
+
+    /** Done / later / note — from the app's screen or the buttons on the phone notification. */
+    public function followUpAction(Request $request, FollowUps $followUps, string $token, FollowUp $followUp, string $action): JsonResponse
+    {
+        abort_unless(hash_equals(AutoEntries::token(), $token), 404);
+        match ($action) {
+            'done' => $followUps->done($followUp),
+            'later' => $followUps->later($followUp, (int) ($request->validate(['minutes' => ['nullable', 'integer', 'in:30,60,180,1440']])['minutes'] ?? 60)),
+            'note' => $followUp->update($request->validate(['note' => ['nullable', 'string', 'max:500']])),
+            default => abort(404),
+        };
+
+        return response()->json(['ok' => true, 'item' => $followUps->row($followUp->fresh())]);
     }
 
     /** New notifications since the last one the phone showed. */

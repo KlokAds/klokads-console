@@ -34,6 +34,7 @@ class MainActivity : FlutterFragmentActivity() {
                     "poll" -> {
                         Feed.pollSoon(this@MainActivity)
                         Forwarder.schedule(this@MainActivity)
+                        Thread { try { FollowUps.checkCalls(this@MainActivity) } catch (_: Exception) {} }.start()
                         result.success(null)
                     }
                     "pending" -> result.success(Forwarder.pending(this@MainActivity))

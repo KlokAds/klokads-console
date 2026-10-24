@@ -118,20 +118,191 @@ class _PhonePageState extends State<PhonePage> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       initialIndex: widget.tab,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('MH-Bot', style: TextStyle(fontWeight: FontWeight.w800)),
-          bottom: const TabBar(tabs: [Tab(text: 'Messages'), Tab(text: 'Senders'), Tab(text: 'Settings')]),
+          bottom: const TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [Tab(text: 'Follow-ups'), Tab(text: 'Messages'), Tab(text: 'Senders'), Tab(text: 'Settings')]),
         ),
         body: TabBarView(
           children: [
+            const FollowUpsTab(),
             const MessagesTab(),
             const SendersTab(),
             SettingsTab(site: widget.site, firstTime: widget.firstTime),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Follow-ups: unseen messages and missed calls, what they're about, done / later / note.
+// ---------------------------------------------------------------------------
+
+class FollowUpsTab extends StatefulWidget {
+  const FollowUpsTab({super.key});
+
+  @override
+  State<FollowUpsTab> createState() => _FollowUpsTabState();
+}
+
+class _FollowUpsTabState extends State<FollowUpsTab> {
+  List<Map<String, dynamic>> open = [];
+  List<Map<String, dynamic>> closed = [];
+  Map<String, dynamic> sources = {};
+  bool showClosed = false;
+  bool loading = true;
+  String? error;
+
+  static const icons = {'whatsapp': '🟢', 'whatsapp_business': '🏢', 'messenger': '🔵', 'imo': '🟦', 'call': '📞'};
+
+  @override
+  void initState() {
+    super.initState();
+    load();
+  }
+
+  Future<String?> base() async => (await SharedPreferences.getInstance()).getString('followups.url');
+
+  Future<void> load() async {
+    final url = await base();
+    if (url == null) {
+      setState(() {
+        loading = false;
+        error = 'আগে যুক্ত হতে হবে — personal side খুলুন।';
+      });
+      return;
+    }
+    try {
+      final res = await http.get(Uri.parse(url), headers: {'Accept': 'application/json'}).timeout(const Duration(seconds: 12));
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        open = (data['open'] as List).cast<Map<String, dynamic>>();
+        closed = (data['closed'] as List).cast<Map<String, dynamic>>();
+        sources = data['sources'] as Map<String, dynamic>;
+        loading = false;
+        error = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          loading = false;
+          error = 'নেট নেই — পরে আবার টানুন।';
+        });
+      }
+    }
+  }
+
+  Future<void> act(Map<String, dynamic> f, String action, [Map<String, dynamic>? body]) async {
+    final url = await base();
+    if (url == null) return;
+    try {
+      await http.post(Uri.parse('$url/${f['id']}/$action'), headers: {'Accept': 'application/json', 'Content-Type': 'application/json'}, body: jsonEncode(body ?? {}));
+      await load();
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('নেট নেই — হলো না।')));
+    }
+  }
+
+  Future<void> note(Map<String, dynamic> f) async {
+    final controller = TextEditingController(text: f['note'] as String? ?? '');
+    final text = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${f['person']} — কী কাজ?'),
+        content: TextField(controller: controller, autofocus: true, maxLines: 3, decoration: const InputDecoration(hintText: 'যেমন invoice-এর ব্যাপারে')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('বাদ')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('রাখুন')),
+        ],
+      ),
+    );
+    if (text != null) await act(f, 'note', {'note': text});
+  }
+
+  String ago(String iso) {
+    final m = DateTime.now().difference(DateTime.parse(iso)).inMinutes;
+    if (m < 60) return '${m < 1 ? 1 : m} মি আগে';
+    if (m < 1440) return '${(m / 60).round()} ঘ আগে';
+    return '${(m / 1440).round()} দিন আগে';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final list = showClosed ? closed : open;
+    return RefreshIndicator(
+      onRefresh: load,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 32),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+            child: SegmentedButton<bool>(
+              segments: [ButtonSegment(value: false, label: Text('বাকি (${open.length})')), const ButtonSegment(value: true, label: Text('হয়ে গেছে'))],
+              selected: {showClosed},
+              onSelectionChanged: (v) => setState(() => showClosed = v.first),
+            ),
+          ),
+          if (loading) const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator())),
+          if (error != null) Padding(padding: const EdgeInsets.all(32), child: Text(error!, textAlign: TextAlign.center)),
+          if (!loading && error == null && list.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(40),
+              child: Text(showClosed ? 'এখনো কিছু নেই।' : '✅ কিছু বাকি নেই। না দেখা WhatsApp/Messenger/IMO message আর missed call এখানে আসবে।', textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+            ),
+          for (final f in list)
+            Card(
+              margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              elevation: 0,
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Text(icons[f['source']] ?? '💬', style: const TextStyle(fontSize: 20)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('${f['person']}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5)),
+                          Text(
+                            '${f['kind'] == 'missed_call' ? 'Missed call' : 'Unseen'} · ${sources[f['source']] ?? f['source']}${(f['count'] as num) > 1 ? ' · ${f['count']}×' : ''}',
+                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: f['kind'] == 'missed_call' ? const Color(0xFFB45309) : teal),
+                          ),
+                        ]),
+                      ),
+                      Text(ago(f['first_at'] as String), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    ]),
+                    if (f['preview'] != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('“${f['preview']}”', maxLines: 3, overflow: TextOverflow.ellipsis)),
+                    if (f['context'] != null)
+                      Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        decoration: BoxDecoration(color: teal.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                        child: Text('${f['context']}', style: const TextStyle(fontSize: 12.5)),
+                      ),
+                    if (f['note'] != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text('📝 ${f['note']}', style: const TextStyle(fontSize: 12.5))),
+                    const SizedBox(height: 4),
+                    Wrap(spacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      if (!showClosed) ...[
+                        FilledButton.tonal(onPressed: () => act(f, 'done'), child: const Text('Done')),
+                        TextButton(onPressed: () => act(f, 'later', {'minutes': 60}), child: const Text('১ ঘণ্টা পরে')),
+                        TextButton(onPressed: () => act(f, 'later', {'minutes': 1440}), child: const Text('কাল')),
+                      ] else
+                        TextButton(onPressed: () => act(f, 'later', {'minutes': 60}), child: const Text('আবার খুলুন')),
+                      IconButton(tooltip: 'Note', onPressed: () => note(f), icon: const Icon(Icons.edit_note)),
+                    ]),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -500,6 +671,9 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
   bool notify = false;
   bool wallet = false;
   bool battery = false;
+  static const followUpApps = {'whatsapp': 'WhatsApp', 'whatsapp_business': 'WhatsApp Business', 'messenger': 'Messenger', 'imo': 'IMO', 'call': 'Phone calls'};
+  Set<String> watching = {};
+  bool callLog = false;
   String lockMode = 'off';
   int lockAfter = 1;
   String theme = 'system';
@@ -535,6 +709,7 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
       notify: await Permission.notification.isGranted,
       wallet: await nativeChannel.invokeMethod<bool>('walletAccess') ?? false,
       battery: await nativeChannel.invokeMethod<bool>('batteryFree') ?? false,
+      callLog: await Permission.phone.isGranted,
       lockMode: await Lock.mode(),
       lockAfter: await Lock.after(),
       theme: await widget.site.theme(),
@@ -546,6 +721,8 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
       notify = values.notify;
       wallet = values.wallet;
       battery = values.battery;
+      callLog = values.callLog;
+      watching = (prefs.getString('followup.apps') ?? followUpApps.keys.join(',')).split(',').where((s) => s.isNotEmpty).toSet();
       lockMode = values.lockMode;
       lockAfter = values.lockAfter;
       theme = values.theme;
@@ -564,6 +741,19 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
       subtitle: Text(text),
       trailing: ok || action == null ? null : FilledButton.tonal(onPressed: onTap, child: Text(action)),
     );
+  }
+
+  /// Which apps follow-ups watch (the native side reads this list).
+  Future<void> setWatching(String key, bool on) async {
+    if (key == 'call' && on && !(await Permission.phone.request()).isGranted) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Call log-এর অনুমতি ছাড়া missed call দেখা যাবে না।')));
+      return;
+    }
+    final next = {...watching};
+    on ? next.add(key) : next.remove(key);
+    await (await SharedPreferences.getInstance()).setString('followup.apps', next.join(','));
+    setState(() => watching = next);
+    if (key == 'call' && on) await nativeChannel.invokeMethod('poll');
   }
 
   /// Changing the lock asks for the current one first.
@@ -681,6 +871,24 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
             },
           ),
         ),
+        const _Heading('Follow-ups'),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
+          child: Text('না দেখা message আর ধরা হয়নি এমন call — ১ ঘণ্টা পর মনে করিয়ে দেবে, কার আর কী কাজের জন্য সহ।', style: TextStyle(color: Colors.grey, fontSize: 12.5)),
+        ),
+        for (final app in followUpApps.entries)
+          SwitchListTile(
+            dense: true,
+            value: watching.contains(app.key),
+            title: Text(app.value, style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: app.key == 'call' && !callLog ? const Text('Call log-এর অনুমতি লাগবে') : null,
+            onChanged: (v) => setWatching(app.key, v),
+          ),
+        if (!wallet)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
+            child: Text('WhatsApp/Messenger/IMO-র জন্য নিচে "Notification access" চালু করুন।', style: TextStyle(color: Color(0xFFB45309), fontSize: 12.5)),
+          ),
         const _Heading('Notifications'),
         ListTile(
           leading: const Icon(Icons.notifications_active_outlined),

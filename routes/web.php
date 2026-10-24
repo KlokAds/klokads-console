@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\EnvelopeController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\FollowUpController;
 use App\Http\Controllers\GuideController;
 use App\Http\Controllers\InboxController;
 use App\Http\Controllers\InstallController;
@@ -44,6 +45,9 @@ Route::get('/reminders/ping/{token}', [NotificationController::class, 'ping'])->
 // An Android SMS-forwarder app posts bank / wallet SMS here (secret token in the URL).
 Route::post('/inbox/sms/{token}', [InboxController::class, 'sms'])->middleware('throttle:120,1')->name('inbox.sms');
 Route::get('/app/feed/{token}', [PhoneAppController::class, 'feed'])->middleware('throttle:60,1')->name('app.feed');
+Route::post('/app/followups/{token}', [PhoneAppController::class, 'followUps'])->middleware('throttle:120,1')->name('app.followups');
+Route::get('/app/followups/{token}', [PhoneAppController::class, 'followUpList'])->middleware('throttle:60,1')->name('app.followups.list');
+Route::post('/app/followups/{token}/{followUp}/{action}', [PhoneAppController::class, 'followUpAction'])->middleware('throttle:60,1')->name('app.followups.action');
 Route::post('/app/test/{token}', [PhoneAppController::class, 'test'])->middleware('throttle:10,1')->name('app.test');
 Route::match(['get', 'put'], '/app/config/{token}', [PhoneAppController::class, 'config'])->middleware('throttle:60,1')->name('app.config');
 Route::post('/hooks/app-release/{token}', [AppReleaseController::class, 'upload'])->middleware('throttle:10,1')->name('hooks.app-release');
@@ -95,6 +99,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/personal/envelopes/{envelope}/spends', [EnvelopeController::class, 'spend'])->middleware('personal')->name('personal.envelopes.spend');
     Route::delete('/personal/envelope-spends/{spend}', [EnvelopeController::class, 'destroySpend'])->middleware('personal')->name('personal.envelopes.spends.destroy');
     Route::put('/personal/guide', [GuideController::class, 'update'])->middleware('personal')->name('personal.guide.update');
+    Route::get('/personal/followups', [FollowUpController::class, 'index'])->middleware('personal')->name('personal.followups.index');
+    Route::post('/personal/followups/{followUp}/done', [FollowUpController::class, 'done'])->middleware('personal')->name('personal.followups.done');
+    Route::post('/personal/followups/{followUp}/later', [FollowUpController::class, 'later'])->middleware('personal')->name('personal.followups.later');
+    Route::put('/personal/followups/{followUp}/note', [FollowUpController::class, 'note'])->middleware('personal')->name('personal.followups.note');
     Route::get('/personal/feed', [NotificationFeedController::class, 'index'])->middleware('personal')->name('personal.feed');
     Route::post('/personal/feed/read', [NotificationFeedController::class, 'read'])->middleware('personal')->name('personal.feed.read');
     Route::post('/personal/app/pair', [PhoneAppController::class, 'pair'])->middleware('personal')->name('personal.app.pair');

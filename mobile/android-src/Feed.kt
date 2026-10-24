@@ -94,7 +94,7 @@ object Feed {
             .putExtra("url", url)
         val tap = PendingIntent.getActivity(context, id.toInt(), open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val money = kind == "credit" || kind == "debit"
-        val notification = NotificationCompat.Builder(context, if (money) MONEY else REMINDERS)
+        val builder = NotificationCompat.Builder(context, if (money) MONEY else REMINDERS)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(if (kind == "credit") 0xFF059669.toInt() else if (kind == "debit") 0xFFE11D48.toInt() else 0xFF0D9488.toInt())
             .setContentTitle(title)
@@ -104,7 +104,16 @@ object Feed {
             .setCategory(if (money) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(tap)
-            .build()
+        // A follow-up reminder: done or later, right from the notification.
+        Regex("[?&]f=(\\d+)").find(url)?.groupValues?.get(1)?.let { followUp ->
+            for ((action, label) in listOf("done" to "Done", "later" to "1 hour later")) {
+                val intent = Intent(context, FollowUpActionReceiver::class.java)
+                    .putExtra("id", followUp).putExtra("action", action).putExtra("notification", id.toInt())
+                val pending = PendingIntent.getBroadcast(context, (id * 10 + if (action == "done") 1 else 2).toInt(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                builder.addAction(0, label, pending)
+            }
+        }
+        val notification = builder.build()
         try {
             NotificationManagerCompat.from(context).notify(id.toInt(), notification)
         } catch (_: SecurityException) {
@@ -129,5 +138,12 @@ object Feed {
 }
 
 class FeedWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
-    override fun doWork(): Result = if (Feed.poll(applicationContext)) Result.success() else Result.retry()
+    override fun doWork(): Result {
+        // Missed calls are found in the call log on the same rhythm.
+        try {
+            FollowUps.checkCalls(applicationContext)
+        } catch (_: Exception) {
+        }
+        return if (Feed.poll(applicationContext)) Result.success() else Result.retry()
+    }
 }
