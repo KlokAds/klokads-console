@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AppNotification;
 use App\Services\AutoEntries;
+use App\Support\InboxRules;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -23,8 +24,31 @@ class PhoneAppController extends Controller
             'token' => AutoEntries::token(),
             'feed' => route('app.feed', ['token' => AutoEntries::token()]),
             'inbox' => route('inbox.sms', ['token' => AutoEntries::token()]),
+            'config' => route('app.config', ['token' => AutoEntries::token()]),
             'last_id' => (int) AppNotification::max('id'),
         ]);
+    }
+
+    /** The senders, wallet apps and ignore words — the phone keeps a copy and can change them. */
+    public function config(Request $request, string $token): JsonResponse
+    {
+        abort_unless(hash_equals(AutoEntries::token(), $token), 404);
+
+        if ($request->isMethod('put')) {
+            $data = $request->validate([
+                'senders' => ['sometimes', 'array', 'max:200'],
+                'senders.*.name' => ['required', 'string', 'max:40'],
+                'senders.*.type' => ['nullable', 'in:sms,app'],
+                'senders.*.on' => ['boolean'],
+                'ignore' => ['sometimes', 'array', 'max:200'],
+                'ignore.*' => ['string', 'max:60'],
+                'whitelist' => ['sometimes', 'boolean'],
+            ]);
+
+            return response()->json(InboxRules::save($data));
+        }
+
+        return response()->json(InboxRules::all());
     }
 
     /** New notifications since the last one the phone showed. */

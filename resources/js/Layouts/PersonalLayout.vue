@@ -3,6 +3,7 @@ import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import CommandPalette from '@/Components/CommandPalette.vue';
 import ConfirmDialog from '@/Components/ConfirmDialog.vue';
 import Icon from '@/Components/Icon.vue';
+import NotificationBell from '@/Components/Personal/NotificationBell.vue';
 import QuickAddSheet from '@/Components/QuickAddSheet.vue';
 import Toast from '@/Components/Toast.vue';
 import { online, pending, syncEntries, syncState } from '@/offline';
@@ -92,6 +93,8 @@ router.on('navigate', () => (more.value = false));
                     </div>
                     <slot name="actions" />
                     <CommandPalette mode="personal" />
+                    <NotificationBell />
+                    <button v-if="inApp" class="icon-btn" title="Phone: messages, senders, settings" @click="appSettings"><Icon name="send" :size="18" /></button>
                     <button class="icon-btn lg:hidden" :title="`Theme: ${theme}`" @click="cycleTheme"><Icon :name="THEME_ICON[theme]" :size="18" /></button>
                     <button class="btn hidden bg-gradient-to-r from-teal-500 to-brand-600 text-white shadow-md shadow-teal-500/20 hover:brightness-110 sm:inline-flex lg:hidden" @click="quickAdd()"><Icon name="plus" :size="16" /> Add</button>
                 </div>

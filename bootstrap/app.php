@@ -26,7 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
             RunHeartbeat::class, // the app's own clock (no outside cron)
         ]);
 
-        $middleware->validateCsrfTokens(except: ['stripe/webhook', 'inbox/sms/*', 'hooks/app-release/*']);
+        $middleware->validateCsrfTokens(except: ['stripe/webhook', 'inbox/sms/*', 'hooks/app-release/*', 'app/config/*']);
 
         // On the server the app's public/ folder is also reachable under the main site
         // (klokads.com/console); only answer requests for the APP_URL host.

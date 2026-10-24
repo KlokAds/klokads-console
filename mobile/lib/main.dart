@@ -1,6 +1,7 @@
 // Klok — my own app: the console (personal side first, business one tap away) inside, plus
 // what only a phone can do: read bank SMS and wallet-app notifications so money is booked by
-// itself, and show every credit, debit and reminder as a phone notification.
+// itself, show every credit, debit and reminder as a phone notification, and let me see and
+// control all of it here (Phone: messages, senders, settings).
 
 import 'dart:async';
 
@@ -12,6 +13,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import 'phone.dart';
 
 const site = 'https://console.klokads.com';
 const ink = Color(0xFF0B1020);
@@ -34,16 +37,35 @@ class KlokApp extends StatelessWidget {
     return MaterialApp(
       title: 'Klok',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: teal, useMaterial3: true),
+      theme: ThemeData(colorSchemeSeed: teal, useMaterial3: true, scaffoldBackgroundColor: const Color(0xFFF6F7FB)),
       home: const LockGate(child: SitePage()),
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// The lock: my fingerprint (or the phone's own PIN behind it) every time the app opens, and
-// again after a minute away. Only I open this app.
+// The lock. Off until I turn it on: after the first sign-in the app asks whether to use my
+// fingerprint. Once on, it asks every time the app opens and after a minute away.
 // ---------------------------------------------------------------------------
+
+class Lock {
+  static Future<bool> on() async => (await SharedPreferences.getInstance()).getBool('lock.on') ?? false;
+
+  static Future<void> set(bool value) async => (await SharedPreferences.getInstance()).setBool('lock.on', value);
+
+  /// My fingerprint, or the phone's own PIN/pattern behind it. A phone with no screen lock passes.
+  static Future<bool> check(String reason) async {
+    final auth = LocalAuthentication();
+    try {
+      if (!await auth.isDeviceSupported()) {
+        return true;
+      }
+      return await auth.authenticate(localizedReason: reason, options: const AuthenticationOptions(stickyAuth: true));
+    } on PlatformException catch (e) {
+      return e.code == 'NotAvailable' || e.code == 'PasscodeNotSet' || e.code == 'NotEnrolled';
+    }
+  }
+}
 
 class LockGate extends StatefulWidget {
   const LockGate({super.key, required this.child});
@@ -55,7 +77,7 @@ class LockGate extends StatefulWidget {
 }
 
 class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
-  bool locked = true;
+  bool locked = false;
   bool asking = false;
   DateTime? leftAt;
 
@@ -63,7 +85,12 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    unlock();
+    Lock.on().then((on) {
+      if (on) {
+        setState(() => locked = true);
+        unlock();
+      }
+    });
   }
 
   @override
@@ -73,7 +100,7 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
     // The fingerprint prompt itself sends the app to the background for a moment.
     if (asking) {
       return;
@@ -83,7 +110,7 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
     } else if (state == AppLifecycleState.resumed && leftAt != null) {
       final away = DateTime.now().difference(leftAt!);
       leftAt = null;
-      if (away >= const Duration(minutes: 1)) {
+      if (away >= const Duration(minutes: 1) && await Lock.on()) {
         setState(() => locked = true);
         unlock();
       }
@@ -96,17 +123,8 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
       return;
     }
     asking = true;
-    var ok = false;
-    final auth = LocalAuthentication();
-    try {
-      ok = !await auth.isDeviceSupported() ||
-          await auth.authenticate(localizedReason: 'Klok খুলতে', options: const AuthenticationOptions(stickyAuth: true));
-    } on PlatformException catch (e) {
-      // A phone with no screen lock at all has nothing to ask.
-      ok = e.code == 'NotAvailable' || e.code == 'PasscodeNotSet' || e.code == 'NotEnrolled';
-    } finally {
-      asking = false;
-    }
+    final ok = await Lock.check('Klok খুলতে');
+    asking = false;
     if (mounted) {
       setState(() => locked = !ok);
     }
@@ -129,8 +147,6 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
                       const Icon(Icons.fingerprint, size: 76, color: Color(0xFF5EEAD4)),
                       const SizedBox(height: 18),
                       const Text('Klok', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Colors.white)),
-                      const SizedBox(height: 6),
-                      const Text('শুধু আপনার জন্য', style: TextStyle(color: Colors.white60)),
                       const SizedBox(height: 28),
                       FilledButton.icon(
                         style: FilledButton.styleFrom(backgroundColor: teal, padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14)),
@@ -151,24 +167,23 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
 
 // ---------------------------------------------------------------------------
 // The site inside. Once I'm signed in and the personal side is unlocked, the app pairs
-// itself: it gets the private URLs for forwarding and for the notification feed.
+// itself: it gets the private URLs for forwarding, the notification feed and the senders.
 // ---------------------------------------------------------------------------
 
 class SitePage extends StatefulWidget {
   const SitePage({super.key});
 
   @override
-  State<SitePage> createState() => _SitePageState();
+  State<SitePage> createState() => SitePageState();
 }
 
-class _SitePageState extends State<SitePage> {
+class SitePageState extends State<SitePage> {
   InAppWebViewController? web;
   PullToRefreshController? refresh;
   double progress = 0;
   bool failed = false;
   bool pairing = false;
   DateTime? checkedUpdate;
-  String? first;
 
   @override
   void initState() {
@@ -179,6 +194,7 @@ class _SitePageState extends State<SitePage> {
         open(call.arguments as String);
       }
     });
+    unawaited(Rules.sync());
   }
 
   void open(String url) {
@@ -206,10 +222,10 @@ class _SitePageState extends State<SitePage> {
     return value is Map ? (status: (value['status'] as num?)?.toInt() ?? 0, body: value['body']) : null;
   }
 
-  /// On the unlocked personal side, once: the URLs for forwarding and notifications.
+  /// On the unlocked personal side, once: the URLs, then permissions, then (if I want) the lock.
   Future<void> pair(WebUri? url) async {
     final prefs = await SharedPreferences.getInstance();
-    final paired = prefs.getString('feed.url') != null && prefs.getString('inbox.error') == null;
+    final paired = prefs.getString('feed.url') != null && prefs.getString('config.url') != null && prefs.getString('inbox.error') == null;
     if (paired || pairing || url == null || url.host != Uri.parse(site).host) {
       return;
     }
@@ -223,18 +239,45 @@ class _SitePageState extends State<SitePage> {
       if (result?.status != 200 || body is! Map) {
         return;
       }
+      final first = prefs.getString('feed.url') == null;
       await prefs.setString('inbox.url', body['inbox'] as String);
       await prefs.setString('feed.url', body['feed'] as String);
-      await prefs.setInt('feed.last', (body['last_id'] as num?)?.toInt() ?? 0);
+      await prefs.setString('config.url', body['config'] as String);
+      if (first) {
+        await prefs.setInt('feed.last', (body['last_id'] as num?)?.toInt() ?? 0);
+      }
       await prefs.remove('inbox.error');
+      await Rules.sync();
       await nativeChannel.invokeMethod('paired');
-      await Permission.notification.request();
-      await Permission.sms.request();
-      if (mounted) {
-        await openSettings(firstTime: true);
+      if (first && mounted) {
+        await askLock();
+        await Permission.notification.request();
+        await Permission.sms.request();
+        if (mounted) {
+          await openPhone(tab: 2, firstTime: true);
+        }
       }
     } finally {
       pairing = false;
+    }
+  }
+
+  /// Asked once, after the first sign-in: should Klok open with my fingerprint?
+  Future<void> askLock() async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.fingerprint, size: 40, color: teal),
+        title: const Text('আঙুলের ছাপ দিয়ে খুলবেন?'),
+        content: const Text('চালু করলে Klok খুলতে প্রতিবার আপনার আঙুলের ছাপ (বা phone-এর lock) লাগবে। পরে Phone › Settings থেকে বদলানো যায়।'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('এখন না')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('চালু করুন')),
+        ],
+      ),
+    );
+    if (yes == true && await Lock.check('Klok-এর lock চালু করতে')) {
+      await Lock.set(true);
     }
   }
 
@@ -285,8 +328,8 @@ class _SitePageState extends State<SitePage> {
     await nativeChannel.invokeMethod('install', {'url': url});
   }
 
-  Future<void> openSettings({bool firstTime = false}) async {
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => SettingsPage(site: this, firstTime: firstTime)));
+  Future<void> openPhone({int tab = 0, bool firstTime = false}) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => PhonePage(site: this, tab: tab, firstTime: firstTime)));
   }
 
   @override
@@ -324,11 +367,12 @@ class _SitePageState extends State<SitePage> {
                 ),
                 onWebViewCreated: (controller) async {
                   web = controller;
-                  controller.addJavaScriptHandler(handlerName: 'appSettings', callback: (_) => openSettings());
+                  // The site's "Phone app" button opens the native screens.
+                  controller.addJavaScriptHandler(handlerName: 'appSettings', callback: (_) => openPhone());
                   // Opened by tapping a notification: go straight to its page.
-                  first = await nativeChannel.invokeMethod<String>('launchUrl');
-                  if (first != null && first!.isNotEmpty) {
-                    open(first!);
+                  final first = await nativeChannel.invokeMethod<String>('launchUrl');
+                  if (first != null && first.isNotEmpty) {
+                    open(first);
                   }
                 },
                 shouldOverrideUrlLoading: (controller, action) async {
@@ -383,7 +427,7 @@ class _SitePageState extends State<SitePage> {
                             const SizedBox(height: 14),
                             const Text('নেট নেই', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                             const SizedBox(height: 8),
-                            const Text('আগে খোলা পাতা আর offline entry চলবে। Bank SMS phone-এ জমা থাকবে, নেট এলে নিজে যাবে।', textAlign: TextAlign.center),
+                            const Text('Bank SMS phone-এ জমা থাকবে, নেট এলে নিজে যাবে। Phone-এ সব দেখা যাবে।', textAlign: TextAlign.center),
                             const SizedBox(height: 18),
                             FilledButton.icon(
                               style: FilledButton.styleFrom(backgroundColor: teal),
@@ -394,6 +438,7 @@ class _SitePageState extends State<SitePage> {
                               icon: const Icon(Icons.refresh),
                               label: const Text('আবার চেষ্টা'),
                             ),
+                            TextButton(onPressed: () => openPhone(), child: const Text('Phone: messages দেখুন')),
                           ],
                         ),
                       ),
@@ -403,192 +448,6 @@ class _SitePageState extends State<SitePage> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// The app's own settings: what the phone is allowed to do, and its status.
-// ---------------------------------------------------------------------------
-
-class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, required this.site, this.firstTime = false});
-
-  final _SitePageState site;
-  final bool firstTime;
-
-  @override
-  State<SettingsPage> createState() => _SettingsPageState();
-}
-
-class _SettingsPageState extends State<SettingsPage> with WidgetsBindingObserver {
-  bool paired = false;
-  bool sms = false;
-  bool notify = false;
-  bool wallet = false;
-  bool battery = false;
-  int pending = 0;
-  DateTime? lastSent;
-  String version = '';
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    load();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  // Back from the phone's settings: show what changed.
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      load();
-    }
-  }
-
-  Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.reload();
-    final info = await PackageInfo.fromPlatform();
-    final last = prefs.getInt('inbox.last_ok');
-    final values = (
-      paired: prefs.getString('feed.url') != null && prefs.getString('inbox.error') == null,
-      sms: await Permission.sms.isGranted,
-      notify: await Permission.notification.isGranted,
-      wallet: await nativeChannel.invokeMethod<bool>('walletAccess') ?? false,
-      battery: await nativeChannel.invokeMethod<bool>('batteryFree') ?? false,
-      pending: await nativeChannel.invokeMethod<int>('pending') ?? 0,
-    );
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      paired = values.paired;
-      sms = values.sms;
-      notify = values.notify;
-      wallet = values.wallet;
-      battery = values.battery;
-      pending = values.pending;
-      lastSent = last != null ? DateTime.fromMillisecondsSinceEpoch(last) : null;
-      version = '${info.version} (${info.buildNumber})';
-    });
-  }
-
-  Widget row({required IconData icon, required String title, required String text, required bool ok, String? action, VoidCallback? onTap}) {
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: ok ? const Color(0xFFD1FAE5) : const Color(0xFFFEF3C7),
-        child: Icon(ok ? Icons.check_rounded : icon, color: ok ? const Color(0xFF047857) : const Color(0xFFB45309)),
-      ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(text),
-      trailing: ok || action == null ? null : FilledButton.tonal(onPressed: onTap, child: Text(action)),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.firstTime ? 'Klok সেট আপ' : 'Klok app')),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        children: [
-          if (widget.firstTime)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 8, 20, 12),
-              child: Text('নিচের সবগুলো চালু থাকলে bank SMS আর wallet-এর টাকা নিজে থেকে হিসাবে উঠবে, আর প্রতিটা credit/debit আর reminder phone-এ আসবে।'),
-            ),
-          row(
-            icon: Icons.link,
-            title: 'আমার হিসাবের সাথে যুক্ত',
-            text: paired ? 'এই phone থেকে SMS আর notification যাচ্ছে' : 'Personal side খুলুন (PIN দিয়ে) — নিজে থেকে যুক্ত হবে',
-            ok: paired,
-          ),
-          row(
-            icon: Icons.sms_outlined,
-            title: 'Bank আর bKash/Nagad SMS',
-            text: 'শুধু bank/wallet-এর SMS যায়, মানুষের নম্বরের SMS কখনো না',
-            ok: sms,
-            action: 'অনুমতি',
-            onTap: () async {
-              final status = await Permission.sms.request();
-              if (status.isPermanentlyDenied) {
-                await openAppSettings();
-              }
-              await load();
-            },
-          ),
-          row(
-            icon: Icons.account_balance_wallet_outlined,
-            title: 'Wallet app (nSave, Rizon, Elevate Pay…)',
-            text: 'এদের notification থেকে টাকা আসা-যাওয়া — "Notification access"-এ Klok চালু করুন',
-            ok: wallet,
-            action: 'চালু করুন',
-            onTap: () => nativeChannel.invokeMethod('openWalletAccess'),
-          ),
-          row(
-            icon: Icons.notifications_outlined,
-            title: 'Notification দেখানো',
-            text: 'প্রতিটা credit, debit আর reminder',
-            ok: notify,
-            action: 'অনুমতি',
-            onTap: () async {
-              await Permission.notification.request();
-              await load();
-            },
-          ),
-          row(
-            icon: Icons.battery_saver_outlined,
-            title: 'Battery saver থেকে বাদ',
-            text: 'না হলে কিছু phone background-এ app বন্ধ করে দেয়',
-            ok: battery,
-            action: 'বাদ দিন',
-            onTap: () => nativeChannel.invokeMethod('openBattery'),
-          ),
-          const Divider(height: 32),
-          ListTile(
-            leading: const Icon(Icons.outbox_outlined),
-            title: Text(pending == 0 ? 'সব পাঠানো হয়েছে' : '$pending টা পাঠানোর অপেক্ষায়'),
-            subtitle: Text(lastSent != null ? 'শেষ পাঠানো: ${lastSent!.toLocal().toString().substring(0, 16)}' : 'এখনো কিছু পাঠানো হয়নি'),
-            trailing: IconButton(
-              icon: const Icon(Icons.sync),
-              onPressed: () async {
-                await nativeChannel.invokeMethod('poll');
-                await Future<void>.delayed(const Duration(seconds: 2));
-                await load();
-              },
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.system_update_outlined),
-            title: const Text('নতুন version আছে কিনা দেখুন'),
-            subtitle: Text('এখন: $version'),
-            onTap: () => widget.site.checkUpdate(now: true),
-          ),
-          if (paired)
-            ListTile(
-              leading: const Icon(Icons.restart_alt),
-              title: const Text('আবার যুক্ত করুন'),
-              subtitle: const Text('Link বদলালে বা কাজ না করলে'),
-              onTap: () async {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.remove('feed.url');
-                await load();
-                if (mounted) {
-                  Navigator.of(context).pop();
-                }
-                widget.site.open('/personal');
-              },
-            ),
-          const SizedBox(height: 24),
-        ],
       ),
     );
   }

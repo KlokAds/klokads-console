@@ -49,6 +49,23 @@ class PersonalAutomationTest extends TestCase
         $this->assertStringContainsString('Balance ৳20,000', $note->body);
     }
 
+    public function test_money_moved_between_my_own_accounts_becomes_one_transfer(): void
+    {
+        $from = Account::create(['name' => 'UCB', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'ucb', 'last4' => '1603', 'currency' => 'BDT', 'opening_balance' => 1112200]);
+        $to = Account::create(['name' => 'UCB salary', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'ucb', 'last4' => '6318', 'currency' => 'BDT', 'opening_balance' => 8921000]);
+        $entries = app(AutoEntries::class);
+
+        $entries->ingest('sms', 'UCB', 'Your A/C (***1603) has been debited BDT 11,122.00 for Ibanking Fund Transfer - Debit. Avl Bal: BDT 0.00 @ 02:23 PM');
+        $entries->ingest('sms', 'UCB', 'Your A/C (***6318) has been credited BDT 11,122.00 for I BANKING FUND TRANSFER - CREDIT. Avl Bal: BDT 1,00,332.00 @ 02:23 PM');
+
+        $tx = MoneyTransaction::sole();
+        $this->assertSame(['transfer', $from->id, $to->id, 1112200], [$tx->kind, $tx->account_id, $tx->to_account_id, $tx->amount]);
+        $this->assertSame([0, 10033200], [Ledger::balance($from), Ledger::balance($to)]);
+        $this->assertSame(10033200, $to->fresh()->bank_balance, 'matches what the bank says');
+        $this->get('/personal')->assertInertia(fn ($page) => $page->where('stats.BDT.current.spent', 0)->where('stats.BDT.current.in', 0));
+        $this->assertStringContainsString('UCB ••1603 → UCB salary ••6318', AppNotification::latest('id')->first()->title);
+    }
+
     public function test_wallet_app_notifications_from_the_phone_app_are_entries_too(): void
     {
         $nsave = Account::create(['name' => 'nSave', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'nsave', 'currency' => 'USD']);
@@ -174,6 +191,34 @@ class PersonalAutomationTest extends TestCase
             ->where('accounts.0.last4', '1122')
             ->where('accounts.1.currency', 'USD')
             ->where('accounts.1.guide', fn ($text) => str_contains($text, 'Rizon app')));
+    }
+
+    public function test_the_bell_shows_notifications_and_marks_them_read(): void
+    {
+        AppNotification::create(['kind' => 'credit', 'title' => '💰 bKash +৳500']);
+        AppNotification::create(['kind' => 'reminder', 'title' => '🤝 Pay Karim']);
+
+        $this->getJson('/personal/feed')->assertOk()->assertJsonPath('unread', 2)->assertJsonPath('items.0.title', '🤝 Pay Karim');
+        $this->postJson('/personal/feed/read')->assertOk();
+        $this->getJson('/personal/feed')->assertJsonPath('unread', 0);
+    }
+
+    public function test_senders_and_ignore_words_are_one_list_for_the_phone_and_the_panel(): void
+    {
+        $url = '/app/config/'.AutoEntries::token();
+        $this->getJson($url)->assertOk()->assertJsonPath('whitelist', true)->assertJsonFragment(['name' => 'UCB', 'type' => 'sms', 'on' => true]);
+
+        // The phone switches UCB off and adds a word; the panel sees it.
+        $this->putJson($url, ['senders' => [['name' => 'UCB', 'type' => 'sms', 'on' => false], ['name' => 'nSave', 'type' => 'app', 'on' => true]], 'ignore' => ['otp', 'Offer']])->assertOk();
+        $this->get('/personal/inbox')->assertInertia(fn ($page) => $page->where('rules.senders.0.on', false)->where('rules.ignore', ['otp', 'offer']));
+
+        // The panel saves; the phone gets it.
+        $this->put('/personal/inbox-rules', ['senders' => [['name' => 'Cellfin', 'type' => 'sms', 'on' => true]], 'ignore' => ['otp'], 'whitelist' => false])->assertSessionHasNoErrors();
+        $this->getJson($url)->assertJsonPath('senders.0.name', 'Cellfin')->assertJsonPath('whitelist', false);
+        $this->getJson('/app/config/wrong')->assertNotFound();
+
+        // An ignore word keeps a message out, unless it has a transaction ID.
+        $this->assertSame('skipped', app(AutoEntries::class)->ingest('sms', 'bKash', 'Your OTP for payment of Tk 500.00 is 4421')->status);
     }
 
     public function test_the_phone_app_pairs_from_the_unlocked_side_and_reads_new_notifications(): void

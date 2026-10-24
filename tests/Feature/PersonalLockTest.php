@@ -47,7 +47,7 @@ class PersonalLockTest extends TestCase
         $this->assertTrue(Hash::check('2580', $this->owner->fresh()->pin_hash));
         $this->get('/dashboard')->assertInertia(fn ($page) => $page->missing('auth.user.pin_hash'));
 
-        $this->post('/personal/lock');
+        $this->post('/personal/lock')->assertRedirect('/personal/unlock'); // the PIN screen, not the business side
         $this->get('/personal/invoices')->assertRedirect('/personal/unlock');
         $this->get('/personal/unlock')->assertOk()->assertInertia(fn ($page) => $page->component('Personal/Unlock'));
 

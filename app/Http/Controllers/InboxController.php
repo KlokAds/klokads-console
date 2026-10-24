@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Services\AutoEntries;
 use App\Services\EmailInbox;
 use App\Support\Catalog;
+use App\Support\InboxRules;
 use App\Support\TransactionParser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -40,7 +41,24 @@ class InboxController extends Controller
         $source = in_array($request->input('source'), ['app', 'notification'], true) ? 'app' : 'sms';
         $message = $this->entries->ingest($source, $pick(['from', 'sender', 'phone', 'address', 'number', 'app', 'data.from']), (string) $text);
 
-        return response()->json(['ok' => true, 'status' => $message->status, 'note' => $message->note]);
+        return response()->json(['ok' => true, 'status' => $message->status, 'note' => $message->note, 'account' => $message->account?->name]);
+    }
+
+    /** Senders, wallet apps and ignore words, from the admin panel (the phone app edits the same list). */
+    public function saveRules(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'senders' => ['array', 'max:200'],
+            'senders.*.name' => ['required', 'string', 'max:40'],
+            'senders.*.type' => ['nullable', 'in:sms,app'],
+            'senders.*.on' => ['boolean'],
+            'ignore' => ['array', 'max:200'],
+            'ignore.*' => ['string', 'max:60'],
+            'whitelist' => ['boolean'],
+        ]);
+        InboxRules::save($data);
+
+        return back()->with('success', 'Saved — the phone picks it up next time it opens.');
     }
 
     public function index(Request $request): Response
@@ -61,6 +79,7 @@ class InboxController extends Controller
                 'expense' => Catalog::options(Catalog::PERSONAL_CATEGORIES),
                 'income' => Catalog::options(Catalog::INCOME_CATEGORIES['personal']),
             ],
+            'rules' => InboxRules::all(),
             'setup' => [
                 'sms_url' => route('inbox.sms', AutoEntries::token()),
                 'imap' => [

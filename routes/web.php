@@ -15,6 +15,7 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\LoanController;
 use App\Http\Controllers\MoneyController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\NotificationFeedController;
 use App\Http\Controllers\PaymentLinkController;
 use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\PersonalActivityController;
@@ -43,6 +44,7 @@ Route::get('/reminders/ping/{token}', [NotificationController::class, 'ping'])->
 // An Android SMS-forwarder app posts bank / wallet SMS here (secret token in the URL).
 Route::post('/inbox/sms/{token}', [InboxController::class, 'sms'])->middleware('throttle:120,1')->name('inbox.sms');
 Route::get('/app/feed/{token}', [PhoneAppController::class, 'feed'])->middleware('throttle:60,1')->name('app.feed');
+Route::match(['get', 'put'], '/app/config/{token}', [PhoneAppController::class, 'config'])->middleware('throttle:60,1')->name('app.config');
 Route::post('/hooks/app-release/{token}', [AppReleaseController::class, 'upload'])->middleware('throttle:10,1')->name('hooks.app-release');
 Route::get('/app/get', [AppReleaseController::class, 'get'])->middleware('throttle:10,1')->name('app.get');
 Route::get('/app/download', [AppReleaseController::class, 'download'])->middleware(['signed', 'throttle:10,1'])->name('app.download');
@@ -92,6 +94,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/personal/envelopes/{envelope}/spends', [EnvelopeController::class, 'spend'])->middleware('personal')->name('personal.envelopes.spend');
     Route::delete('/personal/envelope-spends/{spend}', [EnvelopeController::class, 'destroySpend'])->middleware('personal')->name('personal.envelopes.spends.destroy');
     Route::put('/personal/guide', [GuideController::class, 'update'])->middleware('personal')->name('personal.guide.update');
+    Route::get('/personal/feed', [NotificationFeedController::class, 'index'])->middleware('personal')->name('personal.feed');
+    Route::post('/personal/feed/read', [NotificationFeedController::class, 'read'])->middleware('personal')->name('personal.feed.read');
     Route::post('/personal/app/pair', [PhoneAppController::class, 'pair'])->middleware('personal')->name('personal.app.pair');
     Route::get('/app/latest', [AppReleaseController::class, 'latest'])->middleware('throttle:30,1')->name('app.latest');
     Route::get('/personal/activity', PersonalActivityController::class)->middleware('personal')->name('personal.activity');
@@ -128,6 +132,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/personal/inbox/{message}/undo', [InboxController::class, 'undo'])->middleware('personal')->name('personal.inbox.undo');
     Route::post('/personal/inbox-imap', [InboxController::class, 'saveImap'])->middleware('personal')->name('personal.inbox.imap');
     Route::post('/personal/inbox-check', [InboxController::class, 'checkNow'])->middleware('personal')->name('personal.inbox.check');
+    Route::put('/personal/inbox-rules', [InboxController::class, 'saveRules'])->middleware('personal')->name('personal.inbox.rules');
     Route::post('/personal/inbox-test', [InboxController::class, 'test'])->middleware('personal')->name('personal.inbox.test');
     Route::get('/personal/loans', [LoanController::class, 'index'])->middleware('personal')->name('personal.loans.index');
     Route::post('/personal/loans', [LoanController::class, 'store'])->middleware('personal')->name('personal.loans.store');

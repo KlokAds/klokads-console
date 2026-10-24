@@ -8,9 +8,12 @@ use App\Models\MoneyTransaction;
 use App\Models\PersonalInvoice;
 use App\Models\PersonalInvoicePayment;
 use App\Models\Setting;
+use App\Support\Catalog;
+use App\Support\InboxRules;
 use App\Support\Ledger;
 use App\Support\TransactionParser;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -47,7 +50,7 @@ class AutoEntries
     public function ingest(string $source, ?string $sender, string $body, ?CarbonImmutable $receivedAt = null): InboxMessage
     {
         $body = trim(mb_substr($body, 0, 5000));
-        $parsed = TransactionParser::parse($sender, $body);
+        $parsed = InboxRules::ignored($body) ? null : TransactionParser::parse($sender, $body);
         // The wallet's own transaction ID identifies a payment even if the alert arrives twice (SMS + email).
         $hash = hash('sha256', $parsed['reference'] ?? null ? ($parsed['provider'] ?? '').'|'.$parsed['reference'] : $source.'|'.$sender.'|'.$body);
 
@@ -113,7 +116,9 @@ class AutoEntries
                 'occurred_on' => $date,
             ]);
             $message->update(['status' => 'added', 'account_id' => $account->id, 'money_transaction_id' => $tx->id, 'note' => null]);
-            $this->tellEntry($account, $p);
+            if (! $this->pairOwnTransfer($message, $tx)) {
+                $this->tellEntry($account, $p);
+            }
         } catch (Throwable $e) {
             $message->update(['status' => 'review', 'note' => mb_substr($e->getMessage(), 0, 250)]);
         }
@@ -162,6 +167,48 @@ class AutoEntries
         }
 
         return $candidates->count() === 1 ? $candidates->first() : null;
+    }
+
+    /**
+     * Money moved between two of my own accounts arrives as two alerts (a debit here, a credit
+     * there). When both are in, they become one transfer — neither spending nor income.
+     */
+    private function pairOwnTransfer(InboxMessage $message, MoneyTransaction $tx): ?MoneyTransaction
+    {
+        $tx->loadMissing('account');
+        $other = MoneyTransaction::with('account')
+            ->where('id', '!=', $tx->id)->where('account_id', '!=', $tx->account_id)
+            ->where('kind', $tx->kind === 'income' ? 'expense' : 'income')
+            ->where('amount', $tx->amount)->whereNull('to_account_id')
+            ->where('description', 'like', 'Auto ·%')
+            ->whereNotIn('category', ['work', 'envelope', ...array_keys(Catalog::LOAN_CATEGORIES)])
+            ->whereBetween('occurred_on', [$tx->occurred_on->copy()->subDay()->toDateString(), $tx->occurred_on->copy()->addDay()->toDateString().' 23:59:59'])
+            ->latest('id')->get()
+            ->first(fn (MoneyTransaction $t) => strtoupper($t->account->currency) === strtoupper($tx->account->currency));
+        if (! $other) {
+            return null;
+        }
+
+        [$out, $in] = $tx->kind === 'expense' ? [$tx, $other] : [$other, $tx];
+        $transfer = DB::transaction(function () use ($out, $in) {
+            $transfer = Ledger::save([
+                'kind' => 'transfer', 'account_id' => $out->account_id, 'to_account_id' => $in->account_id,
+                'amount' => $out->amount, 'to_amount' => $in->amount, 'fee' => $out->fee,
+                'description' => 'Auto · own transfer', 'occurred_on' => $out->occurred_on->toDateString(),
+            ]);
+            InboxMessage::whereIn('money_transaction_id', [$out->id, $in->id])
+                ->update(['money_transaction_id' => $transfer->id, 'note' => "Own transfer {$out->account->name} → {$in->account->name}"]);
+            Ledger::delete($out);
+            Ledger::delete($in);
+
+            return $transfer;
+        });
+
+        $name = fn (Account $a) => $a->name.($a->last4 && ! str_contains($a->name, $a->last4) ? " ••{$a->last4}" : '');
+        $this->notify->send('info', '🔁 '.$name($out->account).' → '.$name($in->account).' '.Notify::money($out->amount, $out->account->currency),
+            'Moved between your own accounts — not spending, not income.', route('personal.activity'), 'klok-money');
+
+        return $transfer;
     }
 
     /** Keep what the bank says the balance is, to compare with ours. */

@@ -2,7 +2,9 @@
 import CopyButton from '@/Components/CopyButton.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import Icon from '@/Components/Icon.vue';
+import Segmented from '@/Components/Ui/Segmented.vue';
 import Select from '@/Components/Ui/Select.vue';
+import Toggle from '@/Components/Ui/Toggle.vue';
 import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { cat } from '@/personal';
 import { date, money } from '@/money';
@@ -16,6 +18,7 @@ const props = defineProps({
     accounts: Array,
     categories: Object,
     setup: Object,
+    rules: Object,
 });
 
 const TABS = [['review', 'Needs a look'], ['added', 'Added'], ['matched', 'Paid invoices'], ['ignored', 'Ignored'], ['skipped', 'Not money'], ['all', 'All']];
@@ -49,6 +52,23 @@ async function tryIt() {
 
 const parsedLine = (p) => p ? `${p.direction === 'in' ? '+' : '−'}${money(p.amount, p.currency)}${p.counterparty ? (p.direction === 'in' ? ' from ' : ' to ') + p.counterparty : ''}${p.reference ? ' · ' + p.reference : ''}` : '';
 const STATUS_STYLE = { added: 'bg-emerald-50 text-emerald-700', matched: 'bg-brand-50 text-brand-700', review: 'bg-amber-50 text-amber-700', ignored: 'bg-ink-100 text-ink-500', skipped: 'bg-ink-100 text-ink-500' };
+// Senders, wallet apps and ignore words: the same list the Klok phone app shows and edits.
+const rulesForm = useForm({ senders: props.rules.senders.map((x) => ({ ...x })), ignore: [...props.rules.ignore], whitelist: props.rules.whitelist });
+const senderTab = ref('sms');
+const newSender = ref('');
+const newWord = ref('');
+const shownSenders = computed(() => rulesForm.senders.filter((x) => x.type === senderTab.value));
+const saveRules = () => rulesForm.put(route('personal.inbox.rules'), { preserveScroll: true, onSuccess: () => rulesForm.defaults() });
+function addSender() {
+    const name = newSender.value.trim();
+    if (name && !rulesForm.senders.some((x) => x.name.toLowerCase() === name.toLowerCase())) rulesForm.senders.push({ name, type: senderTab.value, on: true });
+    newSender.value = '';
+}
+function addWord() {
+    const word = newWord.value.trim().toLowerCase();
+    if (word && !rulesForm.ignore.includes(word)) rulesForm.ignore.push(word);
+    newWord.value = '';
+}
 const smsOk = computed(() => props.setup.last_sms && Date.now() - new Date(props.setup.last_sms) < 3 * 864e5);
 </script>
 
@@ -64,19 +84,18 @@ const smsOk = computed(() => props.setup.last_sms && Date.now() - new Date(props
         <div v-if="showSetup" class="grid gap-5 lg:grid-cols-2">
             <div class="card p-5 sm:p-6">
                 <div class="flex items-center justify-between">
-                    <div class="card-title">📱 SMS (Android)</div>
+                    <div class="card-title">📱 Klok phone app</div>
                     <span class="badge" :class="smsOk ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ smsOk ? 'Working' : setup.last_sms ? 'Quiet lately' : 'Not set up' }}</span>
                 </div>
-                <ol class="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-ink-700">
-                    <li>Install an <b>SMS forwarder</b> app on your Android phone (e.g. “SMS Forwarder” — forwards to a URL / webhook).</li>
-                    <li>Add a rule for senders <b>bKash, NAGAD, 16216, upay</b> and your banks.</li>
-                    <li>Forward to this URL as <b>POST JSON</b> with <code>{"from": sender, "text": message}</code>:</li>
-                </ol>
-                <div class="mt-3 flex items-center gap-2 rounded-xl border border-line bg-ink-50 p-2.5">
-                    <code class="min-w-0 flex-1 truncate text-xs text-ink-700">{{ setup.sms_url }}</code>
-                    <CopyButton :text="setup.sms_url" />
-                </div>
-                <p class="mt-2 text-xs text-ink-500">Private link — anyone with it can add entries. Last SMS: <b>{{ setup.last_sms ? date(setup.last_sms, true) : 'never' }}</b>.</p>
+                <p class="mt-2 text-sm text-ink-600">The Klok Android app sends bank SMS and wallet-app notifications here by itself — only from the senders switched on below. Last message: <b>{{ setup.last_sms ? date(setup.last_sms, true) : 'never' }}</b>.</p>
+                <details class="mt-3 text-xs text-ink-500">
+                    <summary class="cursor-pointer font-semibold">Using another forwarder app instead?</summary>
+                    <p class="mt-2">Send POST JSON <code>{"from": sender, "text": message}</code> to this private link:</p>
+                    <div class="mt-2 flex items-center gap-2 rounded-xl border border-line bg-ink-50 p-2.5">
+                        <code class="min-w-0 flex-1 truncate text-xs text-ink-700">{{ setup.sms_url }}</code>
+                        <CopyButton :text="setup.sms_url" />
+                    </div>
+                </details>
             </div>
 
             <form class="card p-5 sm:p-6" @submit.prevent="saveImap">
@@ -98,6 +117,56 @@ const smsOk = computed(() => props.setup.last_sms && Date.now() - new Date(props
                     <button class="btn-primary btn-sm" :disabled="imap.processing">Save &amp; check</button>
                 </div>
             </form>
+
+            <!-- Senders & filters -->
+            <div class="card p-5 sm:p-6 lg:col-span-2">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="card-title">🛡️ Senders &amp; filters</div>
+                        <p class="text-xs text-ink-500">Same list as in the phone app — change it in either place.</p>
+                    </div>
+                    <button class="btn-primary btn-sm" :disabled="rulesForm.processing || !rulesForm.isDirty" @click="saveRules">Save</button>
+                </div>
+                <div class="mt-4 flex items-center justify-between rounded-2xl bg-ink-50 px-4 py-3">
+                    <div>
+                        <div class="text-sm font-semibold text-ink-900">Only switched-on senders</div>
+                        <div class="text-xs text-ink-500">Off: any bank-like sender with an amount is sent (never a person's number).</div>
+                    </div>
+                    <Toggle v-model="rulesForm.whitelist" label="Only switched-on senders" />
+                </div>
+                <div class="mt-4 grid gap-5 lg:grid-cols-2">
+                    <div>
+                        <Segmented v-model="senderTab" :options="[{ value: 'sms', label: '💬 SMS senders' }, { value: 'app', label: '📲 Wallet apps' }]" block size="sm" />
+                        <ul class="mt-3 max-h-80 divide-y divide-line/70 overflow-y-auto rounded-2xl border border-line">
+                            <li v-for="x in shownSenders" :key="x.name" class="flex items-center gap-3 px-4 py-2.5">
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate text-sm font-semibold text-ink-900">{{ x.name }}</span>
+                                    <span class="block text-[11px]" :class="x.on ? 'text-emerald-600' : 'text-ink-400'">{{ x.on ? 'On — syncing' : 'Off' }}</span>
+                                </span>
+                                <button class="text-ink-300 hover:text-rose-600" :aria-label="`Remove ${x.name}`" @click="rulesForm.senders.splice(rulesForm.senders.indexOf(x), 1)"><Icon name="trash" :size="14" /></button>
+                                <Toggle v-model="x.on" :label="x.name" />
+                            </li>
+                        </ul>
+                        <div class="mt-2 flex gap-2">
+                            <input v-model="newSender" class="input input-sm flex-1" :placeholder="senderTab === 'sms' ? 'Sender as it shows in SMS, e.g. SCB' : 'App name, e.g. Wise'" @keydown.enter.prevent="addSender" />
+                            <button class="btn-secondary btn-sm" @click="addSender"><Icon name="plus" :size="14" /> Add</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-semibold text-ink-900">Ignore words</div>
+                        <p class="text-xs text-ink-500">A message with any of these is never sent (unless it has a TrxID).</p>
+                        <div class="mt-3 flex flex-wrap gap-1.5">
+                            <span v-for="(w, k) in rulesForm.ignore" :key="w" class="inline-flex items-center gap-1 rounded-full bg-ink-50 py-1 pl-3 pr-1.5 text-sm text-ink-700">
+                                {{ w }}<button class="rounded-full p-0.5 text-ink-400 hover:text-rose-600" :aria-label="`Remove ${w}`" @click="rulesForm.ignore.splice(k, 1)"><Icon name="close" :size="12" /></button>
+                            </span>
+                        </div>
+                        <div class="mt-2 flex gap-2">
+                            <input v-model="newWord" class="input input-sm flex-1" placeholder="e.g. offer" @keydown.enter.prevent="addWord" />
+                            <button class="btn-secondary btn-sm" @click="addWord"><Icon name="plus" :size="14" /> Add</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <div class="card p-5 sm:p-6 lg:col-span-2">
                 <div class="card-title">🧪 Try a message</div>

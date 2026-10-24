@@ -49,7 +49,10 @@ class PersonalLockController extends Controller
     {
         $request->session()->forget('personal_unlocked_until');
 
-        return redirect()->route('dashboard');
+        // Locked means the PIN screen, never the business side. With no PIN there is nothing to lock with yet.
+        return $request->user()?->pin_hash
+            ? redirect()->route('personal.unlock')
+            : redirect()->route('notifications.index')->with('error', 'Set a PIN first — then Lock asks for it.');
     }
 
     /** Set, change or remove the PIN (needs the account password). */

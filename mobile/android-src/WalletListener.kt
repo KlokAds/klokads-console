@@ -12,13 +12,13 @@ import android.service.notification.StatusBarNotification
 class WalletListener : NotificationListenerService() {
     companion object {
         /** Words in a wallet app's package or name; set from the app (Settings), these by default. */
-        val DEFAULT_APPS = listOf("nsave", "rizon", "elevate", "worldfirst", "airwallex", "payoneer", "wise")
+        val DEFAULT_APPS = listOf("nsave", "rizon", "elevatepay", "worldfirst", "airwallex", "payoneer")
         private const val SEEN = "klok_wallet_seen"
     }
 
     private fun watched(): List<String> =
         (getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE).getString("flutter.wallet.apps", null)
-            ?.split(',')?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() })
+            ?.split(',')?.map { Forwarder.normalise(it) }?.filter { it.isNotEmpty() })
             ?: DEFAULT_APPS
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -30,7 +30,7 @@ class WalletListener : NotificationListenerService() {
         } catch (e: Exception) {
             sbn.packageName
         }
-        val key = (sbn.packageName + " " + label).lowercase()
+        val key = Forwarder.normalise(sbn.packageName + label)
         if (watched().none { key.contains(it) }) {
             return
         }

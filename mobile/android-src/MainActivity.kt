@@ -37,6 +37,18 @@ class MainActivity : FlutterFragmentActivity() {
                         result.success(null)
                     }
                     "pending" -> result.success(Forwarder.pending(this@MainActivity))
+                    "history" -> result.success(Forwarder.history(this@MainActivity).toString())
+                    "retry" -> {
+                        Forwarder.retry(this@MainActivity, call.argument<String>("id"))
+                        result.success(null)
+                    }
+                    "importSms" -> {
+                        val days = call.argument<Int>("days") ?: 7
+                        Thread {
+                            val added = try { Forwarder.importInbox(this@MainActivity, days) } catch (e: Exception) { -1 }
+                            runOnUiThread { result.success(added) }
+                        }.start()
+                    }
                     "walletAccess" -> result.success(walletAccess())
                     "openWalletAccess" -> {
                         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

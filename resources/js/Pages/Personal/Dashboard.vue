@@ -142,7 +142,7 @@ function dismissReminders() {
                 <h3 class="font-display text-[15px] font-bold text-ink-900">My {{ pick }} accounts</h3>
                 <Link :href="route('personal.activity', { tab: 'accounts' })" class="text-xs font-semibold text-teal-700">Manage</Link>
             </div>
-            <div class="no-scrollbar -mx-4 mt-3 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6">
+            <div class="no-scrollbar -mx-4 mt-3 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:scroll-px-6 sm:px-6">
                 <button v-for="a in mine" :key="a.id" class="w-[160px] shrink-0 snap-start rounded-3xl border border-line/70 bg-surface p-4 text-left shadow-sm transition hover:shadow-md active:scale-[0.98]"
                     @click="quickAdd({ kind: 'expense', account_id: a.id })">
                     <div class="flex items-center justify-between">

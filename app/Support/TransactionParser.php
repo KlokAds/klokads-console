@@ -163,7 +163,7 @@ class TransactionParser
     /** My account's last digits: "A/C ***1234", "Acct no. 123XXXX4567", "card ending 1234". */
     private static function last4(string $raw): ?string
     {
-        if (! preg_match('/(?:a\/c|acct?|account|card)(?: no\.?| number)?(?: ending(?: in)?)?[\s:#.-]*([0-9xX*•.]*[xX*•][0-9xX*•.]*?\d{3,4}|\d{4,})\b/iu', $raw, $m)) {
+        if (! preg_match('/(?:a\/c|acct?|account|card)(?: no\.?| number)?(?: ending(?: in)?)?[\s:#.(-]*([0-9xX*•.]*[xX*•][0-9xX*•.]*?\d{3,4}|\d{4,})\b/iu', $raw, $m)) {
             return null;
         }
 
