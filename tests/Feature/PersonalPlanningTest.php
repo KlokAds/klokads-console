@@ -121,7 +121,7 @@ class PersonalPlanningTest extends TestCase
 
         // The personal side installs as its own app.
         $personal = json_decode(file_get_contents(public_path('personal.webmanifest')), true);
-        $this->assertSame(['MH-Pilot', './personal'], [$personal['name'], $personal['start_url']]);
+        $this->assertSame(['MH-Bot', './personal'], [$personal['name'], $personal['start_url']]);
         foreach ($personal['icons'] as $icon) {
             $this->assertFileExists(public_path($icon['src']));
         }

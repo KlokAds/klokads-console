@@ -11,7 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * The MH-Pilot Android app. It is paired once from inside the unlocked personal side, then
+ * The MH-Bot Android app. It is paired once from inside the unlocked personal side, then
  * forwards bank / wallet SMS and app notifications, and shows the notification feed
  * (automatic credits/debits, reminders) as phone notifications.
  */
@@ -62,7 +62,7 @@ class PhoneAppController extends Controller
         if ($token !== null) {
             abort_unless(hash_equals(AutoEntries::token(), $token), 404);
         }
-        $note = $notify->send('info', '🔔 MH-Pilot test', 'If this is on your phone, notifications work. Sent '.now()->setTimezone(PersonalReminders::timezone())->format('g:i a').'.', route('personal.dashboard'), 'klok-test');
+        $note = $notify->send('info', '🔔 MH-Bot test', 'If this is on your phone, notifications work. Sent '.now()->setTimezone(PersonalReminders::timezone())->format('g:i a').'.', route('personal.dashboard'), 'klok-test');
 
         return response()->json(['ok' => true, 'id' => $note->id]);
     }

@@ -134,7 +134,7 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
       return;
     }
     asking = true;
-    final ok = await Lock.finger('MH-Pilot খুলতে');
+    final ok = await Lock.finger('MH-Bot খুলতে');
     asking = false;
     if (mounted) {
       setState(() => locked = !ok);
@@ -166,7 +166,7 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
                           children: [
                             const Icon(Icons.fingerprint, size: 76, color: Color(0xFF5EEAD4)),
                             const SizedBox(height: 18),
-                            const Text('MH-Pilot', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Colors.white)),
+                            const Text('MH-Bot', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Colors.white)),
                             const SizedBox(height: 28),
                             FilledButton.icon(
                               style: FilledButton.styleFrom(backgroundColor: teal, padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14)),

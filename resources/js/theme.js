@@ -36,7 +36,7 @@ export function applyTheme() {
     tellApp(dark);
 }
 
-/** Inside the MH-Pilot app: the phone's status and navigation bars take the page's colour. */
+/** Inside the MH-Bot app: the phone's status and navigation bars take the page's colour. */
 function tellApp(dark = isDark()) {
     if (!window.flutter_inappwebview?.callHandler) return;
     window.flutter_inappwebview.callHandler('theme', dark ? 'dark' : 'light', getComputedStyle(document.body).backgroundColor);

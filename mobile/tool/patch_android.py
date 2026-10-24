@@ -1,4 +1,4 @@
-"""Turns the android/ folder that `flutter create` makes into the MH-Pilot app: the package name,
+"""Turns the android/ folder that `flutter create` makes into the MH-Bot app: the package name,
 signing (the same key every time, so a new APK installs over the old one), permissions, the
 SMS receiver, the wallet-notification listener and our Kotlin. Run from mobile/."""
 
@@ -71,7 +71,7 @@ patch(manifest, r'(\n(\s*)<activity)', r'''
             </intent-filter>
         </receiver>
         <receiver android:exported="false" android:name=".UpdateReceiver" />
-        <service android:name=".WalletListener" android:exported="false" android:label="MH-Pilot wallet alerts"
+        <service android:name=".WalletListener" android:exported="false" android:label="MH-Bot wallet alerts"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />

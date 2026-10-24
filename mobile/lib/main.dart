@@ -1,4 +1,4 @@
-// MH-Pilot — my own app: the console (personal side first, business one tap away) inside, plus
+// MH-Bot — my own app: the console (personal side first, business one tap away) inside, plus
 // what only a phone can do: read bank SMS and wallet-app notifications so money is booked by
 // itself, show every credit, debit and reminder as a phone notification, and let me see and
 // control all of it here (Phone: messages, senders, settings).
@@ -35,7 +35,7 @@ class KlokApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MH-Pilot',
+      title: 'MH-Bot',
       debugShowCheckedModeBanner: false,
       // The app follows the phone: light or dark.
       themeMode: ThemeMode.system,
@@ -196,7 +196,7 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
           children: [
             const Padding(
               padding: EdgeInsets.fromLTRB(24, 0, 24, 6),
-              child: Text('MH-Pilot কীভাবে খুলবে?', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
+              child: Text('MH-Bot কীভাবে খুলবে?', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
             ),
             const Padding(
               padding: EdgeInsets.fromLTRB(24, 0, 24, 12),

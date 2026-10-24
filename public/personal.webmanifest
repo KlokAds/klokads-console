@@ -1,6 +1,6 @@
 {
-    "name": "MH-Pilot",
-    "short_name": "MH-Pilot",
+    "name": "MH-Bot",
+    "short_name": "MH-Bot",
     "description": "My money, dena-paona, invoices and reminders — private, works offline.",
     "id": "./personal",
     "start_url": "./personal",

@@ -37,7 +37,7 @@ class InboxController extends Controller
             return response()->json(['ok' => false, 'error' => 'No message text'], 422);
         }
 
-        // The MH-Pilot app also forwards notifications from wallet apps (nSave, Rizon, Elevate Pay…).
+        // The MH-Bot app also forwards notifications from wallet apps (nSave, Rizon, Elevate Pay…).
         $source = in_array($request->input('source'), ['app', 'notification'], true) ? 'app' : 'sms';
         $message = $this->entries->ingest($source, $pick(['from', 'sender', 'phone', 'address', 'number', 'app', 'data.from']), (string) $text);
 

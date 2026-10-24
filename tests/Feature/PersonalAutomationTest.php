@@ -199,7 +199,7 @@ class PersonalAutomationTest extends TestCase
         $this->postJson('/personal/app/test')->assertOk();
         $this->postJson('/app/test/wrong')->assertNotFound();
 
-        $this->assertSame(2, AppNotification::where('title', '🔔 MH-Pilot test')->count());
+        $this->assertSame(2, AppNotification::where('title', '🔔 MH-Bot test')->count());
     }
 
     public function test_the_bell_shows_notifications_and_marks_them_read(): void

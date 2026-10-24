@@ -1,4 +1,4 @@
-# MH-Pilot — Android app
+# MH-Bot — Android app
 
 The console (personal side first, business one tap away) inside a Flutter app, plus what only a
 phone can do:

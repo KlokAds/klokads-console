@@ -122,7 +122,7 @@ class _PhonePageState extends State<PhonePage> {
       initialIndex: widget.tab,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('MH-Pilot', style: TextStyle(fontWeight: FontWeight.w800)),
+          title: const Text('MH-Bot', style: TextStyle(fontWeight: FontWeight.w800)),
           bottom: const TabBar(tabs: [Tab(text: 'Messages'), Tab(text: 'Senders'), Tab(text: 'Settings')]),
         ),
         body: TabBarView(
@@ -704,7 +704,7 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
         row(
           icon: Icons.account_balance_wallet_outlined,
           title: 'Wallet app notification',
-          text: 'nSave, Rizon, Elevate Pay… — "Notification access"-এ MH-Pilot চালু করুন',
+          text: 'nSave, Rizon, Elevate Pay… — "Notification access"-এ MH-Bot চালু করুন',
           ok: wallet,
           action: 'চালু করুন',
           onTap: () => nativeChannel.invokeMethod('openWalletAccess'),

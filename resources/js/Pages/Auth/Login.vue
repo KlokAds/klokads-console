@@ -59,7 +59,7 @@ const submit = () => {
             class="mt-6 flex items-center gap-3 rounded-2xl border border-line bg-surface p-3.5 shadow-sm transition hover:border-teal-300 hover:shadow-md">
             <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-indigo-700 text-lg font-extrabold text-white">K</span>
             <span class="min-w-0 flex-1">
-                <span class="block text-sm font-bold text-ink-900">Download MH-Pilot</span>
+                <span class="block text-sm font-bold text-ink-900">Download MH-Bot</span>
                 <span class="block text-xs text-ink-500">Android · v{{ app.version }}</span>
             </span>
             <span class="rounded-xl bg-teal-600 px-3 py-1.5 text-xs font-bold text-white">Download</span>
