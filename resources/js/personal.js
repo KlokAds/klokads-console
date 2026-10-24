@@ -58,6 +58,11 @@ export function dayLabel(iso) {
     return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+/** A toast right away, without waiting for the server (works offline too). */
+export function say(text, type = 'success') {
+    window.dispatchEvent(new CustomEvent('klok-toast', { detail: { text, type } }));
+}
+
 /** Opens the quick-add sheet from anywhere on the personal side. */
 export function quickAdd(detail = {}) {
     window.dispatchEvent(new CustomEvent('klok-quick-add', { detail }));

@@ -1,7 +1,7 @@
 <script setup>
 import Icon from '@/Components/Icon.vue';
 import { usePage } from '@inertiajs/vue3';
-import { ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 
 /** Success / error message that slides down just under the top bar. */
 const props = defineProps({
@@ -11,17 +11,33 @@ const props = defineProps({
 const page = usePage();
 const toast = ref(null);
 let timer;
+let ownUntil = 0;
 
+function show(type, text, ms) {
+    toast.value = { type, text };
+    clearTimeout(timer);
+    timer = setTimeout(() => (toast.value = null), ms ?? (type === 'error' ? 9000 : 4500));
+}
+
+// The server's message after a save or change.
 watch(
     () => page.props.flash,
     (f) => {
         if (!f?.success && !f?.error) return;
-        toast.value = f.error ? { type: 'error', text: f.error } : { type: 'success', text: f.success };
-        clearTimeout(timer);
-        timer = setTimeout(() => (toast.value = null), f.error ? 9000 : 4500);
+        // A form already said it in more detail (e.g. quick add): keep that one.
+        if (!f.error && Date.now() < ownUntil) return;
+        show(f.error ? 'error' : 'success', f.error || f.success);
     },
     { immediate: true, deep: true },
 );
+
+// A page's own message, at once (also offline): window.dispatchEvent(new CustomEvent('klok-toast', { detail: { text } })).
+const onOwn = (e) => {
+    ownUntil = Date.now() + 3000;
+    show(e.detail?.type ?? 'success', e.detail?.text ?? 'Saved.');
+};
+onMounted(() => window.addEventListener('klok-toast', onOwn));
+onUnmounted(() => window.removeEventListener('klok-toast', onOwn));
 </script>
 
 <template>

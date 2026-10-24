@@ -4,7 +4,7 @@ import DatePicker from '@/Components/Ui/DatePicker.vue';
 import Suggest from '@/Components/Ui/Suggest.vue';
 import { confirmDialog } from '@/confirm';
 import { queueEntry } from '@/offline';
-import { cash, cat } from '@/personal';
+import { cash, cat, say } from '@/personal';
 import { router } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 
@@ -99,6 +99,7 @@ function save(again = false) {
     // Offline: keep it on this phone; it is sent automatically later.
     if (!editing.value && !navigator.onLine) {
         queueEntry(payload());
+        say(`📴 ${summary()} — kept on this phone, sent when online`);
         afterSave(again);
         return;
     }
@@ -109,11 +110,20 @@ function save(again = false) {
         onError: (e) => (errors.value = e),
         onSuccess: () => {
             loadedAt = 0; // balances changed
+            say(`✓ ${editing.value ? 'Updated' : 'Saved'} · ${summary()}`);
             afterSave(again);
         },
     };
     editing.value ? router.put(route('money.update', editing.value.id), payload(), opts) : router.post(route('money.store'), payload(), opts);
 }
+/** "৳500 · Food & groceries · from bKash" */
+function summary() {
+    const cents = Math.round((parseFloat(String(f.amount).replace(/,/g, '')) || 0) * 100);
+    const label = f.kind === 'transfer' ? `to ${accounts.value.find((a) => a.id === Number(f.to_account_id))?.name ?? ''}` : categories.value.find((c) => c.value === f.category)?.label;
+    const where = (f.kind === 'income' ? 'into ' : 'from ') + (from.value?.name ?? '');
+    return [cash(cents, from.value?.currency), f.counterparty || label, f.kind === 'transfer' ? `from ${from.value?.name ?? ''}` : where].filter(Boolean).join(' · ');
+}
+
 function afterSave(again) {
     if (again) {
         Object.assign(f, { amount: '', fee: '', counterparty: '', description: '', to_amount: '' });
