@@ -14,6 +14,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentLinkController;
 use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\PersonalDashboardController;
+use App\Http\Controllers\PersonalInvoiceController;
 use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicInvoiceController;
@@ -37,6 +38,10 @@ Route::get('/card-saved', [ClientCardController::class, 'saved'])->name('cards.s
 Route::middleware('throttle:60,1')->group(function () {
     Route::get('/card/{client}', [ClientCardController::class, 'publicPage'])->middleware('signed')->name('public.card');
     Route::get('/i/{token}', [PublicInvoiceController::class, 'show'])->name('public.invoice');
+    // My personal invoices (client pays by bank / bKash / Nagad / Rocket / Upay / Bangla QR).
+    Route::get('/pi/{token}', [PersonalInvoiceController::class, 'public'])->name('personal.invoice.public');
+    Route::get('/pi/{token}/pdf', [PersonalInvoiceController::class, 'publicPdf'])->name('personal.invoice.public.pdf');
+    Route::post('/pi/{token}/paid', [PersonalInvoiceController::class, 'report'])->middleware('throttle:6,1')->name('personal.invoice.public.report');
     Route::get('/i/{token}/pdf', [PublicInvoiceController::class, 'pdf'])->name('public.invoice.pdf');
 });
 
@@ -65,6 +70,23 @@ Route::middleware('auth')->group(function () {
     Route::put('/personal/bills/{bill}', [PlanningController::class, 'updateBill'])->name('personal.bills.update');
     Route::delete('/personal/bills/{bill}', [PlanningController::class, 'destroyBill'])->name('personal.bills.destroy');
     Route::post('/personal/bills/{bill}/pay', [PlanningController::class, 'payBill'])->name('personal.bills.pay');
+    Route::get('/personal/invoices', [PersonalInvoiceController::class, 'index'])->name('personal.invoices.index');
+    Route::post('/personal/invoices', [PersonalInvoiceController::class, 'store'])->name('personal.invoices.store');
+    Route::put('/personal/invoices/{invoice}', [PersonalInvoiceController::class, 'update'])->name('personal.invoices.update');
+    Route::delete('/personal/invoices/{invoice}', [PersonalInvoiceController::class, 'destroy'])->name('personal.invoices.destroy');
+    Route::post('/personal/invoices/{invoice}/void', [PersonalInvoiceController::class, 'void'])->name('personal.invoices.void');
+    Route::post('/personal/invoices/{invoice}/send', [PersonalInvoiceController::class, 'send'])->name('personal.invoices.send');
+    Route::post('/personal/invoices/{invoice}/payments', [PersonalInvoiceController::class, 'pay'])->name('personal.invoices.pay');
+    Route::post('/personal/invoices/{invoice}/dismiss-report', [PersonalInvoiceController::class, 'dismissReport'])->name('personal.invoices.dismiss');
+    Route::get('/personal/invoices/{invoice}/pdf', [PersonalInvoiceController::class, 'pdf'])->name('personal.invoices.pdf');
+    Route::delete('/personal/invoice-payments/{payment}', [PersonalInvoiceController::class, 'destroyPayment'])->name('personal.invoices.payments.destroy');
+    Route::post('/personal/clients', [PersonalInvoiceController::class, 'storeClient'])->name('personal.clients.store');
+    Route::put('/personal/clients/{client}', [PersonalInvoiceController::class, 'updateClient'])->name('personal.clients.update');
+    Route::delete('/personal/clients/{client}', [PersonalInvoiceController::class, 'destroyClient'])->name('personal.clients.destroy');
+    Route::post('/personal/recurring', [PersonalInvoiceController::class, 'storeRecurring'])->name('personal.recurring.store');
+    Route::put('/personal/recurring/{recurring}', [PersonalInvoiceController::class, 'updateRecurring'])->name('personal.recurring.update');
+    Route::delete('/personal/recurring/{recurring}', [PersonalInvoiceController::class, 'destroyRecurring'])->name('personal.recurring.destroy');
+    Route::post('/personal/invoice-profile', [PersonalInvoiceController::class, 'saveProfile'])->name('personal.invoices.profile');
     Route::get('/personal/loans', [LoanController::class, 'index'])->name('personal.loans.index');
     Route::post('/personal/loans', [LoanController::class, 'store'])->name('personal.loans.store');
     Route::put('/personal/loans/{loan}', [LoanController::class, 'update'])->name('personal.loans.update');

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\PushSubscription;
 use App\Models\Setting;
+use App\Services\PersonalInvoicing;
 use App\Services\PushNotifier;
 use App\Services\Reminders;
 use App\Services\SpendBilling;
@@ -101,6 +102,9 @@ class NotificationController extends Controller
     {
         abort_unless(hash_equals(PushNotifier::cronToken(), $token), 404);
 
-        return response()->json(['ok' => true] + $reminders->run() + ['billing' => $billing->runAll()]);
+        // Personal monthly invoices due today (safe to run every ping: each moves its next date on).
+        $invoices = app(PersonalInvoicing::class)->runRecurring();
+
+        return response()->json(['ok' => true] + $reminders->run() + ['billing' => $billing->runAll(), 'personal_invoices' => $invoices]);
     }
 }

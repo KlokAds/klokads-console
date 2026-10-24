@@ -34,6 +34,7 @@ const pages = [
     { title: 'Business bank & money', icon: 'wallet', url: () => route('money.index', { scope: 'business' }) },
     { title: 'Personal money', icon: 'wallet', url: () => route('money.index', { scope: 'personal' }) },
     { title: 'Dena-paona', sub: 'Loans given and taken', icon: 'users', url: () => route('personal.loans.index') },
+    { title: 'My invoices', sub: 'Personal invoices in BDT', icon: 'invoice', url: () => route('personal.invoices.index') },
     { title: 'Phone reminders', sub: 'Morning and night notifications', icon: 'bolt', url: () => route('notifications.index') },
     { title: 'Settings', icon: 'cog', url: () => route('settings.edit') },
     { title: 'Profile & password', icon: 'user', url: () => route('profile.edit') },

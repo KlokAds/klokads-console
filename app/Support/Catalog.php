@@ -39,6 +39,7 @@ class Catalog
         ],
         'personal' => [
             'salary' => 'Salary / owner draw',
+            'work' => 'Work / invoices',
             'family' => 'From family',
             'gift' => 'Gift',
             'investment' => 'Investment return',
@@ -106,6 +107,18 @@ class Catalog
         'loan_taken' => 'Loan taken',
         'loan_repaid_to_me' => 'Loan repaid to me',
         'loan_repaid_by_me' => 'Loan repaid by me',
+    ];
+
+    /** How clients pay my personal invoices. */
+    public const PAY_METHODS = [
+        'bank' => 'Bank transfer',
+        'bkash' => 'bKash',
+        'nagad' => 'Nagad',
+        'rocket' => 'Rocket',
+        'upay' => 'Upay',
+        'qr' => 'Bangla QR',
+        'cash' => 'Cash',
+        'other' => 'Other',
     ];
 
     /** The personal side only keeps these currencies. */

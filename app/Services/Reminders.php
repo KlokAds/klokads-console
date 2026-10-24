@@ -9,6 +9,7 @@ use App\Models\Goal;
 use App\Models\Invoice;
 use App\Models\Loan;
 use App\Models\MoneyTransaction;
+use App\Models\PersonalInvoice;
 use App\Models\PushSubscription;
 use App\Models\Setting;
 use App\Support\Catalog;
@@ -96,8 +97,18 @@ class Reminders
             $lines[] = "💼 {$dueToday} client invoice".($dueToday === 1 ? '' : 's').' due today';
         }
 
+        // My own invoices: overdue, and payments clients say they made (on hold).
+        $open = PersonalInvoice::whereIn('status', ['unpaid', 'partial'])->get();
+        $late = $open->filter(fn ($i) => $i->due_on && $i->due_on->lt($local->startOfDay()));
+        if ($late->isNotEmpty()) {
+            $lines[] = "🧾 {$late->count()} of my invoice".($late->count() === 1 ? '' : 's').' overdue ('.$this->money((int) $late->sum(fn ($i) => $i->due()), 'BDT').')';
+        }
+        if ($held = $open->whereNotNull('reported')->count()) {
+            $lines[] = "⏳ {$held} payment".($held === 1 ? '' : 's').' on hold — check and confirm';
+        }
+
         // Dena-paona due within 3 days or overdue.
-        foreach (Loan::with('payments')->whereNotNull('due_on')->where('due_on', '<=', $local->addDays(3)->toDateString())->orderBy('due_on')->get() as $loan) {
+        foreach (Loan::with('payments')->whereNotNull('due_on')->whereDate('due_on', '<=', $local->addDays(3)->toDateString())->orderBy('due_on')->get() as $loan) {
             if (($left = $loan->outstanding()) <= 0 || count($lines) >= 6) {
                 continue;
             }
