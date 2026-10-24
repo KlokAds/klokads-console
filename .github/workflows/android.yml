@@ -1,0 +1,88 @@
+name: Android app
+
+# Builds the Klok Android app (mobile/) in the cloud. Only when its version in
+# mobile/pubspec.yaml is raised (a new +number), or by hand from the Actions tab: the pages
+# inside the app come from the site, so most changes need no new APK at all. The APK goes up
+# as a release and to the server, where the app finds it and installs it itself.
+on:
+  push:
+    branches: [main]
+    paths: ['mobile/pubspec.yaml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: A new version?
+        id: version
+        run: |
+          full=$(grep -E '^version:' mobile/pubspec.yaml | awk '{print $2}')
+          name=${full%%+*}
+          number=${full##*+}
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/klok-app-v$number" >/dev/null; then
+            echo "Version $full is already built."
+            echo "build=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: SVG tools for the icon
+        if: steps.version.outputs.build == 'yes'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin
+
+      - uses: actions/setup-java@v4
+        if: steps.version.outputs.build == 'yes'
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        if: steps.version.outputs.build == 'yes'
+        with:
+          channel: stable
+          cache: true
+
+      - name: Make and build the APK
+        if: steps.version.outputs.build == 'yes'
+        working-directory: mobile
+        run: bash tool/build.sh
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_FILE: ${{ runner.temp }}/klok.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+
+      - uses: softprops/action-gh-release@v2
+        if: steps.version.outputs.build == 'yes'
+        with:
+          tag_name: klok-app-v${{ steps.version.outputs.number }}
+          name: Klok app ${{ steps.version.outputs.name }}
+          body: "Klok — my own Android app. Install over the earlier one; sign-in and settings stay."
+          files: mobile/klok.apk
+          make_latest: true
+
+      # The APK is already in the release; a slow handoff only warns.
+      - name: Hand it to the server (the app installs it from there)
+        if: steps.version.outputs.build == 'yes'
+        continue-on-error: true
+        env:
+          APP_RELEASE_URL: ${{ secrets.APP_RELEASE_URL }}
+        run: |
+          if [ -z "$APP_RELEASE_URL" ]; then
+            echo "::warning::APP_RELEASE_URL is not set; the APK is only in the release."
+            exit 0
+          fi
+          curl --fail-with-body -sS --retry 3 --retry-all-errors --connect-timeout 30 --max-time 900 -X POST "$APP_RELEASE_URL" \
+            -H 'Accept: application/json' \
+            -F "version=${{ steps.version.outputs.number }}" \
+            -F "name=${{ steps.version.outputs.name }}" \
+            -F "apk=@mobile/klok.apk"

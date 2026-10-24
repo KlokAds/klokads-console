@@ -1,0 +1,12 @@
+# Made on the build runner by `flutter create` / the build.
+android/
+build/
+.dart_tool/
+assets/
+test/
+.metadata
+*.iml
+*.apk
+pubspec.lock
+analysis_options.yaml
+README.md.bak

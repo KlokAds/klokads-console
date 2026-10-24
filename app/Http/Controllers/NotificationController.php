@@ -28,6 +28,7 @@ class NotificationController extends Controller
                     'created_at' => $s->created_at->toIso8601String(),
                 ]),
             'hasPin' => (bool) $request->user()->pin_hash,
+            'app' => AppReleaseController::current(),
             'cron' => [
                 'url' => route('reminders.ping', PushNotifier::cronToken()),
                 'last_ping' => Setting::get('cron_last_ping'),

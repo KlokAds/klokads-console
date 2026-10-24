@@ -38,6 +38,9 @@ const active = (item) => item && !item.more && route().current(item.match);
 const moreActive = computed(() => NAV.slice(2).some((i) => i.route !== 'personal.invoices.index' && active(i)));
 
 const lock = () => router.post(route('personal.lock'));
+// Inside the Klok Android app: its own settings (SMS, wallet alerts, notifications).
+const inApp = typeof navigator !== 'undefined' && navigator.userAgent.includes('KlokApp');
+const appSettings = () => window.flutter_inappwebview?.callHandler('appSettings');
 onMounted(() => {
     applyTheme();
     syncEntries();
@@ -137,6 +140,7 @@ router.on('navigate', () => (more.value = false));
                         </Link>
                         <Link :href="route('dashboard')" class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700"><Icon name="bank" :size="22" /> Business</Link>
                         <button class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700" @click="lock"><span class="text-xl leading-none">🔒</span> Lock</button>
+                        <button v-if="inApp" class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700" @click="appSettings"><span class="text-xl leading-none">📱</span> Phone app</button>
                     </div>
                 </div>
             </div>

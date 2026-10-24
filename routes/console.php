@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AppReleaseController;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\StripeService;
@@ -54,3 +55,8 @@ Artisan::command('klok:install-code', function () {
 })->purpose('Show the one-time code the web installer asks for');
 
 Schedule::command('klok:sync')->everyFifteenMinutes()->withoutOverlapping();
+
+Artisan::command('klok:app-release-url', function () {
+    // For the GitHub build's APP_RELEASE_URL secret. A new one replaces the old.
+    $this->line(AppReleaseController::newUploadUrl());
+})->purpose('Make the URL the Android build uploads new APKs to');

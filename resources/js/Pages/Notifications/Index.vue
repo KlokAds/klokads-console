@@ -18,7 +18,11 @@ const props = defineProps({
     devices: Array,
     cron: Object,
     hasPin: Boolean,
+    app: { type: Object, default: () => ({}) },
 });
+// Inside the Klok app already? Then its own settings, not a download.
+const inApp = typeof navigator !== 'undefined' && navigator.userAgent.includes('KlokApp');
+const appSettings = () => window.flutter_inappwebview?.callHandler('appSettings');
 
 // App lock (PIN)
 const pinForm = useForm({ pin: '', pin_confirmation: '', password: '' });
@@ -83,6 +87,21 @@ const wokeHealthy = computed(() => props.cron.woke_at && Date.now() - new Date(p
     <Head title="Reminders" />
 
     <PersonalLayout title="Reminders" subtitle="Morning and night notifications on your phone">
+        <!-- The Klok phone app -->
+        <div class="keep-dark relative mb-5 overflow-hidden rounded-3xl bg-gradient-to-br from-teal-600 to-indigo-700 p-5 text-white shadow-lg sm:p-6">
+            <div class="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl"></div>
+            <div class="relative flex flex-wrap items-center gap-4">
+                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-2xl">📱</span>
+                <div class="min-w-0 flex-1">
+                    <div class="font-display text-lg font-bold">Klok app for Android</div>
+                    <p class="text-sm text-white/80">Bank SMS and wallet notifications (nSave, Rizon, Elevate Pay) become entries by themselves; every credit, debit and reminder pops up on your phone.</p>
+                </div>
+                <button v-if="inApp" class="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-teal-800" @click="appSettings">App settings</button>
+                <a v-else-if="app.url" :href="app.url" class="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-teal-800">Install · v{{ app.name }}</a>
+                <span v-else class="rounded-xl bg-white/15 px-4 py-2.5 text-sm font-semibold">Being built — check back soon</span>
+            </div>
+        </div>
+
         <div class="grid gap-5 xl:grid-cols-3">
             <div class="min-w-0 space-y-5 xl:col-span-2">
                 <!-- This device -->

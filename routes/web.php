@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AppReleaseController;
 use App\Http\Controllers\CashflowController;
 use App\Http\Controllers\ClientCardController;
 use App\Http\Controllers\ClientController;
@@ -42,6 +43,8 @@ Route::get('/reminders/ping/{token}', [NotificationController::class, 'ping'])->
 // An Android SMS-forwarder app posts bank / wallet SMS here (secret token in the URL).
 Route::post('/inbox/sms/{token}', [InboxController::class, 'sms'])->middleware('throttle:120,1')->name('inbox.sms');
 Route::get('/app/feed/{token}', [PhoneAppController::class, 'feed'])->middleware('throttle:60,1')->name('app.feed');
+Route::post('/hooks/app-release/{token}', [AppReleaseController::class, 'upload'])->middleware('throttle:10,1')->name('hooks.app-release');
+Route::get('/app/download', [AppReleaseController::class, 'download'])->middleware(['signed', 'throttle:10,1'])->name('app.download');
 Route::get('/g/{token}', [GuideController::class, 'show'])->middleware('throttle:30,1')->name('guide.show');
 
 Route::get('/card-saved', [ClientCardController::class, 'saved'])->name('cards.saved');
@@ -89,6 +92,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/personal/envelope-spends/{spend}', [EnvelopeController::class, 'destroySpend'])->middleware('personal')->name('personal.envelopes.spends.destroy');
     Route::put('/personal/guide', [GuideController::class, 'update'])->middleware('personal')->name('personal.guide.update');
     Route::post('/personal/app/pair', [PhoneAppController::class, 'pair'])->middleware('personal')->name('personal.app.pair');
+    Route::get('/app/latest', [AppReleaseController::class, 'latest'])->middleware('throttle:30,1')->name('app.latest');
     Route::get('/personal/activity', PersonalActivityController::class)->middleware('personal')->name('personal.activity');
     Route::get('/personal/quick', PersonalQuickController::class)->middleware('personal')->name('personal.quick');
     Route::post('/personal/budgets', [PlanningController::class, 'saveBudgets'])->middleware('personal')->name('personal.budgets');

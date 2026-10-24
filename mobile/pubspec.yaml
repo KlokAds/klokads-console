@@ -1,0 +1,33 @@
+name: klokapp
+description: Klok - my own Android app (personal money and the business side, SMS and wallet notifications in, reminders out).
+publish_to: none
+# Raise this only when several phone-side changes have piled up: the pages inside come from the
+# site and are always new. A raise (pushed to main) builds and ships a new APK.
+version: 1.0.0+1
+
+environment:
+    sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+    flutter:
+        sdk: flutter
+    flutter_inappwebview: ^6.1.5
+    local_auth: ^2.3.0
+    package_info_plus: ^8.3.0
+    permission_handler: ^12.0.0
+    shared_preferences: ^2.3.3
+    url_launcher: ^6.3.1
+
+dev_dependencies:
+    flutter_launcher_icons: ^0.14.3
+
+flutter:
+    uses-material-design: true
+
+flutter_launcher_icons:
+    android: true
+    ios: false
+    image_path: assets/icon.png
+    adaptive_icon_background: '#1E3A8A'
+    adaptive_icon_foreground: assets/icon-foreground.png
+    min_sdk_android: 23
