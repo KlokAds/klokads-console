@@ -22,6 +22,8 @@ const props = defineProps({
     spendCategories: Array,
     loans: Object,
     providers: Object,
+    envelopes: { type: Array, default: () => [] },
+    month: String,
 });
 
 const pick = currencyChoice(props.currencies, props.accounts[0]?.currency);
@@ -32,25 +34,81 @@ const mine = computed(() => props.accounts.filter((a) => a.currency === pick.val
 const goals = computed(() => props.goals.filter((g) => g.currency === pick.value));
 const bills = computed(() => props.bills.filter((b) => b.currency === pick.value));
 const billTotals = computed(() => ({ all: bills.value.reduce((t, b) => t + b.amount, 0), due: bills.value.filter((b) => !b.paid_on).reduce((t, b) => t + b.amount, 0) }));
-const budgetTotals = computed(() => s.value.budgets.reduce((t, b) => ({ limit: t.limit + b.limit, spent: t.spent + b.spent }), { limit: 0, spent: 0 }));
 const tone = (b) => (b.spent > b.limit ? 'from-rose-500 to-rose-400' : b.spent > b.limit * 0.8 ? 'from-amber-500 to-amber-400' : 'from-teal-500 to-emerald-400');
 const ordinal = (n) => n + (['th', 'st', 'nd', 'rd'][(n % 100 >> 3) ^ 1 && n % 10] || 'th');
-const budgetable = computed(() => props.spendCategories.filter((c) => c.value !== 'bank_fees'));
 const accountOptions = (list) => list.map((a) => ({ value: a.id, label: a.name, hint: `${cash(a.balance, a.currency)}${a.purpose === 'savings' ? ' · savings' : ''}`, icon: a.purpose === 'savings' ? '🐷' : '💳' }));
 const categoryOptions = computed(() => props.spendCategories.map((c) => ({ value: c.value, label: c.label, icon: cat(c.value)[0] })));
 
-// ---------------------------------------------------------------- budgets
-const showBudgets = ref(false);
-const budgetForm = useForm({ currency: '', limits: {} });
-function openBudgets() {
-    budgetForm.currency = pick.value;
-    budgetForm.limits = Object.fromEntries(budgetable.value.map((c) => {
-        const b = s.value.budgets.find((x) => x.category === c.value);
-        return [c.value, b ? String(Math.round(b.limit / 100)) : ''];
-    }));
-    showBudgets.value = true;
+// ---------------------------------------------------------------- envelopes
+const envelopes = computed(() => props.envelopes.filter((e) => e.currency === pick.value && e.active));
+const envTotals = computed(() => envelopes.value.reduce((t, e) => ({ plan: t.plan + e.amount, handed: t.handed + (e.assigned ?? 0), spent: t.spent + e.spent }), { plan: 0, handed: 0, spent: 0 }));
+const EMOJIS = ['🏠', '📱', '🧍', '🚕', '🍛', '💊', '🎓', '🕌', '🎁', '💡', '🏢', '✨'];
+// Ideas for a first envelope — tapping one only fills the form.
+const IDEAS = [['Songsar', '🏠', ['Bazar', 'Electricity', 'Gas', 'Medicine']], ['Mobile & internet', '📱', ['Recharge', 'Internet']], ['My personal', '🧍', ['Food', 'Clothes', 'Haircut']], ['Transport', '🚕', ['Rickshaw', 'CNG', 'Bus']]];
+
+const showEnvelope = ref(false);
+const editingEnvelope = ref(null);
+const newPurpose = ref('');
+const envForm = useForm({ name: '', emoji: '', currency: '', amount: '', account_id: '', purposes: [], day: 1, active: true });
+function openEnvelope(e = null, idea = null) {
+    editingEnvelope.value = e;
+    const source = mine.value.find((a) => a.purpose !== 'savings') ?? mine.value[0];
+    envForm.defaults(e
+        ? { name: e.name, emoji: e.emoji ?? '', currency: e.currency, amount: String(e.amount / 100), account_id: e.account_id ?? '', purposes: [...e.purposes], day: e.day, active: true }
+        : { name: idea?.[0] ?? '', emoji: idea?.[1] ?? EMOJIS[0], currency: pick.value, amount: '', account_id: source?.id ?? '', purposes: [...(idea?.[2] ?? [])], day: 1, active: true });
+    envForm.reset();
+    envForm.clearErrors();
+    newPurpose.value = '';
+    showEnvelope.value = true;
 }
-const saveBudgets = () => budgetForm.post(route('personal.budgets'), { preserveScroll: true, onSuccess: () => (showBudgets.value = false) });
+function addPurpose() {
+    const p = newPurpose.value.trim();
+    if (p && !envForm.purposes.includes(p)) envForm.purposes.push(p);
+    newPurpose.value = '';
+}
+function saveEnvelope() {
+    const opts = { preserveScroll: true, onSuccess: () => (showEnvelope.value = false) };
+    editingEnvelope.value ? envForm.put(route('personal.envelopes.update', editingEnvelope.value.id), opts) : envForm.post(route('personal.envelopes.store'), opts);
+}
+async function stopEnvelope() {
+    const e = editingEnvelope.value;
+    if (await confirmDialog({ title: `Stop ${e.name}?`, message: 'Past months stay in your history.', confirmLabel: 'Stop', tone: 'danger' })) {
+        router.delete(route('personal.envelopes.destroy', e.id), { preserveScroll: true, onSuccess: () => (showEnvelope.value = false) });
+    }
+}
+
+// Hand out this month's money (debits the source now).
+const showAssign = ref(false);
+const assigning = ref(null);
+const assignForm = useForm({ month: props.month, amount: '', account_id: '', date: '', fee: '' });
+function openAssign(e) {
+    assigning.value = e;
+    assignForm.defaults({ month: props.month, amount: String(e.amount / 100), account_id: e.account_id ?? '', date: todayIso(), fee: '' });
+    assignForm.reset();
+    assignForm.clearErrors();
+    showAssign.value = true;
+}
+const saveAssign = () => assignForm.post(route('personal.envelopes.assign', assigning.value.id), { preserveScroll: true, onSuccess: () => (showAssign.value = false) });
+async function undoAssign(e) {
+    if (await confirmDialog({ title: `Undo ${e.name} hand-out?`, message: `The ${cash(e.assigned, e.currency)} goes back to ${e.account ?? 'its account'}.`, confirmLabel: 'Undo', tone: 'danger' })) {
+        router.delete(route('personal.envelopes.unassign', e.month_id), { preserveScroll: true });
+    }
+}
+
+// Spend from an envelope, by purpose.
+const showSpend = ref(false);
+const spending = ref(null);
+const spendForm = useForm({ purpose: '', amount: '', spent_on: '', note: '' });
+function openSpend(e) {
+    spending.value = e;
+    spendForm.defaults({ purpose: e.purposes[0] ?? '', amount: '', spent_on: todayIso(), note: '' });
+    spendForm.reset();
+    spendForm.clearErrors();
+    showSpend.value = true;
+}
+const saveSpend = () => spendForm.post(route('personal.envelopes.spend', spending.value.id), { preserveScroll: true, onSuccess: () => (showSpend.value = false) });
+const removeSpend = (sp) => router.delete(route('personal.envelopes.spends.destroy', sp.id), { preserveScroll: true });
+const openEnvelopeId = ref(null);
 
 // ---------------------------------------------------------------- goals
 const showGoal = ref(false);
@@ -83,7 +141,9 @@ const goalMonthly = (g) => {
     const months = Math.max(1, Math.ceil((new Date(g.due_on) - new Date()) / (30.44 * 864e5)));
     return Math.ceil((g.target - g.saved) / months);
 };
-const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const todayIso = () => iso(new Date());
+const tomorrow = iso(new Date(Date.now() + 864e5));
 
 // ---------------------------------------------------------------- bills
 const showBill = ref(false);
@@ -119,46 +179,74 @@ async function removeBill() {
 <template>
     <Head title="Plan · Personal" />
 
-    <PersonalLayout title="Plan" subtitle="Budgets, savings goals and monthly bills">
+    <PersonalLayout title="Plan" subtitle="Envelopes, savings goals and monthly bills">
         <div class="flex flex-wrap items-center justify-between gap-3">
             <p class="text-sm text-ink-500">Plan each currency on its own — {{ currencies.join(' and ') }} never mix.</p>
             <Segmented v-model="pick" :options="currencies" />
         </div>
 
-        <!-- ============================================================ Budgets -->
+        <!-- ============================================================ Envelopes -->
         <section class="mt-5 rounded-3xl border border-line/70 bg-surface p-5 shadow-sm">
             <div class="flex items-start justify-between gap-3">
                 <div>
-                    <h3 class="font-display text-[15px] font-bold text-ink-900">Budgets</h3>
-                    <p class="text-xs text-ink-500">Monthly limit per category</p>
+                    <h3 class="font-display text-[15px] font-bold text-ink-900">Monthly envelopes</h3>
+                    <p class="text-xs text-ink-500">Money you hand out each month — spends come out of the envelope</p>
                 </div>
-                <button class="btn-secondary btn-sm" @click="openBudgets"><Icon name="pencil" :size="14" /> Set limits</button>
+                <button class="btn-secondary btn-sm" :disabled="!mine.length" @click="openEnvelope()"><Icon name="plus" :size="14" /> Envelope</button>
             </div>
-            <template v-if="s.budgets.length">
-                <div class="mt-4 rounded-2xl bg-ink-50 p-4">
-                    <div class="flex items-baseline justify-between text-sm">
-                        <span class="font-semibold text-ink-700">This month</span>
-                        <span class="tabular-nums text-ink-500"><b class="text-lg text-ink-900">{{ C(budgetTotals.spent) }}</b> of {{ C(budgetTotals.limit) }}</span>
+
+            <div v-if="envelopes.length" class="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-ink-50 p-3 text-center">
+                <div><div class="text-[11px] text-ink-500">Planned</div><div class="font-bold tabular-nums text-ink-900">{{ C(envTotals.plan) }}</div></div>
+                <div><div class="text-[11px] text-ink-500">Handed out</div><div class="font-bold tabular-nums text-ink-900">{{ C(envTotals.handed) }}</div></div>
+                <div><div class="text-[11px] text-ink-500">Left</div><div class="font-bold tabular-nums text-teal-700">{{ C(envTotals.handed - envTotals.spent) }}</div></div>
+            </div>
+
+            <div class="mt-4 space-y-3">
+                <article v-for="e in envelopes" :key="e.id" class="rounded-2xl border border-line/70 p-4">
+                    <div class="flex items-start gap-3">
+                        <button class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-teal-50 text-xl" title="Edit" @click="openEnvelope(e)">{{ e.emoji || '✉️' }}</button>
+                        <button class="min-w-0 flex-1 text-left" @click="openEnvelopeId = openEnvelopeId === e.id ? null : e.id">
+                            <span class="block truncate font-semibold text-ink-900">{{ e.name }}</span>
+                            <span class="block truncate text-xs text-ink-500">{{ cash(e.amount, e.currency) }} a month<template v-if="e.account"> · from {{ e.account }}</template></span>
+                        </button>
+                        <button v-if="e.assigned === null" class="rounded-xl bg-teal-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-700" @click="openAssign(e)">Hand out</button>
+                        <button v-else class="rounded-xl bg-ink-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-ink-700" @click="openSpend(e)">+ Spend</button>
                     </div>
-                    <div class="mt-2 h-2.5 overflow-hidden rounded-full bg-ink-200/70"><div class="h-full rounded-full bg-gradient-to-r" :class="tone(budgetTotals)" :style="{ width: `${pct(budgetTotals.spent, budgetTotals.limit)}%` }"></div></div>
-                </div>
-                <div class="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
-                    <div v-for="b in s.budgets" :key="b.category" class="flex items-center gap-3">
-                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-lg" :class="cat(b.category)[1]">{{ cat(b.category)[0] }}</span>
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-baseline justify-between gap-2 text-sm">
-                                <span class="truncate font-semibold text-ink-800">{{ b.label }}</span>
-                                <span class="whitespace-nowrap text-xs tabular-nums text-ink-500"><b class="text-ink-900">{{ C(b.spent) }}</b> / {{ C(b.limit) }}</span>
-                            </div>
-                            <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-ink-100"><div class="h-full rounded-full bg-gradient-to-r" :class="tone(b)" :style="{ width: `${pct(b.spent, b.limit)}%` }"></div></div>
-                            <div class="mt-1 text-[11px]" :class="b.spent > b.limit ? 'font-semibold text-rose-600' : 'text-ink-500'">{{ b.spent > b.limit ? `Over by ${C(b.spent - b.limit)}` : `${C(b.limit - b.spent)} left` }}</div>
+                    <template v-if="e.assigned !== null">
+                        <div class="mt-3 h-2 overflow-hidden rounded-full bg-ink-100"><div class="h-full rounded-full bg-gradient-to-r" :class="tone({ spent: e.spent, limit: e.assigned })" :style="{ width: `${pct(e.spent, e.assigned)}%` }"></div></div>
+                        <div class="mt-1.5 flex justify-between text-xs">
+                            <span class="text-ink-500">Spent <b class="text-ink-900">{{ cash(e.spent, e.currency) }}</b> of {{ cash(e.assigned, e.currency) }}</span>
+                            <span class="font-bold" :class="e.left < 0 ? 'text-rose-600' : 'text-teal-700'">{{ e.left < 0 ? `Over ${cash(-e.left, e.currency)}` : `${cash(e.left, e.currency)} left` }}</span>
+                        </div>
+                    </template>
+                    <p v-else class="mt-2 text-xs text-amber-600">Not handed out yet this month · due on the {{ ordinal(e.day) }}. Sending it by bKash/bank fills this in by itself.</p>
+
+                    <div v-if="openEnvelopeId === e.id" class="mt-3 border-t border-line/70 pt-3">
+                        <div v-if="Object.keys(e.by_purpose).length" class="flex flex-wrap gap-1.5">
+                            <span v-for="(v, purpose) in e.by_purpose" :key="purpose" class="rounded-full bg-ink-50 px-2.5 py-1 text-xs text-ink-700">{{ purpose }} <b>{{ cash(v, e.currency) }}</b></span>
+                        </div>
+                        <ul class="mt-2 space-y-1">
+                            <li v-for="sp in e.spends" :key="sp.id" class="group flex items-center gap-2 text-sm">
+                                <span class="w-14 shrink-0 text-xs text-ink-400">{{ date(sp.spent_on).replace(/ \d{4}$/, '') }}</span>
+                                <span class="min-w-0 flex-1 truncate text-ink-700">{{ sp.purpose }}<template v-if="sp.note"> · {{ sp.note }}</template></span>
+                                <span class="font-semibold tabular-nums text-ink-900">{{ cash(sp.amount, e.currency) }}</span>
+                                <button class="text-ink-300 hover:text-rose-600" title="Remove" @click="removeSpend(sp)"><Icon name="trash" :size="13" /></button>
+                            </li>
+                        </ul>
+                        <div class="mt-3 flex justify-between">
+                            <button v-if="e.month_id" class="text-xs font-semibold text-ink-500 hover:text-rose-600" @click="undoAssign(e)">Undo hand-out</button>
+                            <button class="text-xs font-semibold text-teal-700" @click="openEnvelope(e)">Edit envelope</button>
                         </div>
                     </div>
+                </article>
+
+                <div v-if="!envelopes.length" class="rounded-2xl border-2 border-dashed border-ink-200 p-5 text-center">
+                    <p class="text-sm text-ink-500">Give each part of your month its own envelope:</p>
+                    <div class="mt-3 flex flex-wrap justify-center gap-2">
+                        <button v-for="idea in IDEAS" :key="idea[0]" class="rounded-full bg-ink-50 px-3.5 py-2 text-sm font-semibold text-ink-700 transition hover:bg-teal-50 hover:text-teal-800" :disabled="!mine.length" @click="openEnvelope(null, idea)">{{ idea[1] }} {{ idea[0] }}</button>
+                    </div>
                 </div>
-            </template>
-            <button v-else class="mt-4 w-full rounded-2xl border-2 border-dashed border-ink-200 px-4 py-6 text-sm text-ink-500 transition hover:border-teal-400 hover:text-teal-700" @click="openBudgets">
-                🎯 Set a monthly limit for food, rent, family… and see when you're close.
-            </button>
+            </div>
         </section>
 
         <div class="mt-5 grid gap-5 lg:grid-cols-2">
@@ -225,26 +313,110 @@ async function removeBill() {
             </section>
         </div>
 
-        <!-- Budgets sheet -->
-        <Modal :show="showBudgets" max-width="lg" @close="showBudgets = false">
-            <form @submit.prevent="saveBudgets">
+        <!-- Envelope sheet -->
+        <Modal :show="showEnvelope" max-width="md" @close="showEnvelope = false">
+            <form @submit.prevent="saveEnvelope">
                 <div class="flex items-center justify-between px-6 pb-1 pt-5">
-                    <div>
-                        <h2 class="font-display text-lg font-bold text-ink-900">Monthly limits · {{ budgetForm.currency }}</h2>
-                        <p class="text-sm text-ink-500">Leave empty for no limit.</p>
-                    </div>
-                    <button type="button" class="icon-btn" @click="showBudgets = false"><Icon name="close" /></button>
+                    <h2 class="font-display text-lg font-bold text-ink-900">{{ editingEnvelope ? 'Edit envelope' : 'New envelope' }}</h2>
+                    <button type="button" class="icon-btn" @click="showEnvelope = false"><Icon name="close" /></button>
                 </div>
-                <div class="max-h-[60vh] space-y-2 overflow-y-auto px-6 py-4">
-                    <label v-for="c in budgetable" :key="c.value" class="flex items-center gap-3 rounded-2xl bg-ink-50/70 px-3 py-2">
-                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base" :class="cat(c.value)[1]">{{ cat(c.value)[0] }}</span>
-                        <span class="min-w-0 flex-1 truncate text-sm font-semibold text-ink-800">{{ c.label }}</span>
-                        <input v-model="budgetForm.limits[c.value]" inputmode="numeric" class="w-28 rounded-xl border-line bg-surface px-3 py-2 text-right text-sm font-semibold tabular-nums text-ink-900 focus:border-teal-500 focus:ring-teal-500/20" placeholder="—" />
-                    </label>
+                <div class="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-4">
+                    <div class="flex flex-wrap gap-1.5">
+                        <button v-for="em in EMOJIS" :key="em" type="button" class="flex h-10 w-10 items-center justify-center rounded-xl text-lg transition" :class="envForm.emoji === em ? 'bg-teal-600 shadow-sm' : 'bg-ink-50 hover:bg-ink-100'" @click="envForm.emoji = em">{{ em }}</button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2 sm:col-span-1">
+                            <label class="label" for="env-name">Name</label>
+                            <input id="env-name" v-model="envForm.name" class="input" placeholder="Songsar, Mobile, My personal…" required />
+                            <div v-if="envForm.errors.name" class="error">{{ envForm.errors.name }}</div>
+                        </div>
+                        <div class="col-span-2 sm:col-span-1">
+                            <label class="label" for="env-amount">Every month</label>
+                            <input id="env-amount" v-model="envForm.amount" inputmode="decimal" class="input font-semibold tabular-nums" required />
+                            <div v-if="envForm.errors.amount" class="error">{{ envForm.errors.amount }}</div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="label">Handed out from</div>
+                        <Select v-model="envForm.account_id" :options="accountOptions(accounts.filter((a) => a.currency === envForm.currency))" placeholder="Choose account" />
+                        <div v-if="envForm.errors.account_id" class="error">{{ envForm.errors.account_id }}</div>
+                    </div>
+                    <div>
+                        <div class="label">Hand-out day</div>
+                        <div class="grid grid-cols-7 gap-1">
+                            <button v-for="d in 28" :key="d" type="button" class="h-9 rounded-xl text-sm tabular-nums transition" :class="envForm.day === d ? 'bg-teal-600 font-bold text-white' : 'bg-ink-50 text-ink-700 hover:bg-ink-100'" @click="envForm.day = d">{{ d }}</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="label">Spent on (purposes)</div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span v-for="(p, k) in envForm.purposes" :key="p" class="inline-flex items-center gap-1 rounded-full bg-ink-50 py-1 pl-3 pr-1.5 text-sm text-ink-700">
+                                {{ p }}<button type="button" class="rounded-full p-0.5 text-ink-400 hover:text-rose-600" :aria-label="`Remove ${p}`" @click="envForm.purposes.splice(k, 1)"><Icon name="close" :size="12" /></button>
+                            </span>
+                        </div>
+                        <div class="mt-2 flex gap-2">
+                            <input v-model="newPurpose" class="input flex-1" placeholder="Add a purpose, e.g. Bazar" @keydown.enter.prevent="addPurpose" />
+                            <button type="button" class="btn-secondary" @click="addPurpose">Add</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 border-t border-line px-6 py-4">
+                    <button v-if="editingEnvelope" type="button" class="btn-ghost text-rose-600" @click="stopEnvelope">Stop</button>
+                    <div class="flex-1"></div>
+                    <button type="button" class="btn-secondary" @click="showEnvelope = false">Cancel</button>
+                    <button class="btn-primary" :disabled="envForm.processing">{{ editingEnvelope ? 'Save' : 'Add envelope' }}</button>
+                </div>
+            </form>
+        </Modal>
+
+        <!-- Hand out -->
+        <Modal :show="showAssign" max-width="md" @close="showAssign = false">
+            <form v-if="assigning" @submit.prevent="saveAssign">
+                <div class="px-6 pb-1 pt-5">
+                    <h2 class="font-display text-lg font-bold text-ink-900">{{ assigning.emoji }} Hand out {{ assigning.name }}</h2>
+                    <p class="text-sm text-ink-500">The money leaves the account now. Spends then come out of the envelope.</p>
+                </div>
+                <div class="space-y-4 px-6 py-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div><label class="label" for="as-amount">Amount</label><input id="as-amount" v-model="assignForm.amount" inputmode="decimal" class="input font-semibold tabular-nums" required /></div>
+                        <div><label class="label" for="as-fee">Sending fee</label><input id="as-fee" v-model="assignForm.fee" inputmode="decimal" class="input tabular-nums" placeholder="0" /></div>
+                    </div>
+                    <div><div class="label">From</div><Select v-model="assignForm.account_id" :options="accountOptions(accounts.filter((a) => a.currency === assigning.currency))" /></div>
+                    <div><div class="label">Date</div><DatePicker v-model="assignForm.date" :max="todayIso()" /></div>
+                    <div v-if="Object.keys(assignForm.errors).length" class="error">{{ Object.values(assignForm.errors)[0] }}</div>
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line px-6 py-4">
-                    <button type="button" class="btn-secondary" @click="showBudgets = false">Cancel</button>
-                    <button class="btn-primary" :disabled="budgetForm.processing">Save limits</button>
+                    <button type="button" class="btn-secondary" @click="showAssign = false">Cancel</button>
+                    <button class="btn-primary" :disabled="assignForm.processing">Hand out</button>
+                </div>
+            </form>
+        </Modal>
+
+        <!-- Spend from an envelope -->
+        <Modal :show="showSpend" max-width="md" @close="showSpend = false">
+            <form v-if="spending" @submit.prevent="saveSpend">
+                <div class="px-6 pb-1 pt-5">
+                    <h2 class="font-display text-lg font-bold text-ink-900">{{ spending.emoji }} {{ spending.name }}</h2>
+                    <p class="text-sm text-ink-500">{{ cash(spending.left, spending.currency) }} left this month</p>
+                </div>
+                <div class="space-y-4 px-6 py-4">
+                    <div>
+                        <div class="label">For</div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button v-for="p in spending.purposes" :key="p" type="button" class="rounded-full px-3.5 py-1.5 text-sm font-semibold transition" :class="spendForm.purpose === p ? 'bg-teal-600 text-white' : 'bg-ink-50 text-ink-700 hover:bg-ink-100'" @click="spendForm.purpose = p">{{ p }}</button>
+                        </div>
+                        <input v-model="spendForm.purpose" class="input mt-2" placeholder="Or type a new one" required />
+                        <div v-if="spendForm.errors.purpose" class="error">{{ spendForm.errors.purpose }}</div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div><label class="label" for="sp-amount">Amount</label><input id="sp-amount" v-model="spendForm.amount" inputmode="decimal" class="input font-semibold tabular-nums" required /></div>
+                        <div><div class="label">Date</div><DatePicker v-model="spendForm.spent_on" :max="todayIso()" /></div>
+                    </div>
+                    <div><label class="label" for="sp-note">Note</label><input id="sp-note" v-model="spendForm.note" class="input" placeholder="optional" /></div>
+                </div>
+                <div class="flex justify-end gap-2 border-t border-line px-6 py-4">
+                    <button type="button" class="btn-secondary" @click="showSpend = false">Cancel</button>
+                    <button class="btn-primary" :disabled="spendForm.processing">Save</button>
                 </div>
             </form>
         </Modal>

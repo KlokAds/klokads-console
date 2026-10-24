@@ -5,6 +5,7 @@ import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
 import RowMenu from '@/Components/RowMenu.vue';
 import DatePicker from '@/Components/Ui/DatePicker.vue';
+import Segmented from '@/Components/Ui/Segmented.vue';
 import Select from '@/Components/Ui/Select.vue';
 import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { confirmDialog } from '@/confirm';
@@ -110,13 +111,13 @@ async function removeClient(c) {
 // ---------------------------------------------------------------- monthly
 const showRec = ref(false);
 const editingRec = ref(null);
-const recForm = useForm({ personal_client_id: '', items: [blankItem()], day: 1, due_days: 7, auto_send: true, active: true, note: '' });
+const recForm = useForm({ personal_client_id: '', items: [blankItem()], start_on: '', lead_days: 2, auto_send: false, active: true, note: '' });
 const recTotal = computed(() => recForm.items.reduce((s, i) => s + Math.round((Number(i.qty) || 0) * (Number(i.rate) || 0) * 100), 0));
 function openRec(r = null) {
     editingRec.value = r;
     recForm.defaults(r
-        ? { personal_client_id: r.personal_client_id, items: r.items.map((i) => ({ ...i, rate: (i.rate / 100).toString() })), day: r.day, due_days: r.due_days, auto_send: r.auto_send, active: r.active, note: r.note ?? '' }
-        : { personal_client_id: props.clients[0]?.id ?? '', items: [blankItem()], day: 1, due_days: 7, auto_send: true, active: true, note: '' });
+        ? { personal_client_id: r.personal_client_id, items: r.items.map((i) => ({ ...i, rate: (i.rate / 100).toString() })), start_on: r.start_on ?? r.next_on, lead_days: r.lead_days, auto_send: r.auto_send, active: r.active, note: r.note ?? '' }
+        : { personal_client_id: props.clients[0]?.id ?? '', items: [{ description: 'Monthly work', qty: 1, rate: '' }], start_on: today(), lead_days: 2, auto_send: false, active: true, note: '' });
     recForm.reset();
     recForm.clearErrors();
     showRec.value = true;
@@ -126,7 +127,7 @@ function saveRec() {
     editingRec.value ? recForm.put(route('personal.recurring.update', editingRec.value.id), opts) : recForm.post(route('personal.recurring.store'), opts);
 }
 async function removeRec(r) {
-    if (await confirmDialog({ title: 'Stop this monthly invoice?', message: 'Invoices already made are kept.', confirmLabel: 'Stop', tone: 'danger' })) router.delete(route('personal.recurring.destroy', r.id), { preserveScroll: true });
+    if (await confirmDialog({ title: 'Stop this monthly job?', message: 'Invoices already made are kept.', confirmLabel: 'Stop', tone: 'danger' })) router.delete(route('personal.recurring.destroy', r.id), { preserveScroll: true });
 }
 
 // ---------------------------------------------------------------- my details
@@ -157,7 +158,7 @@ if (wantsNew()) openInv();
         </div>
 
         <div class="mt-5 grid grid-cols-4 gap-1 rounded-xl border border-line bg-surface p-1">
-            <button v-for="t in [['invoices', 'Invoices'], ['clients', 'Clients'], ['monthly', 'Monthly'], ['me', 'My details']]" :key="t[0]" class="rounded-lg py-2 text-xs font-semibold transition sm:text-sm"
+            <button v-for="t in [['invoices', 'Invoices'], ['clients', 'Clients'], ['monthly', 'Jobs'], ['me', 'My details']]" :key="t[0]" class="rounded-lg py-2 text-xs font-semibold transition sm:text-sm"
                 :class="tab === t[0] ? 'bg-ink-900 text-white' : 'text-ink-500 hover:text-ink-900'" @click="tab = t[0]">{{ t[1] }}</button>
         </div>
 
@@ -240,15 +241,15 @@ if (wantsNew()) openInv();
         <!-- Monthly -->
         <div v-if="tab === 'monthly'" class="card mt-4">
             <div class="card-head">
-                <div><div class="card-title">Monthly invoices</div><div class="card-sub">Created automatically on the day you set (and emailed)</div></div>
-                <button class="btn-dark btn-sm" :disabled="!clients.length" @click="openRec()"><Icon name="plus" :size="14" /> Monthly</button>
+                <div><div class="card-title">Monthly jobs</div><div class="card-sub">Paid on the start day each month — the invoice is made a couple of days before</div></div>
+                <button class="btn-dark btn-sm" :disabled="!clients.length" @click="openRec()"><Icon name="plus" :size="14" /> Job</button>
             </div>
             <ul v-if="recurring.length" class="divide-y divide-line/70">
                 <li v-for="r in recurring" :key="r.id" class="flex items-center gap-3 px-5 py-3 sm:px-6">
-                    <span class="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl bg-brand-50 text-[10px] font-bold text-brand-700"><span class="text-sm">{{ r.day }}</span>day</span>
+                    <span class="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-2xl bg-teal-50 text-[9px] font-bold uppercase text-teal-700"><span class="text-[15px]">{{ r.day }}</span>pay day</span>
                     <div class="min-w-0 flex-1">
                         <div class="truncate font-semibold text-ink-900">{{ clientName(r.client) }}</div>
-                        <div class="truncate text-xs text-ink-500">{{ r.items.map((i) => i.description).join(', ') }} · next {{ date(r.next_on) }}{{ r.active ? '' : ' · paused' }}{{ r.auto_send ? ' · emails' : '' }}</div>
+                        <div class="truncate text-xs text-ink-500">Next: {{ r.period }} · paid {{ date(r.next_on) }}{{ r.active ? '' : ' · paused' }}{{ r.auto_send ? ' · emails itself' : '' }}</div>
                     </div>
                     <div class="font-bold tabular-nums text-ink-900">{{ T(r.total, r.currency) }}</div>
                     <RowMenu>
@@ -257,7 +258,7 @@ if (wantsNew()) openInv();
                     </RowMenu>
                 </li>
             </ul>
-            <EmptyState v-else compact icon="repeat" title="No monthly invoices" text="For retainers or monthly work: set it once, it's created and emailed every month." />
+            <EmptyState v-else compact icon="repeat" title="No monthly jobs" text="Add each job once (e.g. EDGE ৳5,000 from the 9th) — its invoice is made 2 days before every pay day and you get a reminder to send it." />
         </div>
 
         <!-- My details -->
@@ -384,7 +385,7 @@ if (wantsNew()) openInv();
         <!-- Monthly -->
         <Modal :show="showRec" max-width="2xl" @close="showRec = false">
             <form @submit.prevent="saveRec">
-                <div class="border-b border-line px-6 py-5"><h2 class="text-lg font-bold text-ink-900">{{ editingRec ? 'Edit monthly invoice' : 'New monthly invoice' }}</h2></div>
+                <div class="border-b border-line px-6 py-5"><h2 class="text-lg font-bold text-ink-900">{{ editingRec ? 'Edit monthly job' : 'New monthly job' }}</h2></div>
                 <div class="grid grid-cols-2 gap-4 px-6 py-5">
                     <div class="col-span-2">
                         <label class="label">Client *</label>
@@ -404,9 +405,18 @@ if (wantsNew()) openInv();
                             <span class="text-sm">Each month <b class="tabular-nums">{{ T(recTotal) }}</b></span>
                         </div>
                     </div>
-                    <div><label class="label">Create on day</label><input v-model="recForm.day" type="number" min="1" max="28" class="input" /></div>
-                    <div><label class="label">Due after (days)</label><input v-model="recForm.due_days" type="number" min="0" max="60" class="input" /></div>
-                    <label class="flex items-center gap-2 text-sm text-ink-700"><input v-model="recForm.auto_send" type="checkbox" class="checkbox" /> Email it automatically</label>
+                    <div>
+                        <div class="label">Job started on</div>
+                        <DatePicker v-model="recForm.start_on" :shortcuts="false" />
+                        <p class="mt-1 text-[11px] text-ink-500">Pay day is this day every month.</p>
+                        <div v-if="recForm.errors.start_on" class="error">{{ recForm.errors.start_on }}</div>
+                    </div>
+                    <div>
+                        <div class="label">Make the invoice</div>
+                        <Segmented v-model="recForm.lead_days" :options="[{ value: 1, label: '1 day' }, { value: 2, label: '2 days' }, { value: 3, label: '3 days' }]" block size="sm" />
+                        <p class="mt-1 text-[11px] text-ink-500">before pay day — you get a reminder to send it.</p>
+                    </div>
+                    <label class="flex items-center gap-2 text-sm text-ink-700"><input v-model="recForm.auto_send" type="checkbox" class="checkbox" /> Email it to them by itself</label>
                     <label class="flex items-center gap-2 text-sm text-ink-700"><input v-model="recForm.active" type="checkbox" class="checkbox" /> Active</label>
                     <div class="col-span-2"><label class="label">Note</label><input v-model="recForm.note" class="input" /></div>
                 </div>

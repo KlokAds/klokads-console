@@ -107,19 +107,30 @@ class PersonalInvoicesTest extends TestCase
         $this->assertStringStartsWith('%PDF', app(PersonalInvoicing::class)->pdf($inv->fresh())->output());
     }
 
-    public function test_monthly_invoices_are_created_on_their_day_once(): void
+    public function test_a_monthly_job_makes_its_invoice_two_days_before_pay_day_and_tells_me(): void
     {
-        PersonalRecurring::create(['personal_client_id' => $this->client->id, 'items' => [['description' => 'Monthly SEO', 'qty' => 1, 'rate' => 2000000]],
-            'day' => 5, 'due_days' => 7, 'auto_send' => false, 'next_on' => '2026-11-05']);
-        $invoicing = app(PersonalInvoicing::class);
+        $this->travelTo(CarbonImmutable::parse('2026-10-25 10:00'));
+        // EDGE: ৳5,000 a month, started on the 9th → paid every 9th for the month just worked.
+        $this->post('/personal/recurring', ['personal_client_id' => $this->client->id, 'items' => [['description' => 'Monthly work', 'qty' => 1, 'rate' => 5000]],
+            'start_on' => '2026-09-09', 'lead_days' => 2, 'auto_send' => false, 'active' => true])->assertSessionHasNoErrors();
+        $job = PersonalRecurring::sole();
+        $this->assertSame([9, '2026-11-09'], [$job->day, $job->next_on->toDateString()]);
 
-        $this->assertSame(0, $invoicing->runRecurring(CarbonImmutable::parse('2026-11-04')));
-        $this->assertSame(1, $invoicing->runRecurring(CarbonImmutable::parse('2026-11-05')));
-        $this->assertSame(0, $invoicing->runRecurring(CarbonImmutable::parse('2026-11-05')));
+        $invoicing = app(PersonalInvoicing::class);
+        $this->assertSame(0, $invoicing->runRecurring(CarbonImmutable::parse('2026-11-06')));
+        $this->assertSame(1, $invoicing->runRecurring(CarbonImmutable::parse('2026-11-07')));
+        $this->assertSame(0, $invoicing->runRecurring(CarbonImmutable::parse('2026-11-08')));
 
         $inv = PersonalInvoice::sole();
-        $this->assertSame([2000000, '2026-11-12'], [$inv->total, $inv->due_on->toDateString()]);
-        $this->assertSame('2026-12-05', PersonalRecurring::sole()->next_on->toDateString());
+        $this->assertSame([500000, '2026-11-09'], [$inv->total, $inv->due_on->toDateString()]);
+        $this->assertSame('Monthly work (9 Oct – 8 Nov 2026)', $inv->items[0]['description']);
+        $this->assertSame('2026-12-09', $job->fresh()->next_on->toDateString());
+        $this->assertDatabaseHas('app_notifications', ['kind' => 'invoice', 'title' => '🧾 Rafiq Traders invoice ready — send it']);
+
+        // A job that starts today is first paid a month from now.
+        $this->post('/personal/recurring', ['personal_client_id' => $this->client->id, 'items' => [['description' => 'Retainer', 'qty' => 1, 'rate' => 100000]],
+            'start_on' => '2026-10-25', 'lead_days' => 2, 'auto_send' => false, 'active' => true]);
+        $this->assertSame('2026-11-25', PersonalRecurring::latest('id')->first()->next_on->toDateString());
         $this->assertSame('2027-02-28', PersonalInvoicing::nextOn(CarbonImmutable::parse('2027-01-31'), 31)->toDateString());
     }
 }

@@ -189,12 +189,14 @@ class MoneyController extends Controller
             'kind' => ['required', Rule::in(array_keys(Catalog::ACCOUNT_KINDS))],
             'currency' => ['required', 'alpha', 'size:3', Rule::when($request->input('scope') === 'personal', [Rule::in(array_merge(Catalog::PERSONAL_CURRENCIES, array_map('strtolower', Catalog::PERSONAL_CURRENCIES)))])],
             'provider' => ['nullable', 'string', 'max:40'],
+            'last4' => ['nullable', 'digits:4'],
+            'guide' => ['nullable', 'string', 'max:4000'],
             'purpose' => ['nullable', Rule::in(['spending', 'savings'])],
             'opening_balance' => ['nullable', 'numeric'],
             'opening_rate' => ['nullable', 'numeric', 'gt:0'],
             'notes' => ['nullable', 'string', 'max:500'],
             'archived' => ['boolean'],
-        ], ['currency.in' => 'Personal accounts are SGD or BDT.']);
+        ], ['currency.in' => 'Personal accounts are BDT, SGD or USD.']);
 
         $data['currency'] = strtoupper($data['currency']);
         $data['opening_balance'] = $this->toCents($data['opening_balance'] ?? 0);

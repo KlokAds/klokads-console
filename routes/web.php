@@ -5,7 +5,9 @@ use App\Http\Controllers\ClientCardController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\EnvelopeController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\GuideController;
 use App\Http\Controllers\InboxController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\InvoiceController;
@@ -19,6 +21,7 @@ use App\Http\Controllers\PersonalDashboardController;
 use App\Http\Controllers\PersonalInvoiceController;
 use App\Http\Controllers\PersonalLockController;
 use App\Http\Controllers\PersonalQuickController;
+use App\Http\Controllers\PhoneAppController;
 use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicInvoiceController;
@@ -38,6 +41,8 @@ Route::get('/reminders/ping/{token}', [NotificationController::class, 'ping'])->
 
 // An Android SMS-forwarder app posts bank / wallet SMS here (secret token in the URL).
 Route::post('/inbox/sms/{token}', [InboxController::class, 'sms'])->middleware('throttle:120,1')->name('inbox.sms');
+Route::get('/app/feed/{token}', [PhoneAppController::class, 'feed'])->middleware('throttle:60,1')->name('app.feed');
+Route::get('/g/{token}', [GuideController::class, 'show'])->middleware('throttle:30,1')->name('guide.show');
 
 Route::get('/card-saved', [ClientCardController::class, 'saved'])->name('cards.saved');
 
@@ -75,6 +80,15 @@ Route::middleware('auth')->group(function () {
     Route::redirect('/me', '/personal');
     Route::get('/personal', PersonalDashboardController::class)->middleware('personal')->name('personal.dashboard');
     Route::get('/personal/plan', [PersonalDashboardController::class, 'plan'])->middleware('personal')->name('personal.plan');
+    Route::post('/personal/envelopes', [EnvelopeController::class, 'store'])->middleware('personal')->name('personal.envelopes.store');
+    Route::put('/personal/envelopes/{envelope}', [EnvelopeController::class, 'update'])->middleware('personal')->name('personal.envelopes.update');
+    Route::delete('/personal/envelopes/{envelope}', [EnvelopeController::class, 'destroy'])->middleware('personal')->name('personal.envelopes.destroy');
+    Route::post('/personal/envelopes/{envelope}/assign', [EnvelopeController::class, 'assign'])->middleware('personal')->name('personal.envelopes.assign');
+    Route::delete('/personal/envelope-months/{month}', [EnvelopeController::class, 'unassign'])->middleware('personal')->name('personal.envelopes.unassign');
+    Route::post('/personal/envelopes/{envelope}/spends', [EnvelopeController::class, 'spend'])->middleware('personal')->name('personal.envelopes.spend');
+    Route::delete('/personal/envelope-spends/{spend}', [EnvelopeController::class, 'destroySpend'])->middleware('personal')->name('personal.envelopes.spends.destroy');
+    Route::put('/personal/guide', [GuideController::class, 'update'])->middleware('personal')->name('personal.guide.update');
+    Route::post('/personal/app/pair', [PhoneAppController::class, 'pair'])->middleware('personal')->name('personal.app.pair');
     Route::get('/personal/activity', PersonalActivityController::class)->middleware('personal')->name('personal.activity');
     Route::get('/personal/quick', PersonalQuickController::class)->middleware('personal')->name('personal.quick');
     Route::post('/personal/budgets', [PlanningController::class, 'saveBudgets'])->middleware('personal')->name('personal.budgets');
@@ -92,6 +106,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/personal/invoices/{invoice}/void', [PersonalInvoiceController::class, 'void'])->middleware('personal')->name('personal.invoices.void');
     Route::post('/personal/invoices/{invoice}/send', [PersonalInvoiceController::class, 'send'])->middleware('personal')->name('personal.invoices.send');
     Route::post('/personal/invoices/{invoice}/payments', [PersonalInvoiceController::class, 'pay'])->middleware('personal')->name('personal.invoices.pay');
+    Route::post('/personal/invoices/{invoice}/link', [PersonalInvoiceController::class, 'link'])->middleware('personal')->name('personal.invoices.link');
     Route::post('/personal/invoices/{invoice}/dismiss-report', [PersonalInvoiceController::class, 'dismissReport'])->middleware('personal')->name('personal.invoices.dismiss');
     Route::get('/personal/invoices/{invoice}/pdf', [PersonalInvoiceController::class, 'pdf'])->middleware('personal')->name('personal.invoices.pdf');
     Route::delete('/personal/invoice-payments/{payment}', [PersonalInvoiceController::class, 'destroyPayment'])->middleware('personal')->name('personal.invoices.payments.destroy');

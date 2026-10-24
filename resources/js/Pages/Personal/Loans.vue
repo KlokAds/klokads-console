@@ -37,11 +37,11 @@ const accountOptions = (currency) => [
 // ---------------------------------------------------------------- add / edit
 const showForm = ref(false);
 const editing = ref(null);
-const blank = (direction = 'lent') => ({ direction, person: '', phone: '', currency: currencies.value[0], principal: '', account_id: '', started_on: today(), due_on: '', note: '' });
+const blank = (direction = 'lent') => ({ direction, person: '', phone: '', currency: currencies.value[0], principal: '', fee: '', account_id: '', started_on: today(), due_on: '', note: '' });
 const form = useForm(blank());
 function open(l = null, direction = 'lent') {
     editing.value = l;
-    form.defaults(l ? { ...blank(), ...l, principal: (l.principal / 100).toFixed(2), account_id: l.account_id ?? '', due_on: l.due_on ?? '', phone: l.phone ?? '', note: l.note ?? '' } : blank(direction));
+    form.defaults(l ? { ...blank(), ...l, principal: (l.principal / 100).toFixed(2), fee: l.fee ? String(l.fee / 100) : '', account_id: l.account_id ?? '', due_on: l.due_on ?? '', phone: l.phone ?? '', note: l.note ?? '' } : blank(direction));
     form.reset();
     form.clearErrors();
     showForm.value = true;
@@ -194,13 +194,19 @@ if (wantsNew()) open();
                         <Select v-model="form.account_id" :options="accountOptions(form.currency)" />
                         <div v-if="form.errors.account_id" class="error">{{ form.errors.account_id }}</div>
                     </div>
+                    <div v-if="form.direction === 'lent' && form.account_id" class="col-span-2">
+                        <label class="label" for="loan-fee">Sending fee</label>
+                        <input id="loan-fee" v-model="form.fee" inputmode="decimal" class="input tabular-nums" placeholder="0 — e.g. bKash send money charge" />
+                        <p class="mt-1 text-[11px] text-ink-500">Counted as your spending; they owe only the amount.</p>
+                    </div>
                     <div>
                         <label class="label">Date *</label>
                         <DatePicker v-model="form.started_on" :max="today()" />
                     </div>
                     <div>
-                        <label class="label">Pay back by</label>
+                        <label class="label">{{ form.direction === 'lent' ? 'They will pay by' : 'I will pay by' }}</label>
                         <DatePicker v-model="form.due_on" :min="form.started_on" :shortcuts="false" clearable placeholder="No date" />
+                        <p class="mt-1 text-[11px] text-ink-500">{{ !form.due_on ? 'No date, no reminder.' : form.direction === 'lent' ? 'Reminds you to knock from 2 days before.' : 'Reminds you 2 days and 1 day before, that morning, and 1 hour before the day ends.' }}</p>
                         <div v-if="form.errors.due_on" class="error">{{ form.errors.due_on }}</div>
                     </div>
                     <div class="col-span-2">

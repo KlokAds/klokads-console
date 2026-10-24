@@ -149,7 +149,7 @@ function dismissReminders() {
                         <span class="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-extrabold" :class="a.purpose === 'savings' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'">{{ a.name.slice(0, 1) }}</span>
                         <span v-if="a.purpose === 'savings'" class="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Savings</span>
                     </div>
-                    <div class="mt-3 truncate text-xs font-semibold text-ink-500">{{ a.name }}</div>
+                    <div class="mt-3 truncate text-xs font-semibold text-ink-500">{{ a.name }}<span v-if="a.last4" class="font-normal text-ink-400"> ••{{ a.last4 }}</span></div>
                     <div class="mt-0.5 truncate text-lg font-extrabold tabular-nums" :class="a.balance < 0 ? 'text-rose-600' : 'text-ink-900'">{{ cash(a.balance, a.currency) }}</div>
                     <div class="mt-0.5 h-4 truncate text-[11px] text-ink-400">{{ a.month_out ? `−${cash(a.month_out, a.currency)} this month` : '' }}</div>
                 </button>

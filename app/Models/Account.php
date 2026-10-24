@@ -8,9 +8,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /** A bank account, wallet, card or cash pot — business or personal, in any currency. */
 class Account extends Model
 {
-    protected $fillable = ['name', 'scope', 'kind', 'purpose', 'provider', 'currency', 'opening_balance', 'opening_rate', 'notes', 'archived'];
+    protected $fillable = ['name', 'scope', 'kind', 'purpose', 'provider', 'last4', 'currency', 'opening_balance', 'opening_rate', 'notes', 'bank_balance', 'bank_balance_at', 'guide', 'archived'];
 
-    protected $casts = ['opening_rate' => 'float', 'archived' => 'boolean'];
+    protected $casts = ['opening_rate' => 'float', 'archived' => 'boolean', 'bank_balance_at' => 'datetime'];
 
     public function outgoing(): HasMany
     {

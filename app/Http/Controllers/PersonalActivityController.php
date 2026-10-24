@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Account;
 use App\Models\MoneyTransaction;
+use App\Models\Setting;
 use App\Support\Catalog;
 use App\Support\Ledger;
 use Carbon\CarbonImmutable;
@@ -35,9 +36,10 @@ class PersonalActivityController extends Controller
         return Inertia::render('Personal/Activity', [
             'month' => $month,
             'accounts' => $all->map(fn (Account $a) => [
-                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'opening_balance', 'notes', 'archived', 'scope'),
+                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'opening_balance', 'notes', 'guide', 'bank_balance', 'archived', 'scope'),
                 'currency' => strtoupper($a->currency),
                 'balance' => Ledger::balance($a),
+                'bank_balance_at' => $a->bank_balance_at?->toIso8601String(),
             ])->values(),
             'entries' => $transactions->map(fn (MoneyTransaction $t) => [
                 ...$t->only('id', 'kind', 'account_id', 'to_account_id', 'amount', 'to_amount', 'fee', 'category', 'counterparty', 'description', 'bill_id'),
@@ -52,6 +54,9 @@ class PersonalActivityController extends Controller
             'providers' => Catalog::PROVIDERS,
             'kinds' => Catalog::options(Catalog::ACCOUNT_KINDS),
             'currencies' => Catalog::PERSONAL_CURRENCIES,
+            'mfs' => Catalog::MFS,
+            'guides' => Catalog::WITHDRAW_GUIDES,
+            'familyGuide' => ['url' => route('guide.show', GuideController::token()), 'message' => Setting::get('guide_message')],
         ]);
     }
 }

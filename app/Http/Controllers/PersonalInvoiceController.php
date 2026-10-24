@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\MoneyTransaction;
 use App\Models\PersonalClient;
 use App\Models\PersonalInvoice;
 use App\Models\PersonalInvoicePayment;
@@ -44,8 +45,9 @@ class PersonalInvoiceController extends Controller
             ]),
             'clients' => PersonalClient::orderBy('name')->get(),
             'recurring' => PersonalRecurring::with('client:id,name,company')->orderBy('day')->get()
-                ->map(fn ($r) => [...$r->only('id', 'personal_client_id', 'currency', 'items', 'day', 'due_days', 'auto_send', 'active', 'note'),
-                    'client' => $r->client, 'next_on' => $r->next_on->toDateString(), 'total' => PersonalInvoicing::total($r->items)]),
+                ->map(fn ($r) => [...$r->only('id', 'personal_client_id', 'currency', 'items', 'day', 'lead_days', 'auto_send', 'active', 'note'),
+                    'client' => $r->client, 'next_on' => $r->next_on->toDateString(), 'start_on' => $r->start_on?->toDateString(),
+                    'period' => PersonalInvoicing::period($r->next_on, $r->day), 'total' => PersonalInvoicing::total($r->items)]),
             'profile' => PersonalInvoicing::profile(),
             'methods' => Catalog::options(Catalog::PAY_METHODS),
             'accounts' => Account::where('scope', 'personal')->where('archived', false)->orderBy('name')->get(['id', 'name', 'currency', 'provider']),
@@ -120,6 +122,21 @@ class PersonalInvoiceController extends Controller
         return back()->with('success', $invoice->fresh()->status === 'paid' ? "{$invoice->number} is paid." : 'Payment saved.');
     }
 
+    /** A credit already in my books (e.g. from the bank SMS) is this invoice's payment. */
+    public function link(Request $request, PersonalInvoice $invoice): RedirectResponse
+    {
+        $data = $request->validate([
+            'money_transaction_id' => ['required', Rule::exists('money_transactions', 'id')->where('kind', 'income')],
+        ]);
+        $tx = MoneyTransaction::with('account')->findOrFail($data['money_transaction_id']);
+        abort_if($tx->account->scope !== 'personal' || strtoupper($tx->account->currency) !== $invoice->currency, 422, 'That entry is not in this invoice\'s currency.');
+        abort_if(PersonalInvoicePayment::where('money_transaction_id', $tx->id)->exists(), 422, 'That entry already pays an invoice.');
+
+        $this->invoicing->linkEntry($invoice, $tx);
+
+        return back()->with('success', $invoice->fresh()->status === 'paid' ? "{$invoice->number} is paid." : 'Linked as a part payment.');
+    }
+
     public function destroyPayment(PersonalInvoicePayment $payment): RedirectResponse
     {
         $this->invoicing->removePayment($payment);
@@ -170,19 +187,16 @@ class PersonalInvoiceController extends Controller
 
     public function storeRecurring(Request $request): RedirectResponse
     {
-        $data = $this->recurringData($request);
-        $today = CarbonImmutable::today();
-        $first = $today->setDay(min($data['day'], $today->daysInMonth));
-        PersonalRecurring::create($data + ['next_on' => ($first->lt($today) ? PersonalInvoicing::nextOn($today, $data['day']) : $first)->toDateString()]);
+        PersonalRecurring::create($this->recurringData($request));
 
-        return back()->with('success', 'Monthly invoice set up.');
+        return back()->with('success', 'Monthly job added — its invoice is made 2 days before each pay day.');
     }
 
     public function updateRecurring(Request $request, PersonalRecurring $recurring): RedirectResponse
     {
         $recurring->update($this->recurringData($request));
 
-        return back()->with('success', 'Monthly invoice updated.');
+        return back()->with('success', 'Monthly job updated.');
     }
 
     public function destroyRecurring(PersonalRecurring $recurring): RedirectResponse
@@ -312,14 +326,19 @@ class PersonalInvoiceController extends Controller
             'items.*.description' => ['required', 'string', 'max:200'],
             'items.*.qty' => ['required', 'numeric', 'min:0.01'],
             'items.*.rate' => ['required', 'numeric', 'min:0'],
-            'day' => ['required', 'integer', 'between:1,28'],
-            'due_days' => ['required', 'integer', 'between:0,60'],
+            'start_on' => ['required', 'date'],
+            'lead_days' => ['required', 'integer', 'between:0,15'],
             'auto_send' => ['boolean'],
             'active' => ['boolean'],
             'note' => ['nullable', 'string', 'max:500'],
         ]);
 
-        return [...$data, 'items' => $this->items($data['items'])];
+        // Paid on the start day every month, for the month just worked.
+        $start = CarbonImmutable::parse($data['start_on']);
+        $day = $start->day;
+        $next = PersonalInvoicing::payDayFrom(CarbonImmutable::today()->max($start->addMonthNoOverflow()), $day);
+
+        return [...$data, 'items' => $this->items($data['items']), 'day' => $day, 'due_days' => 0, 'next_on' => $next->toDateString()];
     }
 
     /** Rates come in as taka; stored in poisha (cents). */

@@ -8,6 +8,7 @@ use App\Models\Budget;
 use App\Models\Goal;
 use App\Models\Loan;
 use App\Models\MoneyTransaction;
+use App\Services\Envelopes;
 use App\Support\Catalog;
 use App\Support\Ledger;
 use Illuminate\Http\Request;
@@ -30,7 +31,11 @@ class PersonalDashboardController extends Controller
     /** Budgets, savings goals and monthly bills in one place. */
     public function plan(Request $request): Response
     {
-        return Inertia::render('Personal/Plan', $this->data($request));
+        return Inertia::render('Personal/Plan', [
+            ...$this->data($request),
+            'envelopes' => app(Envelopes::class)->summary(now()->format('Y-m')),
+            'month' => now()->format('Y-m'),
+        ]);
     }
 
     /** @return array<string, mixed> */
@@ -86,7 +91,7 @@ class PersonalDashboardController extends Controller
         return [
             'currencies' => $currencies,
             'accounts' => $accounts->map(fn (Account $a) => [
-                ...$a->only('id', 'name', 'kind', 'purpose', 'provider'),
+                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4'),
                 'currency' => strtoupper($a->currency),
                 'balance' => $balances[$a->id],
                 // What left this account this month (spending + fees).
@@ -165,11 +170,15 @@ class PersonalDashboardController extends Controller
         };
 
         foreach ($transactions as $t) {
-            // Dena-paona moves money but is neither spending nor income.
+            $fromMine = in_array($t->account_id, $ids, true) && strtoupper($t->account->currency) === $currency;
+            // Dena-paona moves money but is neither spending nor income — only its sending fee is spent.
             if ($t->kind !== 'transfer' && array_key_exists((string) $t->category, Catalog::LOAN_CATEGORIES)) {
+                if ($fromMine && $t->fee) {
+                    $add('bank_fees', $t->fee);
+                }
+
                 continue;
             }
-            $fromMine = in_array($t->account_id, $ids, true) && strtoupper($t->account->currency) === $currency;
             $toMine = $t->to_account_id && in_array($t->to_account_id, $ids, true) && strtoupper($t->toAccount->currency) === $currency;
             $fromSavings = in_array($t->account_id, $savingsIds, true);
             $toSavings = $t->to_account_id && in_array($t->to_account_id, $savingsIds, true);

@@ -8,7 +8,6 @@ use App\Models\PersonalClient;
 use App\Models\PersonalInvoice;
 use App\Models\PersonalInvoicePayment;
 use App\Models\PersonalRecurring;
-use App\Models\PushSubscription;
 use App\Models\Setting;
 use App\Support\Catalog;
 use App\Support\Ledger;
@@ -25,7 +24,7 @@ use Throwable;
 /** My own invoices: numbering, payments, the client's "I've paid", email + PDF, monthly runs. */
 class PersonalInvoicing
 {
-    public function __construct(private PushNotifier $push) {}
+    public function __construct(private Notify $notify) {}
 
     /** Who the invoice is from, and how to pay. */
     public static function profile(): array
@@ -97,10 +96,42 @@ class PersonalInvoicing
         return $payment;
     }
 
+    /**
+     * Money that already came in (e.g. the bank SMS added it) is this invoice's payment:
+     * the entry is kept as it is and only marked as work income for this client.
+     */
+    public function linkEntry(PersonalInvoice $invoice, MoneyTransaction $tx): PersonalInvoicePayment
+    {
+        $invoice->loadMissing('client');
+        $provider = $tx->account?->provider;
+        $method = array_key_exists((string) $provider, Catalog::PAY_METHODS) ? $provider : 'bank';
+
+        $payment = DB::transaction(function () use ($invoice, $tx, $method) {
+            $tx->update(['category' => 'work', 'counterparty' => $invoice->client->company ?: $invoice->client->name,
+                'description' => "{$invoice->number} · ".ltrim((string) preg_replace('/^Auto · /', '', (string) $tx->description))]);
+            $payment = $invoice->payments()->create([
+                'amount' => min($tx->amount - $tx->fee, max(0, $invoice->due())), 'paid_on' => $tx->occurred_on->toDateString(), 'method' => $method,
+                'account_id' => $tx->account_id, 'money_transaction_id' => $tx->id, 'source' => 'linked',
+            ]);
+            $this->refresh($invoice);
+
+            return $payment;
+        });
+
+        $fresh = $invoice->fresh();
+        $this->tell($fresh->status === 'paid' ? "✅ {$fresh->number} paid" : "💰 Part payment on {$fresh->number}",
+            ($invoice->client->company ?: $invoice->client->name).': '.$this->money($payment->amount, $fresh->currency).($fresh->due() ? ' · '.$this->money($fresh->due(), $fresh->currency).' still due' : ''));
+
+        return $payment;
+    }
+
     public function removePayment(PersonalInvoicePayment $payment): void
     {
         DB::transaction(function () use ($payment) {
-            if ($payment->money_transaction_id && ($tx = MoneyTransaction::find($payment->money_transaction_id))) {
+            $tx = $payment->money_transaction_id ? MoneyTransaction::find($payment->money_transaction_id) : null;
+            if ($tx && $payment->source === 'linked') {
+                $tx->update(['category' => 'other_income']); // the money really came in — keep it
+            } elseif ($tx) {
                 Ledger::delete($tx);
             }
             $invoice = $payment->invoice;
@@ -152,27 +183,59 @@ class PersonalInvoicing
         return Pdf::loadView('personal.invoice-pdf', ['invoice' => $invoice->loadMissing('client', 'payments'), 'me' => self::profile()])->setPaper('a4');
     }
 
-    /** Monthly: create today's recurring invoices (and email them). */
+    /**
+     * Monthly jobs: a few days (lead_days) before each pay day, make the invoice for the
+     * month just worked (e.g. 9 Oct – 8 Nov, due 9 Nov) and tell me to send it.
+     */
     public function runRecurring(?CarbonImmutable $today = null): int
     {
         $today ??= CarbonImmutable::today();
         $made = 0;
 
-        foreach (PersonalRecurring::with('client')->where('active', true)->whereDate('next_on', '<=', $today->toDateString())->get() as $r) {
-            $invoice = $this->create($r->client, $r->items, $today, $today->addDays($r->due_days), $r->note, $r, $r->currency);
+        foreach (PersonalRecurring::with('client')->where('active', true)->get() as $r) {
+            $payDay = CarbonImmutable::parse($r->next_on);
+            if ($payDay->subDays($r->lead_days)->gt($today)) {
+                continue;
+            }
+
+            $period = self::period($payDay, $r->day);
+            $items = collect($r->items)->map(fn ($i) => [...$i, 'description' => $i['description'].' ('.$period.')'])->all();
+            $invoice = $this->create($r->client, $items, $today, $payDay->lt($today) ? $today : $payDay, $r->note, $r, $r->currency);
             $made++;
             if ($r->auto_send && $r->client->email) {
                 try {
                     $this->send($invoice);
                 } catch (Throwable) {
-                    // stays unsent; shown in the list and tonight's summary
+                    // stays unsent; the reminder says so
                 }
             }
-            $r->update(['next_on' => self::nextOn($r->next_on, $r->day)->toDateString()]);
-            $this->tell("🧾 {$invoice->number} created", ($r->client->company ?: $r->client->name).' · '.$this->money($invoice->total, $invoice->currency).($invoice->sent_at ? ' · emailed' : ''));
+            $r->update(['next_on' => self::nextOn($payDay, $r->day)->toDateString()]);
+
+            $who = $r->client->company ?: $r->client->name;
+            $this->notify->send('invoice', $invoice->sent_at ? "🧾 {$who} invoice sent" : "🧾 {$who} invoice ready — send it",
+                "{$invoice->number} · ".$this->money($invoice->total, $invoice->currency)." · {$period} · pay day ".$payDay->format('j M'),
+                route('personal.invoices.index', ['invoice' => $invoice->id]), 'klok-pinv');
         }
 
         return $made;
+    }
+
+    /** The first pay day on or after $from for a job paid on $day each month. */
+    public static function payDayFrom(CarbonInterface $from, int $day): CarbonImmutable
+    {
+        $from = CarbonImmutable::parse($from)->startOfDay();
+        $candidate = $from->setDay(min($day, $from->daysInMonth));
+
+        return $candidate->lt($from) ? self::nextOn($from, $day) : $candidate;
+    }
+
+    /** "9 Oct – 8 Nov": the month of work paid on $payDay. */
+    public static function period(CarbonInterface $payDay, int $day): string
+    {
+        $start = CarbonImmutable::parse($payDay)->startOfMonth()->subMonth();
+        $start = $start->setDay(min($day, $start->daysInMonth));
+
+        return $start->format('j M').' – '.CarbonImmutable::parse($payDay)->subDay()->format('j M Y');
     }
 
     /** Same day next month (or the month's last day). */
@@ -185,12 +248,7 @@ class PersonalInvoicing
 
     private function tell(string $title, string $body): void
     {
-        foreach (PushSubscription::all() as $sub) {
-            try {
-                $this->push->send($sub, ['title' => $title, 'body' => $body, 'url' => route('personal.invoices.index'), 'tag' => 'klok-pinv']);
-            } catch (Throwable) {
-            }
-        }
+        $this->notify->send('invoice', $title, $body, route('personal.invoices.index'), 'klok-pinv');
     }
 
     private function money(int $cents, string $currency): string

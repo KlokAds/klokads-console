@@ -1,4 +1,5 @@
 <script setup>
+import CopyButton from '@/Components/CopyButton.vue';
 import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
 import EntryRow from '@/Components/Personal/EntryRow.vue';
@@ -19,6 +20,9 @@ const props = defineProps({
     providers: Object,
     kinds: Array,
     currencies: Array,
+    mfs: Array,
+    guides: Object,
+    familyGuide: Object,
 });
 
 const tab = ref('entries');
@@ -71,13 +75,19 @@ const filterChips = computed(() => live.value.map((a) => ({ id: a.id, name: a.na
 
 const sheet = ref(false);
 const editing = ref(null);
-const form = useForm({ name: '', scope: 'personal', kind: 'bank', currency: 'BDT', provider: '', purpose: 'spending', opening_balance: '', notes: '', archived: false });
+const blankAccount = () => ({ name: '', scope: 'personal', kind: 'bank', currency: props.currencies[0], provider: '', last4: '', purpose: 'spending', opening_balance: '', notes: '', guide: '', archived: false });
+const form = useForm(blankAccount());
+const isMfs = computed(() => props.mfs.includes(form.provider));
+const isForeign = computed(() => form.currency !== props.currencies[0]);
+const digits = (a) => (a.last4 ? ` ••${a.last4}` : '');
+// What the bank's own latest alert said, when it differs from our books.
+const bankDiffers = (a) => a.bank_balance !== null && a.bank_balance !== undefined && a.bank_balance !== a.balance;
 const providerList = computed(() => Object.entries(props.providers[form.currency] ?? {}).map(([key, [name, kind]]) => ({ key, name, kind })));
 function openAccount(a = null) {
     editing.value = a;
     form.defaults(a
-        ? { name: a.name, scope: 'personal', kind: a.kind, currency: a.currency, provider: a.provider ?? '', purpose: a.purpose ?? 'spending', opening_balance: a.opening_balance ? String(a.opening_balance / 100) : '', notes: a.notes ?? '', archived: !!a.archived }
-        : { name: '', scope: 'personal', kind: 'bank', currency: props.currencies[0], provider: '', purpose: 'spending', opening_balance: '', notes: '', archived: false });
+        ? { ...blankAccount(), name: a.name, kind: a.kind, currency: a.currency, provider: a.provider ?? '', last4: a.last4 ?? '', purpose: a.purpose ?? 'spending', opening_balance: a.opening_balance ? String(a.opening_balance / 100) : '', notes: a.notes ?? '', guide: a.guide ?? '', archived: !!a.archived }
+        : blankAccount());
     form.reset();
     form.clearErrors();
     sheet.value = true;
@@ -87,6 +97,7 @@ function chooseProvider(p) {
     form.provider = p.key;
     form.kind = p.kind;
     if (wasAuto && p.key !== 'other') form.name = p.name;
+    if (!form.guide && props.guides[p.key] && isForeign.value) form.guide = props.guides[p.key];
 }
 function setCurrency(c) {
     form.currency = c;
@@ -102,6 +113,14 @@ async function removeAccount() {
     if (ok) router.delete(route('money.accounts.destroy', a.id), { preserveScroll: true, onSuccess: () => (sheet.value = false) });
 }
 const restore = (a) => router.put(route('money.accounts.update', a.id), { ...a, opening_balance: a.opening_balance / 100, archived: false }, { preserveScroll: true });
+
+// ---------------------------------------------------------------- family guide
+const guideForm = useForm({ message: props.familyGuide.message ?? '', new_link: false });
+const saveGuide = () => guideForm.transform((d) => ({ ...d, new_link: false })).put(route('personal.guide.update'), { preserveScroll: true });
+async function newGuideLink() {
+    const ok = await confirmDialog({ title: 'Make a new link?', message: 'The old link stops working. Give the new one to your family.', confirmLabel: 'New link' });
+    if (ok) guideForm.transform((d) => ({ ...d, new_link: true })).put(route('personal.guide.update'), { preserveScroll: true });
+}
 
 onMounted(() => {
     const params = new URLSearchParams(window.location.search);
@@ -180,10 +199,13 @@ onMounted(() => {
                     <button v-for="a in g.list" :key="a.id" class="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition hover:bg-ink-50" @click="openAccount(a)">
                         <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-extrabold" :class="a.purpose === 'savings' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'">{{ a.name.slice(0, 1) }}</span>
                         <span class="min-w-0 flex-1">
-                            <span class="block truncate text-[15px] font-semibold text-ink-900">{{ a.name }}</span>
-                            <span class="block truncate text-xs text-ink-500">{{ a.purpose === 'savings' ? 'Savings' : 'Spending' }} · {{ kinds.find((k) => k.value === a.kind)?.label }}</span>
+                            <span class="block truncate text-[15px] font-semibold text-ink-900">{{ a.name }}<span class="font-normal text-ink-400">{{ digits(a) }}</span></span>
+                            <span class="block truncate text-xs text-ink-500">{{ a.purpose === 'savings' ? 'Savings' : 'Spending' }} · {{ kinds.find((k) => k.value === a.kind)?.label.split(' (')[0] }}<template v-if="!a.last4 && a.kind !== 'cash'"> · <span class="text-amber-600">add last 4 digits</span></template></span>
                         </span>
-                        <span class="text-[15px] font-bold tabular-nums" :class="a.balance < 0 ? 'text-rose-600' : 'text-ink-900'">{{ cash(a.balance, a.currency) }}</span>
+                        <span class="text-right">
+                            <span class="block text-[15px] font-bold tabular-nums" :class="a.balance < 0 ? 'text-rose-600' : 'text-ink-900'">{{ cash(a.balance, a.currency) }}</span>
+                            <span v-if="bankDiffers(a)" class="block text-[11px] font-semibold text-amber-600" :title="`Latest ${a.name} alert`">bank says {{ cash(a.bank_balance, a.currency) }}</span>
+                        </span>
                     </button>
                     <p v-if="!g.list.length" class="px-3 pb-3 text-sm text-ink-500">No {{ g.c }} account yet.</p>
                 </section>
@@ -191,6 +213,29 @@ onMounted(() => {
                 <button class="flex w-full items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-ink-200 py-4 text-sm font-bold text-ink-500 transition hover:border-teal-400 hover:text-teal-700" @click="openAccount()">
                     <Icon name="plus" :size="18" /> Add account
                 </button>
+
+                <!-- Family guide -->
+                <section class="rounded-3xl border border-line/70 bg-surface p-5 shadow-sm">
+                    <div class="flex items-start gap-3">
+                        <span class="text-2xl">🤲</span>
+                        <div class="min-w-0 flex-1">
+                            <h3 class="font-display text-[15px] font-bold text-ink-900">Family guide</h3>
+                            <p class="text-xs text-ink-500">A private link for your family: where your money is and how to bring the foreign money to BDT. Only last 4 digits, never passwords.</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center gap-2 rounded-2xl bg-ink-50 px-3 py-2">
+                        <span class="min-w-0 flex-1 truncate text-xs text-ink-600">{{ familyGuide.url }}</span>
+                        <CopyButton :text="familyGuide.url" />
+                        <a :href="familyGuide.url" target="_blank" class="icon-btn" title="Open"><Icon name="external" :size="15" /></a>
+                    </div>
+                    <label class="label mt-4" for="guide-msg">Your message to them</label>
+                    <textarea id="guide-msg" v-model="guideForm.message" rows="4" class="input" placeholder="Who to call, where the phone PIN is kept, which account to use first…"></textarea>
+                    <div class="mt-3 flex flex-wrap justify-between gap-2">
+                        <button class="btn-ghost btn-sm" @click="newGuideLink">New link</button>
+                        <button class="btn-primary btn-sm" :disabled="guideForm.processing || !guideForm.isDirty" @click="saveGuide">Save message</button>
+                    </div>
+                    <p class="mt-3 text-[11px] text-ink-400">Each foreign account's withdraw steps are in its own settings — tap the account above.</p>
+                </section>
 
                 <details v-if="archived.length" class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm">
                     <summary class="cursor-pointer text-sm font-semibold text-ink-600">Archived ({{ archived.length }})</summary>
@@ -222,11 +267,19 @@ onMounted(() => {
                                 :class="form.provider === p.key ? 'bg-teal-600 text-white shadow-sm' : 'bg-ink-50 text-ink-700 hover:bg-ink-100'" @click="chooseProvider(p)">{{ p.name }}</button>
                         </div>
                     </div>
-                    <div>
-                        <label class="label" for="acc-name">Name</label>
-                        <input id="acc-name" v-model="form.name" class="input" placeholder="e.g. bKash personal, DBS savings" required />
-                        <div v-if="form.errors.name" class="error">{{ form.errors.name }}</div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="col-span-2">
+                            <label class="label" for="acc-name">Name</label>
+                            <input id="acc-name" v-model="form.name" class="input" placeholder="e.g. UCB salary, bKash" required />
+                            <div v-if="form.errors.name" class="error">{{ form.errors.name }}</div>
+                        </div>
+                        <div v-if="form.kind !== 'cash'">
+                            <label class="label" for="acc-last4">{{ isMfs ? 'Mobile last 4' : 'Last 4 digits' }}</label>
+                            <input id="acc-last4" v-model="form.last4" class="input text-center font-semibold tabular-nums tracking-[0.3em]" inputmode="numeric" maxlength="4" placeholder="••••" />
+                            <div v-if="form.errors.last4" class="error">{{ form.errors.last4 }}</div>
+                        </div>
                     </div>
+                    <p v-if="form.kind !== 'cash'" class="-mt-3 text-[11px] text-ink-500">{{ isMfs ? 'Last 4 of the mobile number on this wallet.' : 'Last 4 of the account or card number.' }} Bank messages are matched to this account by these digits.</p>
                     <div>
                         <div class="label">Used for</div>
                         <Segmented v-model="form.purpose" :options="[{ value: 'spending', label: '💳 Spending' }, { value: 'savings', label: '🐷 Savings' }]" block />
@@ -234,6 +287,11 @@ onMounted(() => {
                     <div>
                         <div class="label">Type</div>
                         <Segmented v-model="form.kind" :options="kinds.map((k) => ({ value: k.value, label: k.label.split(' (')[0] }))" block size="sm" />
+                    </div>
+                    <div v-if="isForeign || form.guide">
+                        <label class="label" for="acc-guide">{{ isForeign ? 'How to bring it to BDT (for family)' : 'Note for family' }}</label>
+                        <textarea id="acc-guide" v-model="form.guide" rows="5" class="input text-sm" placeholder="Steps someone else can follow…"></textarea>
+                        <p class="mt-1 text-[11px] text-ink-500">Shown on the family guide. Check the steps match the app — never write passwords.</p>
                     </div>
                     <div>
                         <label class="label" for="acc-open">Balance when you started tracking</label>

@@ -8,6 +8,7 @@ use App\Models\LoanPayment;
 use App\Models\MoneyTransaction;
 use App\Support\Catalog;
 use App\Support\Ledger;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +28,7 @@ class LoanController extends Controller
         $loans = Loan::with('payments', 'account:id,name')->latest('started_on')->latest('id')->get();
 
         $rows = $loans->map(fn (Loan $l) => [
-            ...$l->only('id', 'direction', 'person', 'phone', 'currency', 'principal', 'account_id', 'note'),
+            ...$l->only('id', 'direction', 'person', 'phone', 'currency', 'principal', 'fee', 'account_id', 'note'),
             'started_on' => $l->started_on->toDateString(),
             'due_on' => $l->due_on?->toDateString(),
             'account' => $l->account?->name,
@@ -54,7 +55,7 @@ class LoanController extends Controller
 
         DB::transaction(function () use ($data) {
             $loan = Loan::create($data);
-            $loan->update(['money_transaction_id' => $this->move($loan, $loan->principal, $loan->account_id, $loan->started_on->toDateString(), true)?->id]);
+            $loan->update(['money_transaction_id' => $this->move($loan, $loan->principal, $loan->account_id, $loan->started_on->toDateString(), true, $loan->fee)?->id]);
         });
 
         return back()->with('success', $data['direction'] === 'lent' ? "Saved — {$data['person']} owes you." : "Saved — you owe {$data['person']}.");
@@ -70,7 +71,7 @@ class LoanController extends Controller
             if ($tx = MoneyTransaction::find($loan->money_transaction_id)) {
                 Ledger::delete($tx);
             }
-            $loan->update(['money_transaction_id' => $this->move($loan, $loan->principal, $loan->account_id, $loan->started_on->toDateString(), true)?->id]);
+            $loan->update(['money_transaction_id' => $this->move($loan, $loan->principal, $loan->account_id, $loan->started_on->toDateString(), true, $loan->fee)?->id]);
         });
 
         return back()->with('success', 'Updated.');
@@ -119,8 +120,11 @@ class LoanController extends Controller
         return back()->with('success', 'Repayment removed.');
     }
 
-    /** Record the money moving in/out of the chosen account (if any). */
-    private function move(Loan $loan, int $amount, ?int $accountId, string $date, bool $opening): ?MoneyTransaction
+    /**
+     * Record the money moving in/out of the chosen account (if any). If the bank / wallet
+     * SMS for it already came in as an automatic entry, that entry becomes this one.
+     */
+    private function move(Loan $loan, int $amount, ?int $accountId, string $date, bool $opening, int $fee = 0): ?MoneyTransaction
     {
         if (! $accountId) {
             return null; // e.g. cash that isn't tracked
@@ -135,15 +139,28 @@ class LoanController extends Controller
             default => 'loan_repaid_by_me',
         };
 
-        return Ledger::save([
+        $entry = [
             'kind' => $out ? 'expense' : 'income',
             'account_id' => $accountId,
             'amount' => $amount,
+            'fee' => $out ? $fee : 0,
             'category' => $category,
             'counterparty' => $loan->person,
             'description' => Catalog::LOAN_CATEGORIES[$category],
             'occurred_on' => $date,
-        ]);
+        ];
+
+        $auto = MoneyTransaction::where('account_id', $accountId)->where('kind', $entry['kind'])->where('amount', $amount)
+            ->where('description', 'like', 'Auto ·%')->whereNotIn('category', array_keys(Catalog::LOAN_CATEGORIES))
+            ->whereBetween('occurred_on', [CarbonImmutable::parse($date)->subDays(2)->toDateString(), CarbonImmutable::parse($date)->addDays(2)->toDateString().' 23:59:59'])
+            ->latest('id')->first();
+        if ($auto) {
+            $auto->update(['category' => $category, 'counterparty' => $loan->person, 'description' => $entry['description'].' · '.$auto->description, 'fee' => $auto->fee ?: $entry['fee']]);
+
+            return $auto;
+        }
+
+        return Ledger::save($entry);
     }
 
     /** @return array<string, mixed> */
@@ -155,12 +172,13 @@ class LoanController extends Controller
             'phone' => ['nullable', 'string', 'max:30'],
             'currency' => ['required', Rule::in(Catalog::PERSONAL_CURRENCIES)],
             'principal' => ['required', 'numeric', 'min:0.01'],
+            'fee' => ['nullable', 'numeric', 'min:0'],
             'account_id' => ['nullable', Rule::exists('accounts', 'id')->where('scope', 'personal')->where('currency', $request->input('currency'))],
             'started_on' => ['required', 'date'],
             'due_on' => ['nullable', 'date', 'after_or_equal:started_on'],
             'note' => ['nullable', 'string', 'max:500'],
         ], ['account_id.exists' => 'Pick an account in the same currency.']);
 
-        return [...$data, 'principal' => $this->toCents($data['principal'])];
+        return [...$data, 'principal' => $this->toCents($data['principal']), 'fee' => $this->toCents($data['fee'] ?? 0)];
     }
 }

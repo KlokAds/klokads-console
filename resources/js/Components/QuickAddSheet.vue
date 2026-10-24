@@ -128,6 +128,17 @@ async function remove() {
     }
 }
 
+// Editing money that came in: it can be marked as the payment for an open invoice.
+const isLinked = computed(() => !!editing.value && (data.value?.linked ?? []).includes(editing.value.id));
+const payableInvoices = computed(() => {
+    if (!editing.value || editing.value.kind !== 'income' || isLinked.value) return [];
+    const currency = accounts.value.find((a) => a.id === Number(f.account_id))?.currency;
+    return (data.value?.invoices ?? []).filter((i) => i.currency === currency);
+});
+function linkTo(inv) {
+    router.post(route('personal.invoices.link', inv.id), { money_transaction_id: editing.value.id }, { preserveScroll: true, onSuccess: () => { loadedAt = 0; close(); } });
+}
+
 const onEvent = (e) => show(e.detail ?? {});
 const onKey = (e) => {
     if (!open.value) return;
@@ -215,6 +226,16 @@ onUnmounted(() => {
                                     </button>
                                 </div>
                             </template>
+
+                            <!-- Money in that pays one of my invoices -->
+                            <div v-if="payableInvoices.length" class="mt-5 rounded-2xl bg-emerald-50 p-3">
+                                <div class="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-700">Is this a payment for…</div>
+                                <button v-for="inv in payableInvoices" :key="inv.id" type="button" class="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-sm transition hover:bg-surface" @click="linkTo(inv)">
+                                    <span class="min-w-0 flex-1 truncate font-semibold text-ink-900">{{ inv.client }} <span class="font-normal text-ink-500">· {{ inv.number }}</span></span>
+                                    <span class="font-bold tabular-nums text-emerald-700">{{ cash(inv.due, inv.currency) }}</span>
+                                </button>
+                            </div>
+                            <div v-else-if="isLinked" class="mt-5 rounded-2xl bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">✅ Counted as an invoice payment</div>
 
                             <!-- Who / when -->
                             <div class="mt-5 grid grid-cols-2 gap-2">

@@ -20,6 +20,13 @@ class TransactionParser
         'dbbl' => ['dbbl', 'dutch-bangla', 'dutch bangla'],
         'ebl' => ['ebl', 'eastern bank'],
         'islami' => ['islami', 'ibbl'],
+        'ucb' => ['ucb', 'united commercial'],
+        'mtb' => ['mtb', 'mutual trust'],
+        'prime' => ['prime bank', 'primebank'],
+        'scb' => ['standard chartered', 'stanchart', 'sc bank'],
+        'worldfirst' => ['worldfirst', 'world first'],
+        'elevatepay' => ['elevate pay', 'elevatepay', 'elevate'],
+        'payoneer' => ['payoneer'],
         'dbs' => ['dbs', 'posb', 'paylah'],
         'ocbc' => ['ocbc'],
         'uob' => ['uob'],
@@ -43,7 +50,7 @@ class TransactionParser
     private const NOT_MONEY = '/\b(otp|one[- ]time password|verification code|do not share|pin|offer|cashback up to|win|\d+% off|discount|failed|unsuccessful|declined|reversed|insufficient)\b/u';
 
     /**
-     * @return array{provider: ?string, direction: string, amount: int, currency: string, counterparty: ?string, reference: ?string, fee: int, last4: ?string}|null
+     * @return array{provider: ?string, direction: string, amount: int, currency: string, counterparty: ?string, reference: ?string, fee: int, last4: ?string, balance: ?int}|null
      */
     public static function parse(?string $sender, string $text): ?array
     {
@@ -70,7 +77,8 @@ class TransactionParser
             'counterparty' => self::counterparty($raw, $direction),
             'reference' => self::match('/\b(?:trx ?id|txn ?id|transaction id|ref(?:erence)?(?: no\.?)?)[\s:#.-]*([A-Z0-9]{6,})/i', $raw),
             'fee' => self::fee($raw),
-            'last4' => self::match('/(?:a\/c|acct?|account|card)(?: no\.?)?[^0-9]{0,20}(?:\*+|x+|ending(?: in)?\s*)?(\d{3,4})\b/i', $raw),
+            'last4' => self::last4($raw),
+            'balance' => self::balance($raw),
         ];
     }
 
@@ -150,6 +158,24 @@ class TransactionParser
         }
 
         return null;
+    }
+
+    /** My account's last digits: "A/C ***1234", "Acct no. 123XXXX4567", "card ending 1234". */
+    private static function last4(string $raw): ?string
+    {
+        if (! preg_match('/(?:a\/c|acct?|account|card)(?: no\.?| number)?(?: ending(?: in)?)?[\s:#.-]*([0-9xX*•.]*[xX*•][0-9xX*•.]*?\d{3,4}|\d{4,})\b/iu', $raw, $m)) {
+            return null;
+        }
+
+        return preg_match('/(\d{3,4})$/', $m[1], $d) ? $d[1] : null;
+    }
+
+    /** The balance an alert reports after the transaction, in cents. */
+    private static function balance(string $raw): ?int
+    {
+        $v = self::match('/\b(?:avl\.? bal(?:ance)?|available balance|current balance|new balance|balance|bal)[\s:.]*(?:is\s*)?(?:tk\.?|bdt|৳|sgd|s\$|usd|us\$|\$)?\s*(\d[\d,]*(?:\.\d{1,2})?)/iu', $raw);
+
+        return $v !== null ? (int) round(((float) str_replace(',', '', $v)) * 100) : null;
     }
 
     private static function fee(string $raw): int

@@ -32,7 +32,7 @@ class AutoEntries
         'family' => ['ammu', 'abbu', 'family'],
     ];
 
-    public function __construct(private PersonalInvoicing $invoicing) {}
+    public function __construct(private PersonalInvoicing $invoicing, private Envelopes $envelopes, private Notify $notify) {}
 
     public static function token(): string
     {
@@ -70,9 +70,13 @@ class AutoEntries
         $account = $accountId ? Account::find($accountId) : $this->account($p);
         if (! $account) {
             $message->update(['status' => 'review', 'note' => $p['provider'] ? 'No matching '.strtoupper($p['currency']).' account for '.$p['provider'] : 'Which account is this?']);
+            $this->notify->send('info', '👀 '.($p['direction'] === 'in' ? 'Money in' : 'Money out').' — which account?',
+                Notify::money($p['amount'], $p['currency']).' · '.($p['provider'] ? ucfirst($p['provider']) : ($message->sender ?: $message->source)).(($p['last4'] ?? null) ? " ••{$p['last4']}" : '').' — tap to choose the account.',
+                route('personal.inbox.index'), 'klok-review');
 
             return $message;
         }
+        $this->rememberBankBalance($account, $p);
 
         $date = ($message->received_at ?? now())->toDateString();
         if ($this->alreadyRecorded($account, $p, $date)) {
@@ -90,6 +94,14 @@ class AutoEntries
                 return $message;
             }
 
+            // Money out that is this month's envelope hand-out (e.g. Songsar from bKash).
+            if ($p['direction'] === 'out' && ! $category && ($month = $this->envelopes->claim($account, $p['amount'], $p['fee'] ?? 0, $date, ucfirst($message->source).($p['reference'] ? " · {$p['reference']}" : '')))) {
+                $message->update(['status' => 'added', 'account_id' => $account->id, 'money_transaction_id' => $month->money_transaction_id, 'note' => 'Envelope: '.$month->envelope->name]);
+                $this->tellEntry($account, $p, '→ '.$month->envelope->name.' envelope');
+
+                return $message;
+            }
+
             $tx = Ledger::save([
                 'kind' => $p['direction'] === 'in' ? 'income' : 'expense',
                 'account_id' => $account->id,
@@ -101,6 +113,7 @@ class AutoEntries
                 'occurred_on' => $date,
             ]);
             $message->update(['status' => 'added', 'account_id' => $account->id, 'money_transaction_id' => $tx->id, 'note' => null]);
+            $this->tellEntry($account, $p);
         } catch (Throwable $e) {
             $message->update(['status' => 'review', 'note' => mb_substr($e->getMessage(), 0, 250)]);
         }
@@ -120,24 +133,57 @@ class AutoEntries
         $message->update(['status' => 'review', 'money_transaction_id' => null, 'personal_invoice_id' => null, 'note' => 'Undone']);
     }
 
-    /** Provider + currency → account; the last 4 digits pick between several. */
+    /**
+     * Which of my accounts: the last 4 digits first (they belong to one account),
+     * then the bank / wallet and currency, with the digits picking between several.
+     */
     private function account(array $p): ?Account
     {
+        $live = Account::where('archived', false)->whereRaw('upper(currency) = ?', [strtoupper($p['currency'])])->orderByRaw("scope = 'personal' desc")->get();
+        $digits = $p['last4'] ?? null;
+
+        if ($digits) {
+            $byLast4 = $live->filter(fn ($a) => $a->last4 && str_ends_with($a->last4, $digits) && (! $p['provider'] || ! $a->provider || $a->provider === $p['provider']));
+            if ($byLast4->count() === 1) {
+                return $byLast4->first();
+            }
+        }
+
         if (! $p['provider']) {
             return null;
         }
 
-        $candidates = Account::where('archived', false)->where('provider', $p['provider'])
-            ->whereRaw('upper(currency) = ?', [strtoupper($p['currency'])])->orderByRaw("scope = 'personal' desc")->get();
-
-        if ($candidates->count() > 1 && $p['last4']) {
-            $byDigits = $candidates->filter(fn ($a) => str_contains($a->name.' '.$a->notes, $p['last4']));
+        $candidates = $live->where('provider', $p['provider'])->values();
+        if ($candidates->count() > 1 && $digits) {
+            $byDigits = $candidates->filter(fn ($a) => str_contains($a->last4.' '.$a->name.' '.$a->notes, $digits));
             if ($byDigits->count() === 1) {
                 return $byDigits->first();
             }
         }
 
         return $candidates->count() === 1 ? $candidates->first() : null;
+    }
+
+    /** Keep what the bank says the balance is, to compare with ours. */
+    private function rememberBankBalance(Account $account, array $p): void
+    {
+        if (($p['balance'] ?? null) !== null) {
+            $account->update(['bank_balance' => $p['balance'], 'bank_balance_at' => now()]);
+        }
+    }
+
+    /** "💰 UCB ••4567 +৳20,000 · From X · Balance ৳45,500" */
+    private function tellEntry(Account $account, array $p, ?string $extra = null): void
+    {
+        $in = $p['direction'] === 'in';
+        $name = $account->name.($account->last4 && ! str_contains($account->name, $account->last4) ? " ••{$account->last4}" : '');
+        $parts = array_filter([
+            $p['counterparty'] ? ($in ? 'From ' : 'To ').$p['counterparty'] : null,
+            $extra,
+            'Balance '.Notify::money(Ledger::balance($account->fresh()), $account->currency),
+        ]);
+        $this->notify->send($in ? 'credit' : 'debit', ($in ? '💰 ' : '💸 ').$name.' '.($in ? '+' : '−').Notify::money($p['amount'], $account->currency),
+            implode(' · ', $parts), route('personal.activity'), 'klok-money');
     }
 
     /**

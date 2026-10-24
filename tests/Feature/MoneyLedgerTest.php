@@ -120,7 +120,7 @@ class MoneyLedgerTest extends TestCase
         $this->post('/money', ['kind' => 'expense', 'account_id' => $this->sgd->id, 'amount' => 999, 'category' => 'software', 'occurred_on' => now()->toDateString()]);
 
         $this->get('/personal')->assertOk()->assertInertia(fn ($page) => $page->component('Personal/Dashboard')
-            ->where('currencies', ['SGD', 'BDT'])
+            ->where('currencies', ['BDT', 'SGD', 'USD'])
             ->has('accounts', 2)
             ->where('accounts.0.name', 'DBS Savings')
             ->where('accounts.0.balance', 50000 - 12000 - 8000 - 10000)
@@ -157,10 +157,16 @@ class MoneyLedgerTest extends TestCase
         $this->assertNotContains('bank_fees', array_column($quick->json('categories.expense'), 'value'));
     }
 
-    public function test_personal_accounts_are_sgd_or_bdt_and_keep_their_bank(): void
+    public function test_personal_accounts_are_bdt_sgd_or_usd_and_keep_their_bank_and_last_4(): void
     {
-        $this->post('/money/accounts', ['name' => 'Revolut USD', 'scope' => 'personal', 'kind' => 'wallet', 'currency' => 'USD'])
-            ->assertSessionHasErrors(['currency' => 'Personal accounts are SGD or BDT.']);
+        $this->post('/money/accounts', ['name' => 'Revolut EUR', 'scope' => 'personal', 'kind' => 'wallet', 'currency' => 'EUR'])
+            ->assertSessionHasErrors(['currency' => 'Personal accounts are BDT, SGD or USD.']);
+        $this->post('/money/accounts', ['name' => 'UCB', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'ucb', 'currency' => 'BDT', 'last4' => '45a7'])
+            ->assertSessionHasErrors('last4');
+
+        $this->post('/money/accounts', ['name' => 'nSave', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'nsave', 'currency' => 'USD', 'last4' => '9012'])
+            ->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('accounts', ['name' => 'nSave', 'currency' => 'USD', 'last4' => '9012']);
 
         $this->post('/money/accounts', ['name' => 'Airwallex', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'airwallex', 'currency' => 'SGD'])
             ->assertSessionHasNoErrors();

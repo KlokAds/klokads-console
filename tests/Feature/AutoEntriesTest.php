@@ -24,7 +24,7 @@ class AutoEntriesTest extends TestCase
     {
         return [
             'bkash received' => ['bKash', 'You have received Tk 1,500.00 from 01711000000. Ref Rent. Fee Tk 0.00. Balance Tk 8,250.50. TrxID 9JK4XY2Z at 24/10/2026 10:15',
-                ['provider' => 'bkash', 'direction' => 'in', 'amount' => 150000, 'currency' => 'BDT', 'reference' => '9JK4XY2Z']],
+                ['provider' => 'bkash', 'direction' => 'in', 'amount' => 150000, 'currency' => 'BDT', 'reference' => '9JK4XY2Z', 'balance' => 825050]],
             'bkash send money' => ['bKash', 'Send Money Tk 500.00 to 01811000000 successful. Ref Ammu. Fee Tk 5.00. Balance Tk 7,745.50. TrxID 8HG3WX1Y at 24/10/2026 12:01',
                 ['provider' => 'bkash', 'direction' => 'out', 'amount' => 50000, 'fee' => 500, 'reference' => '8HG3WX1Y']],
             'nagad received' => ['NAGAD', 'Money Received. Amount: Tk 2000.00 Sender: 01911000000 Ref: N/A TxnID: 73AB12CD Balance: Tk 5000.00 24/10/2026 09:10',
@@ -32,7 +32,11 @@ class AutoEntriesTest extends TestCase
             'rocket' => ['16216', 'Tk1,000.00 received from A/C:017110000001 Fee:Tk0, Your A/C Balance: Tk3,500.00 TxnId:1234567890 Date:24-OCT-26 10:01:02 am',
                 ['provider' => 'rocket', 'direction' => 'in', 'amount' => 100000, 'reference' => '1234567890']],
             'city bank credit' => ['CityBank', 'Dear Customer, your A/C ...4321 has been credited by BDT 25,000.00 on 24-Oct-2026 (NPSB). Avl Bal: BDT 60,210.00',
-                ['provider' => 'city', 'direction' => 'in', 'amount' => 2500000, 'last4' => '4321']],
+                ['provider' => 'city', 'direction' => 'in', 'amount' => 2500000, 'last4' => '4321', 'balance' => 6021000]],
+            'ucb masked account' => ['UCB', 'Your A/C No. 123XXXX4567 is credited with BDT 20,000.00 on 25-10-2026. Current Balance BDT 45,500.00',
+                ['provider' => 'ucb', 'direction' => 'in', 'amount' => 2000000, 'last4' => '4567', 'balance' => 4550000]],
+            'nsave notification' => ['nSave', 'You received $250.00 from Upwork. Your new balance is $1,240.10',
+                ['provider' => 'nsave', 'direction' => 'in', 'amount' => 25000, 'currency' => 'USD', 'balance' => 124010]],
             'dbs card' => ['DBS', 'A card transaction of SGD 12.30 was made on your DBS card ending 5566 at FAIRPRICE XTRA on 24 Oct.',
                 ['provider' => 'dbs', 'direction' => 'out', 'amount' => 1230, 'currency' => 'SGD', 'counterparty' => 'FAIRPRICE XTRA']],
             'airwallex email' => ['notifications@airwallex.com', "You've received SGD 1,000.00\nPayment from KLOK ADS PTE LTD has arrived in your Airwallex account.",
