@@ -35,10 +35,10 @@ export const CATEGORY = {
 
 export const cat = (key) => CATEGORY[key] ?? CATEGORY.other;
 
-/** "৳1,250" for BDT (no paisa), "S$12.50" for SGD. */
+/** "৳1,250.50" for BDT (lakh grouping, with poisha), "S$12.50" for SGD. */
 export function cash(cents, currency = 'BDT') {
     const c = (currency || 'BDT').toUpperCase();
-    if (c === 'BDT') return (cents < 0 ? '−' : '') + '৳' + Math.round(Math.abs(cents) / 100).toLocaleString('en-IN');
+    if (c === 'BDT') return (cents < 0 ? '−' : '') + '৳' + (Math.abs(cents) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     return (cents < 0 ? '−' : '') + money(Math.abs(cents), c);
 }
 

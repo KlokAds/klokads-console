@@ -253,6 +253,6 @@ class PersonalInvoicing
 
     private function money(int $cents, string $currency): string
     {
-        return ($currency === 'BDT' ? '৳' : $currency.' ').number_format($cents / 100, $currency === 'BDT' ? 0 : 2);
+        return ($currency === 'BDT' ? '৳' : $currency.' ').number_format($cents / 100, 2);
     }
 }

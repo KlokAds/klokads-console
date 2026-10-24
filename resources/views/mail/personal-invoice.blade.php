@@ -1,5 +1,5 @@
 @php
-    $money = fn (int $c) => ($invoice->currency === 'BDT' ? '৳' : $invoice->currency.' ').number_format($c / 100, $invoice->currency === 'BDT' ? 0 : 2);
+    $money = fn (int $c) => ($invoice->currency === 'BDT' ? '৳' : $invoice->currency.' ').number_format($c / 100, 2);
     $labels = \App\Support\Catalog::PAY_METHODS;
 @endphp
 <!DOCTYPE html>

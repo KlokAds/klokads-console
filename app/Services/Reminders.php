@@ -218,6 +218,6 @@ class Reminders
         $code = strtoupper($currency);
         $symbol = ['SGD' => 'S$', 'BDT' => '৳', 'USD' => '$'][$code] ?? $code.' ';
 
-        return $symbol.number_format($cents / 100, $code === 'BDT' ? 0 : 2);
+        return $symbol.number_format($cents / 100, 2);
     }
 }

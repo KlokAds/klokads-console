@@ -77,7 +77,7 @@ class LoansTest extends TestCase
 
         $m = app(Reminders::class)->morning(CarbonImmutable::parse('2026-10-15 09:00', 'Asia/Dhaka'));
 
-        $this->assertStringContainsString('🤝 Rahim owes you ৳5,000 (due 16 Oct)', $m['body']);
-        $this->assertStringContainsString('🤝 Pay Karim ৳2,000 (due today)', $m['body']);
+        $this->assertStringContainsString('🤝 Rahim owes you ৳5,000.00 (due 16 Oct)', $m['body']);
+        $this->assertStringContainsString('🤝 Pay Karim ৳2,000.00 (due today)', $m['body']);
     }
 }

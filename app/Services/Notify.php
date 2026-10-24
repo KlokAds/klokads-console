@@ -50,6 +50,6 @@ class Notify
         $code = strtoupper($currency);
         $symbol = ['SGD' => 'S$', 'BDT' => '৳', 'USD' => '$'][$code] ?? $code.' ';
 
-        return ($cents < 0 ? '−' : '').$symbol.number_format(abs($cents) / 100, $code === 'BDT' ? 0 : 2);
+        return ($cents < 0 ? '−' : '').$symbol.number_format(abs($cents) / 100, 2);
     }
 }

@@ -71,7 +71,7 @@ class RemindersTest extends TestCase
         Ledger::save(['kind' => 'expense', 'account_id' => $this->dbs->id, 'amount' => 1250, 'category' => 'food', 'occurred_on' => '2026-10-15']);
         Ledger::save(['kind' => 'expense', 'account_id' => $bk->id, 'amount' => 120000, 'category' => 'family', 'occurred_on' => '2026-10-15']);
 
-        $this->assertSame('🌙 Today: S$12.50 · ৳1,200 spent', $reminders->evening($local)['title']);
+        $this->assertSame('🌙 Today: S$12.50 · ৳1,200.00 spent', $reminders->evening($local)['title']);
     }
 
     public function test_each_reminder_goes_out_once_a_day_at_the_devices_local_time(): void

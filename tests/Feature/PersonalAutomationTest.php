@@ -45,8 +45,8 @@ class PersonalAutomationTest extends TestCase
         $this->assertSame(2000000, Ledger::balance($salary));
         $this->assertSame(4550000, $salary->fresh()->bank_balance, 'what the bank says, to compare');
         $note = AppNotification::sole();
-        $this->assertSame(['credit', '💰 UCB salary ••4567 +৳20,000'], [$note->kind, $note->title]);
-        $this->assertStringContainsString('Balance ৳20,000', $note->body);
+        $this->assertSame(['credit', '💰 UCB salary ••4567 +৳20,000.00'], [$note->kind, $note->title]);
+        $this->assertStringContainsString('Balance ৳20,000.00', $note->body);
     }
 
     public function test_money_moved_between_my_own_accounts_becomes_one_transfer(): void
@@ -135,7 +135,7 @@ class PersonalAutomationTest extends TestCase
         $this->assertSame(0, $run('2026-11-10 23:30'));
 
         $titles = AppNotification::pluck('title')->all();
-        $this->assertSame(['🤝 Pay Karim ৳5,000 in 2 days', '🤝 Pay Karim ৳5,000 tomorrow', '📌 Today: pay Karim ৳5,000', '⏰ 1 hour left: pay Karim ৳5,000'], $titles);
+        $this->assertSame(['🤝 Pay Karim ৳5,000.00 in 2 days', '🤝 Pay Karim ৳5,000.00 tomorrow', '📌 Today: pay Karim ৳5,000.00', '⏰ 1 hour left: pay Karim ৳5,000.00'], $titles);
     }
 
     public function test_money_owed_to_me_reminds_from_two_days_before_only_when_it_has_a_date(): void

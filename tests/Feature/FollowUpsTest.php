@@ -52,7 +52,7 @@ class FollowUpsTest extends TestCase
         $note = AppNotification::sole();
         $this->assertStringStartsWith('💬 Unseen on WhatsApp: Zabed Vai', $note->title);
         $this->assertStringContainsString('Ar meeting kobe?', $note->body);
-        $this->assertStringContainsString('Job ৳5,000/month · pay day 5 Nov', $note->body);
+        $this->assertStringContainsString('Job ৳5,000.00/month · pay day 5 Nov', $note->body);
         $this->assertStringContainsString('f='.FollowUp::sole()->id, $note->url);
     }
 
@@ -63,7 +63,7 @@ class FollowUpsTest extends TestCase
 
         Loan::create(['direction' => 'lent', 'person' => 'Karim', 'phone' => '+8801811000000', 'currency' => 'BDT', 'principal' => 300000, 'started_on' => '2026-10-01']);
         $this->event(['action' => 'new', 'source' => 'call', 'kind' => 'missed_call', 'person' => 'Karim', 'phone' => '01811000000']);
-        $this->assertStringContainsString('Owes you ৳3,000', app(FollowUps::class)->context(FollowUp::latest('id')->first()));
+        $this->assertStringContainsString('Owes you ৳3,000.00', app(FollowUps::class)->context(FollowUp::latest('id')->first()));
         $this->event(['action' => 'called_back', 'source' => 'call', 'phone' => '+880 1811-000000']);
 
         $this->assertSame(0, FollowUp::open()->count());
