@@ -43,6 +43,8 @@ const lock = () => router.post(route('personal.lock'));
 // Inside the MH-Bot app: its own settings (SMS, wallet alerts, notifications).
 const inApp = typeof navigator !== 'undefined' && navigator.userAgent.includes('KlokApp');
 const appSettings = () => window.flutter_inappwebview?.callHandler('appSettings');
+// Inside the app its own lock is the lock: the web PIN and Lock buttons are for browsers.
+if (inApp) NAV.find((i) => i.route === 'notifications.index').name = 'Reminders';
 onMounted(() => {
     applyTheme();
     syncEntries();
@@ -73,7 +75,7 @@ router.on('navigate', () => (more.value = false));
             </nav>
             <div class="space-y-1 border-t border-line/70 pt-3">
                 <Link :href="route('dashboard')" class="flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold text-ink-600 hover:bg-ink-50"><Icon name="bank" :size="17" class="text-ink-400" /> Business side</Link>
-                <button class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold text-ink-600 hover:bg-ink-50" @click="lock"><span class="w-[17px] text-center">🔒</span> Lock</button>
+                <button v-if="!inApp" class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold text-ink-600 hover:bg-ink-50" @click="lock"><span class="w-[17px] text-center">🔒</span> Lock</button>
                 <div class="flex items-center gap-2.5 px-3 pt-2">
                     <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-brand-500 text-xs font-bold text-white">{{ first.slice(0, 1) }}</span>
                     <span class="min-w-0 flex-1 truncate text-xs font-semibold text-ink-700">{{ user?.name }}</span>
@@ -143,7 +145,7 @@ router.on('navigate', () => (more.value = false));
                             <Icon :name="item.icon" :size="22" /> {{ item.name }}
                         </Link>
                         <Link :href="route('dashboard')" class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700"><Icon name="bank" :size="22" /> Business</Link>
-                        <button class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700" @click="lock"><span class="text-xl leading-none">🔒</span> Lock</button>
+                        <button v-if="!inApp" class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700" @click="lock"><span class="text-xl leading-none">🔒</span> Lock</button>
                         <button v-if="inApp" class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700" @click="appSettings"><span class="text-xl leading-none">📱</span> Phone app</button>
                     </div>
                 </div>

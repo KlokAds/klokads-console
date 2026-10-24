@@ -70,6 +70,14 @@ function addWord() {
     newWord.value = '';
 }
 const smsOk = computed(() => props.setup.last_sms && Date.now() - new Date(props.setup.last_sms) < 3 * 864e5);
+// The phone checks in every 15 minutes; quiet for a day means it is off, logged out or uninstalled.
+const appAlive = computed(() => props.setup.app_seen && Date.now() - new Date(props.setup.app_seen) < 864e5);
+const appStatus = computed(() => {
+    if (smsOk.value) return ['Working', 'bg-emerald-50 text-emerald-700'];
+    if (appAlive.value) return [props.setup.last_sms ? 'Connected · quiet lately' : 'Connected · waiting for first SMS', 'bg-sky-50 text-sky-700'];
+    if (props.setup.app_paired || props.setup.app_seen) return ['App not checking in', 'bg-amber-50 text-amber-700'];
+    return ['Not set up', 'bg-amber-50 text-amber-700'];
+});
 </script>
 
 <template>
@@ -85,9 +93,14 @@ const smsOk = computed(() => props.setup.last_sms && Date.now() - new Date(props
             <div class="card p-5 sm:p-6">
                 <div class="flex items-center justify-between">
                     <div class="card-title">📱 MH-Bot phone app</div>
-                    <span class="badge" :class="smsOk ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ smsOk ? 'Working' : setup.last_sms ? 'Quiet lately' : 'Not set up' }}</span>
+                    <span class="badge" :class="appStatus[1]">{{ appStatus[0] }}</span>
                 </div>
-                <p class="mt-2 text-sm text-ink-600">The MH-Bot app sends bank SMS and wallet-app notifications here by itself — only from the senders switched on below. Last message: <b>{{ setup.last_sms ? date(setup.last_sms, true) : 'never' }}</b>.</p>
+                <p class="mt-2 text-sm text-ink-600">The MH-Bot app sends bank SMS and wallet-app notifications here by itself — only from the senders switched on below.</p>
+                <dl class="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div class="rounded-xl bg-ink-50 px-3 py-2"><dt class="text-ink-500">App last checked in</dt><dd class="mt-0.5 font-semibold text-ink-900">{{ setup.app_seen ? date(setup.app_seen, true) : 'never' }}</dd></div>
+                    <div class="rounded-xl bg-ink-50 px-3 py-2"><dt class="text-ink-500">Last bank / wallet message</dt><dd class="mt-0.5 font-semibold text-ink-900">{{ setup.last_sms ? date(setup.last_sms, true) : 'none yet' }}</dd></div>
+                </dl>
+                <p v-if="appAlive && !setup.last_sms" class="mt-2 text-xs text-ink-500">The app is connected. When a bank or bKash SMS comes, it shows here — or send recent ones now: app ⚙️ → Messages → “Old SMS”.</p>
                 <details class="mt-3 text-xs text-ink-500">
                     <summary class="cursor-pointer font-semibold">Using another forwarder app instead?</summary>
                     <p class="mt-2">Send POST JSON <code>{"from": sender, "text": message}</code> to this private link:</p>

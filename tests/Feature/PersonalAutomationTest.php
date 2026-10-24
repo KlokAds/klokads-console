@@ -193,6 +193,27 @@ class PersonalAutomationTest extends TestCase
             ->where('accounts.1.guide', fn ($text) => str_contains($text, 'Rizon app')));
     }
 
+    public function test_inside_the_app_its_own_lock_opens_the_personal_side_without_the_web_pin(): void
+    {
+        $owner = User::factory()->create(['is_owner' => true, 'pin_hash' => bcrypt('2580')]);
+        $this->actingAs($owner);
+        $this->get('/personal/loans')->assertRedirect('/personal/unlock');
+
+        $this->postJson('/app/unlock/wrong')->assertNotFound();
+        $this->postJson('/app/unlock/'.AutoEntries::token())->assertOk()->assertJsonPath('to', route('personal.loans.index'));
+        $this->get('/personal/loans')->assertOk();
+
+        $this->actingAs(User::factory()->create(['is_owner' => false]));
+        $this->postJson('/app/unlock/'.AutoEntries::token())->assertForbidden();
+    }
+
+    public function test_the_panel_knows_the_app_is_connected_before_any_sms_arrives(): void
+    {
+        $this->get('/personal/inbox')->assertInertia(fn ($page) => $page->where('setup.app_seen', null));
+        $this->getJson('/app/feed/'.AutoEntries::token())->assertOk();
+        $this->get('/personal/inbox')->assertInertia(fn ($page) => $page->whereNot('setup.app_seen', null)->where('setup.last_sms', null));
+    }
+
     public function test_a_test_notification_goes_to_the_feed_from_the_app_or_the_panel(): void
     {
         $this->postJson('/app/test/'.AutoEntries::token())->assertOk();

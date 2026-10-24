@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Middleware\PersonalAccess;
 use App\Models\AppNotification;
 use App\Models\FollowUp;
+use App\Models\Setting;
 use App\Services\AutoEntries;
 use App\Services\FollowUps;
 use App\Services\Notify;
@@ -23,6 +25,7 @@ class PhoneAppController extends Controller
     public function pair(Request $request): JsonResponse
     {
         abort_unless($request->user()?->is_owner, 403);
+        Setting::put('app_paired_at', now()->toIso8601String());
 
         return response()->json([
             'token' => AutoEntries::token(),
@@ -117,10 +120,28 @@ class PhoneAppController extends Controller
         return response()->json(['ok' => true, 'item' => $followUps->row($followUp->fresh())]);
     }
 
+    /**
+     * Inside the app, its own lock (fingerprint / app PIN) is the lock: once it passes, the app
+     * calls this with its private key and the personal side opens without the web PIN.
+     * Only the paired app has the key; the browser keeps asking for the web PIN.
+     */
+    public function unlock(Request $request, string $token): JsonResponse
+    {
+        abort_unless(hash_equals(AutoEntries::token(), $token), 404);
+        abort_unless($request->user()?->is_owner, 403);
+        $request->session()->put('personal_unlocked_until', now()->addMinutes(PersonalAccess::IDLE_MINUTES)->timestamp);
+
+        return response()->json(['ok' => true, 'to' => $request->session()->pull('personal_intended', route('personal.dashboard'))]);
+    }
+
     /** New notifications since the last one the phone showed. */
     public function feed(Request $request, string $token): JsonResponse
     {
         abort_unless(hash_equals(AutoEntries::token(), $token), 404);
+        // The phone asks every 15 minutes: that is how the panel knows the app is alive.
+        if (Setting::get('app_seen_at') < now()->subMinutes(5)->toIso8601String()) {
+            Setting::put('app_seen_at', now()->toIso8601String());
+        }
         $after = (int) $request->integer('after');
 
         return response()->json([

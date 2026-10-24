@@ -91,7 +91,9 @@ class InboxController extends Controller
                     'checked_at' => Setting::get('imap_checked_at'),
                     'error' => Setting::get('imap_error'),
                 ],
-                'last_sms' => InboxMessage::where('source', 'sms')->latest('id')->value('created_at')?->toIso8601String(),
+                'last_sms' => InboxMessage::whereIn('source', ['sms', 'app'])->latest('id')->value('created_at')?->toIso8601String(),
+                'app_seen' => Setting::get('app_seen_at'),
+                'app_paired' => Setting::get('app_paired_at'),
             ],
         ]);
     }

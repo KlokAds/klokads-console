@@ -819,6 +819,10 @@ class _SettingsTabState extends State<SettingsTab> with WidgetsBindingObserver {
             child: Text('নিচের সবগুলো চালু থাকলে bank SMS আর wallet-এর টাকা নিজে থেকে হিসাবে উঠবে, আর প্রতিটা credit/debit আর reminder phone-এ আসবে।'),
           ),
         const _Heading('Security'),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
+          child: Text('Lock চালু থাকলে app-এর ভেতরে website-এর PIN আর চাইবে না — এই lock-ই যথেষ্ট। Lock বন্ধ থাকলে website-এর PIN চাইবে।', style: TextStyle(color: Colors.grey, fontSize: 12.5)),
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
           child: SegmentedButton<String>(

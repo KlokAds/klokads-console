@@ -145,6 +145,26 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
     return value is Map ? (status: (value['status'] as num?)?.toInt() ?? 0, body: value['body']) : null;
   }
 
+  /// The site asks for its web PIN, but this app has its own lock (fingerprint / app PIN): with
+  /// that lock on, the app opens the personal side itself. With the app lock off, the web PIN stays.
+  Future<bool> appUnlock() async {
+    if (await Lock.mode() == 'off') {
+      return false;
+    }
+    final config = (await SharedPreferences.getInstance()).getString('config.url');
+    if (config == null) {
+      return false;
+    }
+    final token = Uri.parse(config).pathSegments.last;
+    final result = await request('POST', '/app/unlock/$token');
+    final body = result?.body;
+    if (result?.status != 200 || body is! Map) {
+      return false;
+    }
+    open('${body['to'] ?? '/personal'}');
+    return true;
+  }
+
   /// On the unlocked personal side, once: the URLs, then permissions, then (if I want) the lock.
   Future<void> pair(WebUri? url) async {
     final prefs = await SharedPreferences.getInstance();
@@ -345,6 +365,9 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
                       source: "[document.documentElement.classList.contains('dark') ? 'dark' : 'light', getComputedStyle(document.body).backgroundColor]");
                   if (look is List) {
                     setBars(look);
+                  }
+                  if (url != null && url.host == Uri.parse(site).host && url.path.startsWith('/personal/unlock') && await appUnlock()) {
+                    return;
                   }
                   await pair(url);
                   unawaited(checkUpdate());

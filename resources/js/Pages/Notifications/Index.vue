@@ -103,18 +103,22 @@ const wokeHealthy = computed(() => props.cron.woke_at && Date.now() - new Date(p
         <!-- The MH-Bot phone app -->
         <div class="keep-dark relative mb-5 overflow-hidden rounded-3xl bg-gradient-to-br from-teal-600 to-indigo-700 p-5 text-white shadow-lg sm:p-6">
             <div class="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl"></div>
-            <div class="relative flex flex-wrap items-center gap-4">
-                <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-2xl">📱</span>
-                <div class="min-w-0 flex-1">
-                    <div class="font-display text-lg font-bold">MH-Bot for Android</div>
-                    <p class="text-sm text-white/80">Bank SMS and wallet notifications (nSave, Rizon, Elevate Pay) become entries by themselves; every credit, debit and reminder pops up on your phone.</p>
+            <div class="relative flex flex-col gap-4 sm:flex-row sm:items-center">
+                <div class="flex min-w-0 flex-1 items-start gap-4">
+                    <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-2xl">📱</span>
+                    <div class="min-w-0 flex-1">
+                        <div class="font-display text-lg font-bold">MH-Bot for Android</div>
+                        <p class="text-sm text-white/80">Bank SMS and wallet notifications (nSave, Rizon, Elevate Pay) become entries by themselves; every credit, debit and reminder pops up on your phone.</p>
+                    </div>
                 </div>
+                <div class="flex flex-wrap gap-2 sm:shrink-0">
                 <button class="rounded-xl bg-white/15 px-4 py-2.5 text-sm font-semibold hover:bg-white/25" :disabled="testState === 'sending'" @click="testApp">
                     {{ testState === 'sending' ? 'Sending…' : testState === 'sent' ? '✓ Sent — check the phone' : testState === 'failed' ? 'Failed — try again' : '🔔 Test notification' }}
                 </button>
                 <button v-if="inApp" class="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-teal-800" @click="appSettings">App settings</button>
                 <a v-else-if="app.url" :href="app.url" class="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-teal-800">Install · v{{ app.name }}</a>
                 <span v-else class="rounded-xl bg-white/15 px-4 py-2.5 text-sm font-semibold">Being built — check back soon</span>
+                </div>
             </div>
         </div>
 
@@ -205,8 +209,8 @@ const wokeHealthy = computed(() => props.cron.woke_at && Date.now() - new Date(p
                     <p class="mt-3 text-xs text-ink-500">Tap a reminder to open the right page. The night one opens "Add spending" straight away.</p>
                 </div>
 
-                <!-- App lock -->
-                <form class="card p-5 sm:p-6" @submit.prevent="savePin()">
+                <!-- Web PIN (for browsers; inside the app its own lock is used) -->
+                <form v-if="!inApp" class="card p-5 sm:p-6" @submit.prevent="savePin()">
                     <div class="flex items-center justify-between gap-3">
                         <div class="card-title">🔒 App lock</div>
                         <span class="badge" :class="hasPin ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ hasPin ? 'PIN on' : 'No PIN' }}</span>

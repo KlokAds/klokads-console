@@ -105,6 +105,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/personal/followups/{followUp}/note', [FollowUpController::class, 'note'])->middleware('personal')->name('personal.followups.note');
     Route::get('/personal/feed', [NotificationFeedController::class, 'index'])->middleware('personal')->name('personal.feed');
     Route::post('/personal/feed/read', [NotificationFeedController::class, 'read'])->middleware('personal')->name('personal.feed.read');
+    Route::post('/app/unlock/{token}', [PhoneAppController::class, 'unlock'])->middleware('throttle:30,1')->name('app.unlock');
     Route::post('/personal/app/pair', [PhoneAppController::class, 'pair'])->middleware('personal')->name('personal.app.pair');
     Route::post('/personal/app/test', [PhoneAppController::class, 'test'])->middleware(['personal', 'throttle:10,1'])->name('personal.app.test');
     Route::get('/app/latest', [AppReleaseController::class, 'latest'])->middleware('throttle:30,1')->name('app.latest');
