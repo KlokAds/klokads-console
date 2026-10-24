@@ -44,6 +44,7 @@ Route::get('/reminders/ping/{token}', [NotificationController::class, 'ping'])->
 Route::post('/inbox/sms/{token}', [InboxController::class, 'sms'])->middleware('throttle:120,1')->name('inbox.sms');
 Route::get('/app/feed/{token}', [PhoneAppController::class, 'feed'])->middleware('throttle:60,1')->name('app.feed');
 Route::post('/hooks/app-release/{token}', [AppReleaseController::class, 'upload'])->middleware('throttle:10,1')->name('hooks.app-release');
+Route::get('/app/get', [AppReleaseController::class, 'get'])->middleware('throttle:10,1')->name('app.get');
 Route::get('/app/download', [AppReleaseController::class, 'download'])->middleware(['signed', 'throttle:10,1'])->name('app.download');
 Route::get('/g/{token}', [GuideController::class, 'show'])->middleware('throttle:30,1')->name('guide.show');
 

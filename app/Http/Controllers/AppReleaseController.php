@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Setting;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -69,6 +70,18 @@ class AppReleaseController extends Controller
             'url' => $ready ? URL::temporarySignedRoute('app.download', now()->addMinutes(30)) : null,
             'released_at' => Setting::get('app_released_at'),
         ];
+    }
+
+    /**
+     * The sign-in page's button: a fresh download link on every tap. Anyone may have the APK —
+     * it does nothing without signing in as the owner, the PIN and the fingerprint.
+     */
+    public function get(): RedirectResponse
+    {
+        $url = self::current()['url'];
+        abort_if($url === null, 404);
+
+        return redirect()->away($url);
     }
 
     public function download(): StreamedResponse
