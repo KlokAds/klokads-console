@@ -114,7 +114,7 @@ class RemindersTest extends TestCase
     public function test_ping_needs_the_secret_token(): void
     {
         $this->get('/reminders/ping/wrong')->assertNotFound();
-        $this->getJson('/reminders/ping/'.PushNotifier::cronToken())->assertOk()->assertJson(['ok' => true, 'checked' => 0]);
+        $this->getJson('/reminders/ping/'.PushNotifier::cronToken())->assertOk()->assertJson(['ok' => true, 'reminders' => ['checked' => 0]]);
     }
 
     public function test_devices_subscribe_and_only_owners_can_change_them(): void

@@ -4,11 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\PushSubscription;
 use App\Models\Setting;
-use App\Services\EmailInbox;
-use App\Services\PersonalInvoicing;
+use App\Services\Heartbeat;
 use App\Services\PushNotifier;
 use App\Services\Reminders;
-use App\Services\SpendBilling;
 use Carbon\CarbonImmutable;
 use DateTimeZone;
 use Illuminate\Http\JsonResponse;
@@ -33,6 +31,7 @@ class NotificationController extends Controller
             'cron' => [
                 'url' => route('reminders.ping', PushNotifier::cronToken()),
                 'last_ping' => Setting::get('cron_last_ping'),
+                'heartbeat_at' => Setting::get('heartbeat_at'),
             ],
         ]);
     }
@@ -100,20 +99,12 @@ class NotificationController extends Controller
     }
 
     /** cron-job.org calls this every few minutes; it sends whatever is due. */
-    public function ping(string $token, Reminders $reminders, SpendBilling $billing): JsonResponse
+    /** Optional outside trigger (e.g. cron-job.org) — the app already runs this itself. */
+    public function ping(string $token, Heartbeat $heartbeat): JsonResponse
     {
         abort_unless(hash_equals(PushNotifier::cronToken(), $token), 404);
+        Setting::put('cron_last_ping', now()->toIso8601String());
 
-        // Bank / wallet alert emails → entries (every 10 minutes at most).
-        try {
-            $emails = app(EmailInbox::class)->poll();
-        } catch (\Throwable) {
-            $emails = 'error';
-        }
-
-        // Personal monthly invoices due today (safe to run every ping: each moves its next date on).
-        $invoices = app(PersonalInvoicing::class)->runRecurring();
-
-        return response()->json(['ok' => true] + $reminders->run() + ['billing' => $billing->runAll(), 'personal_invoices' => $invoices, 'emails' => $emails]);
+        return response()->json(['ok' => true] + ($heartbeat->maybeRun() ?? ['skipped' => 'ran less than 5 minutes ago']));
     }
 }

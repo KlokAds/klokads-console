@@ -62,12 +62,15 @@ const formFor = (d) => (forms[d.id] ??= useForm({ morning: d.morning, morning_at
 const save = (d) => formFor(d).put(route('notifications.update', d.id), { preserveScroll: true });
 const test = (d, which) => router.post(route('notifications.test', d.id), { which }, { preserveScroll: true });
 
-const pingAgo = computed(() => {
-    if (!props.cron.last_ping) return null;
-    const mins = Math.round((Date.now() - new Date(props.cron.last_ping)) / 60000);
-    return mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : `${date(props.cron.last_ping, true)}`;
-});
-const pingHealthy = computed(() => props.cron.last_ping && Date.now() - new Date(props.cron.last_ping) < 30 * 60000);
+const ago = (iso) => {
+    if (!iso) return null;
+    const mins = Math.round((Date.now() - new Date(iso)) / 60000);
+    return mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : date(iso, true);
+};
+const beatAgo = computed(() => ago(props.cron.heartbeat_at));
+const pingAgo = computed(() => ago(props.cron.last_ping));
+const beatHealthy = computed(() => props.cron.heartbeat_at && Date.now() - new Date(props.cron.heartbeat_at) < 6 * 3600e3);
+const showBackup = ref(false);
 </script>
 
 <template>
@@ -180,22 +183,23 @@ const pingHealthy = computed(() => props.cron.last_ping && Date.now() - new Date
                     </div>
                 </form>
 
-                <!-- Sender -->
+                <!-- Built-in clock -->
                 <div class="card p-5 sm:p-6">
                     <div class="flex items-center justify-between gap-3">
-                        <div class="card-title">Automatic sending</div>
-                        <span class="badge" :class="pingHealthy ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ pingHealthy ? 'Working' : cron.last_ping ? 'Stopped' : 'Not set up' }}</span>
+                        <div class="card-title">⏱️ Runs inside the app</div>
+                        <span class="badge" :class="beatHealthy ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ beatHealthy ? 'Working' : 'Waiting for a visit' }}</span>
                     </div>
-                    <p class="mt-2 text-sm text-ink-600">Reminders go out when <b>cron-job.org</b> calls this link every 5 minutes.</p>
-                    <ol class="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-ink-700">
-                        <li>Sign up free at <b>cron-job.org</b> → <b>Create cronjob</b>.</li>
-                        <li>Paste this URL, schedule <b>every 5 minutes</b>, save.</li>
-                    </ol>
-                    <div class="mt-3 flex items-center gap-2 rounded-xl border border-line bg-ink-50 p-2.5">
-                        <code class="min-w-0 flex-1 truncate text-xs text-ink-700">{{ cron.url }}</code>
-                        <CopyButton :text="cron.url" />
+                    <p class="mt-2 text-sm text-ink-600">Reminders, alert emails, monthly invoices and Meta billing run by themselves every 5 minutes whenever the app is used — a page open, an SMS forwarded, a Stripe update. No outside cron needed.</p>
+                    <p class="mt-2 text-xs text-ink-500">Last run: <b>{{ beatAgo ?? 'not yet' }}</b>. If nothing touches the app around 9 pm, the night reminder goes out with the next visit or SMS.</p>
+                    <button type="button" class="btn-link mt-2 text-xs" @click="showBackup = !showBackup">{{ showBackup ? 'Hide' : 'Exact times every day? Optional backup' }}</button>
+                    <div v-if="showBackup" class="mt-2">
+                        <p class="text-xs text-ink-600">Any free uptime / cron service (e.g. cron-job.org) can call this link every 5 minutes to keep times exact:</p>
+                        <div class="mt-2 flex items-center gap-2 rounded-xl border border-line bg-ink-50 p-2.5">
+                            <code class="min-w-0 flex-1 truncate text-xs text-ink-700">{{ cron.url }}</code>
+                            <CopyButton :text="cron.url" />
+                        </div>
+                        <p class="mt-1 text-xs text-ink-500">Private link. Last outside call: <b>{{ pingAgo ?? 'never' }}</b>.</p>
                     </div>
-                    <p class="mt-2 text-xs text-ink-500">Keep this link private — it's the key that sends reminders. Last call: <b>{{ pingAgo ?? 'never' }}</b>.</p>
                 </div>
             </div>
         </div>

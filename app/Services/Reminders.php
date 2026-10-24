@@ -12,7 +12,6 @@ use App\Models\Loan;
 use App\Models\MoneyTransaction;
 use App\Models\PersonalInvoice;
 use App\Models\PushSubscription;
-use App\Models\Setting;
 use App\Support\Catalog;
 use App\Support\Ledger;
 use Carbon\CarbonImmutable;
@@ -47,8 +46,6 @@ class Reminders
                 $sent += (int) $this->push->send($sub, $this->evening($local));
             }
         }
-
-        Setting::put('cron_last_ping', $now->toIso8601String());
 
         return ['sent' => $sent, 'checked' => $subs->count()];
     }
