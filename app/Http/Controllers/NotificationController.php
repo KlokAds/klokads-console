@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\PushSubscription;
 use App\Models\Setting;
+use App\Services\EmailInbox;
 use App\Services\PersonalInvoicing;
 use App\Services\PushNotifier;
 use App\Services\Reminders;
@@ -102,9 +103,16 @@ class NotificationController extends Controller
     {
         abort_unless(hash_equals(PushNotifier::cronToken(), $token), 404);
 
+        // Bank / wallet alert emails → entries (every 10 minutes at most).
+        try {
+            $emails = app(EmailInbox::class)->poll();
+        } catch (\Throwable) {
+            $emails = 'error';
+        }
+
         // Personal monthly invoices due today (safe to run every ping: each moves its next date on).
         $invoices = app(PersonalInvoicing::class)->runRecurring();
 
-        return response()->json(['ok' => true] + $reminders->run() + ['billing' => $billing->runAll(), 'personal_invoices' => $invoices]);
+        return response()->json(['ok' => true] + $reminders->run() + ['billing' => $billing->runAll(), 'personal_invoices' => $invoices, 'emails' => $emails]);
     }
 }

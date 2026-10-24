@@ -6,6 +6,7 @@ use App\Models\Account;
 use App\Models\Bill;
 use App\Models\Budget;
 use App\Models\Goal;
+use App\Models\InboxMessage;
 use App\Models\Invoice;
 use App\Models\Loan;
 use App\Models\MoneyTransaction;
@@ -149,6 +150,10 @@ class Reminders
             ->groupBy(fn ($t) => strtoupper($t->account->currency))
             ->map(fn (Collection $list, $currency) => $this->money((int) $list->sum(fn ($t) => $t->amount + $t->fee), $currency));
 
+        $auto = InboxMessage::whereDate('created_at', $local->toDateString())->whereIn('status', ['added', 'matched'])->count();
+        $review = InboxMessage::where('status', 'review')->count();
+        $autoLine = ($auto ? "\n🤖 {$auto} added automatically today" : '').($review ? "\n👀 {$review} bank/wallet alert".($review === 1 ? '' : 's').' need a look' : '');
+
         $tomorrow = $local->addDay()->day;
         $bills = Bill::where('active', true)->where('day', $tomorrow)->pluck('name');
         $billLine = $bills->isNotEmpty() ? "\n📌 Tomorrow: ".$bills->take(3)->implode(', ') : '';
@@ -157,7 +162,7 @@ class Reminders
         if ($entries->isEmpty()) {
             return [
                 'title' => "🌙 Add today's spending",
-                'body' => 'Nothing recorded yet today — it takes 30 seconds. Tap to add.'.$billLine,
+                'body' => 'Nothing recorded yet today — it takes 30 seconds. Tap to add.'.$billLine.$autoLine,
                 'url' => $url,
                 'tag' => 'klok-evening',
             ];
@@ -165,7 +170,7 @@ class Reminders
 
         return [
             'title' => '🌙 Today: '.($spent->isNotEmpty() ? $spent->implode(' · ') : 'no spending').' spent',
-            'body' => "{$entries->count()} entr".($entries->count() === 1 ? 'y' : 'ies').' today. Anything missing? Tap to add.'.$billLine,
+            'body' => "{$entries->count()} entr".($entries->count() === 1 ? 'y' : 'ies').' today. Anything missing? Tap to add.'.$billLine.$autoLine,
             'url' => $url,
             'tag' => 'klok-evening',
         ];

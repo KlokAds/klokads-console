@@ -6,6 +6,7 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\InboxController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\LoanController;
@@ -31,6 +32,9 @@ Route::post('/stripe/webhook', StripeWebhookController::class)->name('stripe.web
 
 // cron-job.org pings this every few minutes to send the morning / night reminders.
 Route::get('/reminders/ping/{token}', [NotificationController::class, 'ping'])->middleware('throttle:30,1')->name('reminders.ping');
+
+// An Android SMS-forwarder app posts bank / wallet SMS here (secret token in the URL).
+Route::post('/inbox/sms/{token}', [InboxController::class, 'sms'])->middleware('throttle:120,1')->name('inbox.sms');
 
 Route::get('/card-saved', [ClientCardController::class, 'saved'])->name('cards.saved');
 
@@ -87,6 +91,13 @@ Route::middleware('auth')->group(function () {
     Route::put('/personal/recurring/{recurring}', [PersonalInvoiceController::class, 'updateRecurring'])->name('personal.recurring.update');
     Route::delete('/personal/recurring/{recurring}', [PersonalInvoiceController::class, 'destroyRecurring'])->name('personal.recurring.destroy');
     Route::post('/personal/invoice-profile', [PersonalInvoiceController::class, 'saveProfile'])->name('personal.invoices.profile');
+    Route::get('/personal/inbox', [InboxController::class, 'index'])->name('personal.inbox.index');
+    Route::post('/personal/inbox/{message}/add', [InboxController::class, 'add'])->name('personal.inbox.add');
+    Route::post('/personal/inbox/{message}/ignore', [InboxController::class, 'ignore'])->name('personal.inbox.ignore');
+    Route::post('/personal/inbox/{message}/undo', [InboxController::class, 'undo'])->name('personal.inbox.undo');
+    Route::post('/personal/inbox-imap', [InboxController::class, 'saveImap'])->name('personal.inbox.imap');
+    Route::post('/personal/inbox-check', [InboxController::class, 'checkNow'])->name('personal.inbox.check');
+    Route::post('/personal/inbox-test', [InboxController::class, 'test'])->name('personal.inbox.test');
     Route::get('/personal/loans', [LoanController::class, 'index'])->name('personal.loans.index');
     Route::post('/personal/loans', [LoanController::class, 'store'])->name('personal.loans.store');
     Route::put('/personal/loans/{loan}', [LoanController::class, 'update'])->name('personal.loans.update');

@@ -60,6 +60,7 @@ const personalSections = [
             { name: 'Money', route: 'money.index', params: { scope: 'personal' }, match: 'money.*', icon: 'wallet' },
             { name: 'Dena-paona', route: 'personal.loans.index', match: 'personal.loans.*', icon: 'users' },
             { name: 'My invoices', route: 'personal.invoices.index', match: 'personal.invoices.*', icon: 'invoice' },
+            { name: 'Auto entries', route: 'personal.inbox.index', match: 'personal.inbox.*', icon: 'bolt' },
             { name: 'Reminders', route: 'notifications.index', match: 'notifications.*', icon: 'bolt' },
         ],
     },

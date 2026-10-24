@@ -35,6 +35,7 @@ const pages = [
     { title: 'Personal money', icon: 'wallet', url: () => route('money.index', { scope: 'personal' }) },
     { title: 'Dena-paona', sub: 'Loans given and taken', icon: 'users', url: () => route('personal.loans.index') },
     { title: 'My invoices', sub: 'Personal invoices in BDT', icon: 'invoice', url: () => route('personal.invoices.index') },
+    { title: 'Auto entries', sub: 'Bank & wallet SMS / email', icon: 'bolt', url: () => route('personal.inbox.index') },
     { title: 'Phone reminders', sub: 'Morning and night notifications', icon: 'bolt', url: () => route('notifications.index') },
     { title: 'Settings', icon: 'cog', url: () => route('settings.edit') },
     { title: 'Profile & password', icon: 'user', url: () => route('profile.edit') },

@@ -11,7 +11,7 @@ class Setting extends Model
     protected $fillable = ['key', 'value'];
 
     /** Keys whose values are stored encrypted. */
-    public const SECRET = ['stripe_secret', 'stripe_webhook_secret', 'smtp_password', 'push_private_key', 'cron_token', 'meta_token'];
+    public const SECRET = ['stripe_secret', 'stripe_webhook_secret', 'smtp_password', 'push_private_key', 'cron_token', 'meta_token', 'imap_password', 'inbox_token'];
 
     public static function get(string $key, mixed $default = null): mixed
     {
