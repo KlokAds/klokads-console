@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Middleware\PersonalAccess;
 use App\Models\Account;
 use App\Models\MoneyTransaction;
 use App\Support\Catalog;
@@ -27,6 +28,9 @@ class MoneyController extends Controller
         // Business and personal are two separate sides of the app; the sidebar switch picks one.
         $scope = in_array($request->input('scope'), ['business', 'personal'], true) ? $request->input('scope') : $request->session()->get('mode', 'business');
         $request->session()->put('mode', $scope);
+        if ($scope === 'personal') {
+            PersonalAccess::guard($request);
+        }
         $month = preg_match('/^\d{4}-\d{2}$/', (string) $request->input('month')) ? $request->input('month') : now()->format('Y-m');
         $start = CarbonImmutable::createFromFormat('Y-m-d', "{$month}-01")->startOfDay();
 
@@ -72,6 +76,7 @@ class MoneyController extends Controller
 
     public function storeAccount(Request $request): RedirectResponse
     {
+        $request->input('scope') === 'personal' && PersonalAccess::guard($request);
         Account::create($this->accountData($request));
 
         return back()->with('success', 'Account added.');
@@ -79,13 +84,15 @@ class MoneyController extends Controller
 
     public function updateAccount(Request $request, Account $account): RedirectResponse
     {
+        ($account->scope === 'personal' || $request->input('scope') === 'personal') && PersonalAccess::guard($request);
         $account->update($this->accountData($request, $account));
 
         return back()->with('success', 'Account updated.');
     }
 
-    public function destroyAccount(Account $account): RedirectResponse
+    public function destroyAccount(Request $request, Account $account): RedirectResponse
     {
+        $account->scope === 'personal' && PersonalAccess::guard($request);
         if ($account->outgoing()->exists() || $account->incoming()->exists()) {
             $account->update(['archived' => true]);
 
@@ -99,6 +106,7 @@ class MoneyController extends Controller
 
     public function store(Request $request): RedirectResponse|JsonResponse
     {
+        $this->guardAccounts($request, [$request->input('account_id'), $request->input('to_account_id')]);
         $tx = Ledger::save($this->transactionData($request));
 
         // Entries made offline are sent later by the app itself and only need a yes.
@@ -113,6 +121,7 @@ class MoneyController extends Controller
     public function export(Request $request): StreamedResponse
     {
         $scope = $request->input('scope') === 'personal' ? 'personal' : 'business';
+        $scope === 'personal' && PersonalAccess::guard($request);
         $month = preg_match('/^\d{4}-\d{2}$/', (string) $request->input('month')) ? $request->input('month') : now()->format('Y-m');
         $ids = Account::where('scope', $scope)->pluck('id');
         $labels = Catalog::EXPENSE_CATEGORIES + Catalog::PERSONAL_CATEGORIES + Catalog::INCOME_CATEGORIES['business'] + Catalog::INCOME_CATEGORIES['personal'];
@@ -147,16 +156,26 @@ class MoneyController extends Controller
 
     public function update(Request $request, MoneyTransaction $transaction): RedirectResponse
     {
+        $this->guardAccounts($request, [$transaction->account_id, $transaction->to_account_id, $request->input('account_id'), $request->input('to_account_id')]);
         Ledger::save($this->transactionData($request), $transaction);
 
         return back()->with('success', 'Updated.');
     }
 
-    public function destroy(MoneyTransaction $transaction): RedirectResponse
+    public function destroy(Request $request, MoneyTransaction $transaction): RedirectResponse
     {
+        $this->guardAccounts($request, [$transaction->account_id, $transaction->to_account_id]);
         Ledger::delete($transaction);
 
         return back()->with('success', 'Deleted.');
+    }
+
+    /** Touching a personal account needs the owner (and PIN). */
+    private function guardAccounts(Request $request, array $ids): void
+    {
+        if (Account::whereKey(array_filter($ids))->where('scope', 'personal')->exists()) {
+            PersonalAccess::guard($request);
+        }
     }
 
     /** @return array<string, mixed> */

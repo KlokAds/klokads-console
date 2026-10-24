@@ -12,7 +12,15 @@ const props = defineProps({
     publicKey: String,
     devices: Array,
     cron: Object,
+    hasPin: Boolean,
 });
+
+// App lock (PIN)
+const pinForm = useForm({ pin: '', pin_confirmation: '', password: '' });
+const savePin = (remove = false) => {
+    if (remove) pinForm.pin = pinForm.pin_confirmation = '';
+    pinForm.post(route('personal.pin'), { preserveScroll: true, onSuccess: () => pinForm.reset() });
+};
 
 const status = ref('ready');
 const hereHash = ref(null);
@@ -152,6 +160,25 @@ const pingHealthy = computed(() => props.cron.last_ping && Date.now() - new Date
                     </div>
                     <p class="mt-3 text-xs text-ink-500">Tap a reminder to open the right page. The night one opens "Add spending" straight away.</p>
                 </div>
+
+                <!-- App lock -->
+                <form class="card p-5 sm:p-6" @submit.prevent="savePin()">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="card-title">🔒 App lock</div>
+                        <span class="badge" :class="hasPin ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ hasPin ? 'PIN on' : 'No PIN' }}</span>
+                    </div>
+                    <p class="mt-2 text-sm text-ink-600">Asks for a 4–6 digit PIN when you open the personal side, and again after 15 idle minutes.</p>
+                    <div class="mt-3 grid grid-cols-2 gap-2">
+                        <input v-model="pinForm.pin" type="password" inputmode="numeric" maxlength="6" class="input" :placeholder="hasPin ? 'New PIN' : 'PIN'" autocomplete="new-password" />
+                        <input v-model="pinForm.pin_confirmation" type="password" inputmode="numeric" maxlength="6" class="input" placeholder="Repeat PIN" autocomplete="new-password" />
+                        <input v-model="pinForm.password" type="password" class="input col-span-2" placeholder="Your account password (to confirm)" autocomplete="current-password" />
+                    </div>
+                    <div v-for="e in [pinForm.errors.pin, pinForm.errors.password]" :key="e" class="error">{{ e }}</div>
+                    <div class="mt-3 flex justify-between gap-2">
+                        <button v-if="hasPin" type="button" class="btn-ghost btn-sm text-rose-600" :disabled="!pinForm.password" @click="savePin(true)">Remove PIN</button>
+                        <button class="btn-primary btn-sm ml-auto" :disabled="pinForm.processing || pinForm.pin.length < 4">{{ hasPin ? 'Change PIN' : 'Set PIN' }}</button>
+                    </div>
+                </form>
 
                 <!-- Sender -->
                 <div class="card p-5 sm:p-6">

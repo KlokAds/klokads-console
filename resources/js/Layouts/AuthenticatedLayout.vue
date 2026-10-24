@@ -66,6 +66,15 @@ const personalSections = [
     },
 ];
 const sections = computed(() => (mode.value === 'personal' ? personalSections : businessSections));
+const isOwner = computed(() => !!page.props.auth.user?.is_owner);
+const lockNow = () => router.post(route('personal.lock'));
+// Phone bottom bar on the personal side.
+const bottomNav = [
+    { name: 'Home', route: 'personal.dashboard', match: 'personal.dashboard', icon: 'home' },
+    { name: 'Money', route: 'money.index', params: { scope: 'personal' }, match: 'money.*', icon: 'wallet' },
+    { name: 'Invoices', route: 'personal.invoices.index', match: 'personal.invoices.*', icon: 'invoice' },
+    { name: 'Dena', route: 'personal.loans.index', match: 'personal.loans.*', icon: 'users' },
+];
 
 const personalCreate = [
     { label: 'Spending', hint: 'What you paid, where and why', icon: 'card', href: () => route('money.index', { scope: 'personal', new: 1 }) },
@@ -167,8 +176,8 @@ router.on('navigate', () => {
                 </button>
             </div>
 
-            <!-- Business / Personal switch -->
-            <div class="mx-3 mb-3 grid grid-cols-2 gap-1 rounded-xl bg-white/[0.05] p-1">
+            <!-- Business / Personal switch (the personal side is the owner's only) -->
+            <div v-if="isOwner" class="mx-3 mb-3 grid grid-cols-2 gap-1 rounded-xl bg-white/[0.05] p-1">
                 <Link :href="route('dashboard')" class="flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition"
                     :class="mode === 'business' ? 'bg-white text-ink-900' : 'text-ink-400 hover:text-white'"><Icon name="bank" :size="14" /> Business</Link>
                 <Link :href="route('personal.dashboard')" class="flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition"
@@ -193,6 +202,10 @@ router.on('navigate', () => {
                     </div>
                 </div>
             </nav>
+
+            <button v-if="mode === 'personal' && isOwner" class="mx-3 mb-3 flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] py-2 text-xs font-semibold text-ink-300 hover:bg-white/[0.05] hover:text-white" @click="lockNow">
+                🔒 Lock personal side
+            </button>
 
             <!-- Stripe status -->
             <div v-if="mode === 'business'" class="mx-3 mb-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
@@ -286,8 +299,8 @@ router.on('navigate', () => {
                     </template>
                     <template v-else-if="syncState === 'login'">
                         <span class="badge bg-rose-200/70 text-rose-900">Sign in</span>
-                        {{ pending.length }} entr{{ pending.length === 1 ? 'y' : 'ies' }} saved offline need you to log in again to be sent.
-                        <Link :href="route('login')" class="font-semibold underline">Log in</Link>
+                        {{ pending.length }} entr{{ pending.length === 1 ? 'y' : 'ies' }} saved offline need you to sign in or unlock to be sent.
+                        <Link :href="route('personal.dashboard')" class="font-semibold underline">Open</Link>
                     </template>
                     <template v-else>
                         <span class="badge bg-sky-200/70 text-sky-900">Syncing</span>
@@ -304,9 +317,24 @@ router.on('navigate', () => {
                 </div>
             </div>
 
-            <main class="mx-auto max-w-[1400px] px-4 py-6 sm:px-8 sm:py-8">
+            <main class="mx-auto max-w-[1400px] px-4 py-6 sm:px-8 sm:py-8" :class="{ 'pb-28 lg:pb-8': mode === 'personal' }">
                 <slot />
             </main>
+
+            <!-- Personal app: bottom bar on phones, with quick add in the middle -->
+            <nav v-if="mode === 'personal'" class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
+                <div class="mx-auto grid max-w-md grid-cols-5 items-end">
+                    <template v-for="(item, k) in bottomNav" :key="item.name">
+                        <Link :href="route(item.route, item.params)" class="flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold"
+                            :class="route().current(item.match) && (item.route !== 'money.index' || page.props.scope === 'personal') ? 'text-brand-600' : 'text-ink-500'">
+                            <Icon :name="item.icon" :size="20" /> {{ item.name }}
+                        </Link>
+                        <Link v-if="k === 1" :href="route('money.index', { scope: 'personal', new: 1 })" class="-mt-5 flex flex-col items-center pb-1.5" aria-label="Add">
+                            <span class="flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/40"><Icon name="plus" :size="26" /></span>
+                        </Link>
+                    </template>
+                </div>
+            </nav>
         </div>
 
         <ConfirmDialog />

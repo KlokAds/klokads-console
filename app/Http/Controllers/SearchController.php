@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Middleware\PersonalAccess;
 use App\Models\Account;
 use App\Models\Bill;
 use App\Models\Client;
@@ -100,6 +101,12 @@ class SearchController extends Controller
                 'scope' => 'personal',
             ])),
         ];
+
+        if (! PersonalAccess::allowed($request)) {
+            $groups['Money'] = $groups['Money']->reject(fn ($i) => $i['scope'] === 'personal');
+            $groups['Accounts'] = $groups['Accounts']->reject(fn ($i) => $i['scope'] === 'personal');
+            unset($groups['Bills & goals']);
+        }
 
         return response()->json([
             'groups' => collect($groups)->filter(fn ($items) => $items->isNotEmpty())

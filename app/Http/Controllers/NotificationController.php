@@ -29,6 +29,7 @@ class NotificationController extends Controller
                 ->map(fn (PushSubscription $s) => $s->only('id', 'device', 'timezone', 'morning', 'morning_at', 'evening', 'evening_at', 'endpoint_hash') + [
                     'created_at' => $s->created_at->toIso8601String(),
                 ]),
+            'hasPin' => (bool) $request->user()->pin_hash,
             'cron' => [
                 'url' => route('reminders.ping', PushNotifier::cronToken()),
                 'last_ping' => Setting::get('cron_last_ping'),

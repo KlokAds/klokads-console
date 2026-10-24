@@ -62,8 +62,8 @@ export async function syncEntries() {
         if (res.ok) {
             discardEntry(_id);
             sent++;
-        } else if ([401, 419].includes(res.status)) {
-            syncState.value = 'login'; // session ended while offline
+        } else if ([401, 419, 423].includes(res.status)) {
+            syncState.value = 'login'; // signed out or PIN-locked while offline — keep everything
             return;
         } else {
             const data = await res.json().catch(() => ({}));
