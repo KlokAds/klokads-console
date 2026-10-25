@@ -145,6 +145,17 @@ class PersonalAdsTest extends TestCase
         $this->assertSame('2026-11-01', $ledger['unbilled_from']);
     }
 
+    public function test_a_campaign_opens_in_full_with_its_days(): void
+    {
+        $this->fakePilot();
+        $this->assignBoth();
+
+        $this->get("/personal/client-ads/{$this->edge->id}/campaigns/11?period=all")->assertInertia(fn ($page) => $page->component('Personal/AdClients/Campaign')
+            ->where('campaign.name', 'Edge Leads')->where('campaign.goal', 'Leads')->where('totals.spend', 200000)->where('totals.results', 20)
+            ->where('days', fn ($days) => collect($days)->firstWhere('date', '2026-10-20')['spend'] === 80000));
+        $this->get("/personal/client-ads/{$this->edge->id}/campaigns/999")->assertNotFound();
+    }
+
     public function test_campaign_controls_go_to_meta_and_the_page_shows_the_new_state(): void
     {
         $this->fakePilot();

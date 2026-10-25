@@ -218,6 +218,7 @@ class PersonalAds
                 'status' => $k['status'] ?? null,
                 'daily_budget' => $k['daily_budget'] ?? null,
                 'start' => $k['start'] ?? null,
+                'last_spend' => $rows->where('spend', '>', 0)->max('date')?->toDateString(),
                 'end' => $k['end'] ?? null,
                 'currency' => $rows->first()?->currency ?? PersonalAdAssignment::where('account_id', $k['account'] ?? '')->value('currency'),
                 'spend' => $spend,

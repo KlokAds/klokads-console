@@ -109,6 +109,23 @@ function edit(c, kind) {
     endDay.value = c.end && c.end > today ? c.end : '';
 }
 const saveEdit = () => router.post(route('ad-clients.control', [props.client.id, editing.value.id]), editKind.value === 'budget' ? { action: 'budget', daily_budget: budget.value } : { action: 'extend', end: endDay.value }, { preserveScroll: true, onSuccess: () => (editing.value = null) });
+// Campaigns: running (on, not past its end) first; then ended or paused, newest first. Old quiet ones on request.
+const withSpend = computed(() => props.campaigns.filter((c) => c.spend > 0));
+const cost = (c) => (c.cost_per_result === null ? '' : (c.cost_per_result === 0 ? '< ' + m(1, c.currency) : m(c.cost_per_result, c.currency)) + ' ' + c.per);
+const isLive = (c) => c.status === 'ACTIVE' && (!c.end || c.end >= today);
+const lastDay = (c) => c.end || c.last_spend || c.start || '';
+const showOlder = ref(false);
+const sixtyDaysAgo = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
+const stopped = computed(() => props.campaigns.filter((c) => !isLive(c)).sort((a, b) => (lastDay(b) > lastDay(a) ? 1 : -1)));
+const older = computed(() => stopped.value.filter((c) => c.spend === 0 && lastDay(c) < sixtyDaysAgo));
+const groups = computed(() => [
+    { key: 'running', label: 'Running', list: props.campaigns.filter(isLive) },
+    { key: 'stopped', label: 'Ended or paused', list: showOlder.value ? stopped.value : stopped.value.filter((c) => !older.value.includes(c)) },
+]);
+// Meta says: the same advice once.
+const tips = computed(() => props.advice.filter((a, i, all) => all.findIndex((b) => b.title === a.title) === i));
+const allTips = ref(false);
+const openTip = ref(null);
 const best = computed(() => props.campaigns.filter((c) => c.cost_per_result && c.results >= 3 && c.goal !== 'Awareness').sort((a, b) => a.cost_per_result - b.cost_per_result)[0]);
 
 // ---------------------------------------------------------------- money: charges, bills, payments
@@ -185,7 +202,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                 <button class="btn-primary btn-sm" :disabled="!from || !to" @click="go">Show</button>
             </div>
             <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div><div class="text-[11px] font-semibold text-white/60">Spent · {{ range.label }}</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ sum(money, 'spend') }}</div></div>
+                <div><div class="text-[11px] font-semibold text-white/60">Spent · {{ range.label }}</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ sum(props.money, 'spend') }}</div></div>
                 <div><div class="text-[11px] font-semibold text-white/60">Results</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ results.toLocaleString() }}</div></div>
                 <template v-if="myCard">
                     <div><div class="text-[11px] font-semibold text-white/60">Not charged yet · not billed</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ ledger.meta.length ? ledger.meta.map((x) => m(x.unbilled, x.currency)).join(' + ') : '—' }}</div></div>
@@ -216,24 +233,33 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                 <button class="btn-primary btn-sm" @click="tab = 'money'; sheet = 'payment'">Record payment</button>
             </div>
             <div class="grid gap-3 sm:grid-cols-2">
-                <button v-for="c in campaigns.slice(0, 4)" :key="c.id" class="rounded-3xl border border-line/70 bg-surface p-4 text-left shadow-sm transition hover:border-teal-300" @click="tab = 'campaigns'">
+                <Link v-for="c in withSpend.slice(0, 4)" :key="c.id" :href="route('ad-clients.campaign', [client.id, c.id])" class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm transition hover:border-teal-300">
                     <div class="flex items-center gap-2 text-xs font-semibold text-ink-500"><span class="h-2 w-2 rounded-full" :class="status(c)[1]"></span>{{ status(c)[0] }} · {{ c.goal }}</div>
                     <div class="mt-1 truncate font-bold text-ink-900">{{ c.name }}</div>
                     <div class="mt-2 flex items-end justify-between gap-2">
                         <div><div class="text-xl font-extrabold tabular-nums text-ink-900">{{ c.results.toLocaleString() }}</div><div class="text-xs text-ink-500">{{ c.result_label }}</div></div>
-                        <div class="text-right"><div class="font-bold tabular-nums">{{ m(c.spend, c.currency) }}</div><div class="text-xs text-ink-500">{{ c.cost_per_result === null ? '' : (c.cost_per_result === 0 ? '< ' + m(1, c.currency) : m(c.cost_per_result, c.currency)) + ' ' + c.per }}</div></div>
+                        <div class="text-right"><div class="font-bold tabular-nums">{{ m(c.spend, c.currency) }}</div><div class="text-xs text-ink-500">{{ cost(c) }}</div></div>
                     </div>
+                </Link>
+            </div>
+            <EmptyState v-if="!withSpend.length" compact icon="megaphone" title="No campaign spend in this period" text="Pick another period, or see Campaigns." />
+
+            <!-- Meta says: short, one line each; open one to read it all -->
+            <div v-if="tips.length" class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <div class="text-sm font-bold text-ink-900">Meta says <span class="ml-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">{{ tips.length }}</span></div>
+                    <button v-if="tips.length > 3" class="text-xs font-semibold text-teal-700" @click="allTips = !allTips">{{ allTips ? 'Show less' : 'Show all' }}</button>
+                </div>
+                <button v-for="(a, i) in (allTips ? tips : tips.slice(0, 3))" :key="i" class="mt-2 block w-full rounded-2xl px-3 py-2.5 text-left transition hover:bg-ink-50" :class="openTip === i ? 'bg-ink-50' : ''" @click="openTip = openTip === i ? null : i">
+                    <div class="flex items-start gap-2">
+                        <span class="min-w-0 flex-1 text-sm font-semibold text-ink-900" :class="openTip === i ? '' : 'line-clamp-1'">{{ a.title }}</span>
+                        <Icon name="chevron" :size="14" class="mt-1 shrink-0 text-ink-400 transition" :class="openTip === i ? 'rotate-180' : ''" />
+                    </div>
+                    <div class="mt-0.5 text-xs text-ink-500" :class="openTip === i ? 'whitespace-pre-line' : 'line-clamp-1'">{{ a.body }}</div>
+                    <a v-if="openTip === i && a.url" :href="a.url" target="_blank" class="mt-1.5 inline-block text-xs font-semibold text-sky-700" @click.stop>Open in Ads Manager →</a>
                 </button>
             </div>
-            <EmptyState v-if="!campaigns.length" compact icon="megaphone" title="No campaign spend in this period" text="Add their ad account in Setup, or pick another period." />
-            <div v-if="advice.length" class="mt-3 rounded-3xl border border-sky-200 bg-sky-50/60 p-4 shadow-sm dark:border-sky-500/30 dark:bg-sky-500/10">
-                <div class="text-sm font-bold text-ink-900">Meta says</div>
-                <div v-for="(a, i) in advice" :key="i" class="mt-2.5 rounded-2xl bg-surface p-3 ring-1 ring-line/70">
-                    <div class="text-sm font-bold text-ink-900">{{ a.title }}</div>
-                    <div class="mt-0.5 whitespace-pre-line text-xs text-ink-600">{{ a.body }}</div>
-                    <a v-if="a.url" :href="a.url" target="_blank" class="mt-1 inline-block text-xs font-semibold text-sky-700">Open in Ads Manager →</a>
-                </div>
-            </div>
+
             <div class="flex flex-wrap items-center gap-2 rounded-3xl border border-line/70 bg-surface p-4 shadow-sm">
                 <Icon name="link" :size="18" class="text-teal-600" />
                 <div class="min-w-0 flex-1"><div class="text-sm font-semibold text-ink-900">Their report link</div><div class="truncate text-xs text-ink-500">No login · their campaigns and results, updated hourly</div></div>
@@ -241,37 +267,29 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
             </div>
         </div>
 
-        <!-- ============ Campaigns -->
-        <div v-if="tab === 'campaigns'" class="mt-3">
-            <div class="mb-2 flex justify-end"><button class="text-xs font-semibold text-teal-700" @click="toggleAll">{{ showAll ? 'Only those with spend' : 'Show all (turn an old one on)' }}</button></div>
-            <div class="space-y-3">
-                <div v-for="c in campaigns" :key="c.id" class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm sm:p-5">
-                    <div class="flex flex-wrap items-start gap-3">
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-center gap-2 text-xs font-semibold text-ink-500"><span class="h-2 w-2 rounded-full" :class="status(c)[1]"></span>{{ status(c)[0] }} · {{ c.goal }}</div>
-                            <div class="mt-0.5 font-bold text-ink-900">{{ c.name }}</div>
+        <!-- ============ Campaigns: running first, then ended or paused (by date) -->
+        <div v-if="tab === 'campaigns'" class="mt-3 space-y-5">
+            <section v-for="g in groups" :key="g.key">
+                <h3 class="mb-2 px-1 text-sm font-bold text-ink-900">{{ g.label }} · {{ g.list.length }}</h3>
+                <div class="space-y-2.5">
+                    <Link v-for="c in g.list" :key="c.id" :href="route('ad-clients.campaign', [client.id, c.id])" class="block rounded-3xl border border-line/70 bg-surface p-4 shadow-sm transition hover:border-teal-300">
+                        <div class="flex items-start gap-2">
+                            <span class="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold" :class="g.key === 'running' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-ink-50 text-ink-500'">{{ status(c)[0] }}</span>
+                            <span class="min-w-0 flex-1 truncate font-bold text-ink-900">{{ c.name }}</span>
+                            <Icon name="chevron" :size="15" class="mt-1 shrink-0 -rotate-90 text-ink-300" />
                         </div>
-                        <button v-if="c.status" class="rounded-xl px-3.5 py-2 text-sm font-bold transition" :disabled="busy === c.id"
-                            :class="isRunning(c) ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100 dark:bg-rose-500/10 dark:ring-rose-500/30' : 'bg-emerald-600 text-white hover:bg-emerald-700'"
-                            @click="toggle(c)">{{ isRunning(c) ? '⏸ Pause' : '▶ Turn on' }}</button>
-                    </div>
-                    <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        <div class="rounded-2xl bg-ink-50 p-3"><div class="text-[11px] text-ink-500">Spent</div><div class="font-bold tabular-nums">{{ m(c.spend, c.currency) }}</div></div>
-                        <div class="rounded-2xl bg-ink-50 p-3"><div class="text-[11px] text-ink-500">Results</div><div class="font-bold tabular-nums">{{ c.results.toLocaleString() }} <span class="text-xs font-normal text-ink-400">{{ c.result_label }}</span></div></div>
-                        <div class="rounded-2xl bg-ink-50 p-3"><div class="text-[11px] text-ink-500">Cost {{ c.per }}</div><div class="font-bold tabular-nums">{{ c.cost_per_result === null ? '—' : c.cost_per_result === 0 ? '< ' + m(1, c.currency) : m(c.cost_per_result, c.currency) }}</div></div>
-                        <div class="rounded-2xl bg-ink-50 p-3"><div class="text-[11px] text-ink-500">Clicks · CTR</div><div class="font-bold tabular-nums">{{ c.clicks.toLocaleString() }} · {{ c.ctr ?? '—' }}%</div></div>
-                    </div>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        <button class="inline-flex items-center gap-1.5 rounded-xl bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800 ring-1 ring-teal-200 hover:bg-teal-100 dark:bg-teal-500/10 dark:text-teal-300 dark:ring-teal-500/30" @click="edit(c, 'budget')">
-                            <Icon name="wallet" :size="15" /> Budget {{ c.daily_budget ? m(c.daily_budget, c.currency) + '/day' : '' }}
-                        </button>
-                        <button class="inline-flex items-center gap-1.5 rounded-xl bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800 ring-1 ring-teal-200 hover:bg-teal-100 dark:bg-teal-500/10 dark:text-teal-300 dark:ring-teal-500/30" @click="edit(c, 'extend')">
-                            <Icon name="clock" :size="15" /> {{ c.end ? 'Ends ' + date(c.end) : 'Set end date' }}
-                        </button>
-                    </div>
+                        <div class="mt-1 text-xs text-ink-500">{{ c.goal }}<template v-if="c.end"> · {{ c.end < today ? 'ended' : 'ends' }} {{ date(c.end) }}</template><template v-else-if="c.last_spend"> · last spent {{ date(c.last_spend) }}</template></div>
+                        <div class="mt-3 grid grid-cols-4 gap-2 text-sm">
+                            <div><div class="text-[11px] text-ink-500">Spent</div><div class="font-bold tabular-nums">{{ m(c.spend, c.currency) }}</div></div>
+                            <div><div class="text-[11px] text-ink-500">Results</div><div class="font-bold tabular-nums">{{ c.results.toLocaleString() }}</div></div>
+                            <div><div class="text-[11px] text-ink-500">Each</div><div class="font-bold tabular-nums">{{ c.cost_per_result === null ? '—' : c.cost_per_result === 0 ? '<' + m(1, c.currency) : m(c.cost_per_result, c.currency) }}</div></div>
+                            <div><div class="text-[11px] text-ink-500">Clicks</div><div class="font-bold tabular-nums">{{ c.clicks.toLocaleString() }}</div></div>
+                        </div>
+                    </Link>
+                    <p v-if="!g.list.length" class="px-1 text-sm text-ink-500">None.</p>
                 </div>
-                <EmptyState v-if="!campaigns.length" compact icon="megaphone" title="No campaigns here" text="Pick another period, or “Show all”." />
-            </div>
+            </section>
+            <button v-if="older.length && !showOlder" class="w-full rounded-2xl bg-surface py-3 text-sm font-semibold text-teal-700 ring-1 ring-line" @click="showOlder = true">Show {{ older.length }} older campaigns</button>
         </div>
 
         <!-- ============ Money (only when my card pays) -->

@@ -8,6 +8,7 @@ use App\Models\PersonalAdCharge;
 use App\Models\PersonalAdDay;
 use App\Models\PersonalClient;
 use App\Services\AdAdvice;
+use App\Services\AdPerformance;
 use App\Services\KlokOneRate;
 use App\Services\MetaAds;
 use App\Services\PersonalAds;
@@ -58,7 +59,8 @@ class AdClientController extends Controller
             'tab' => in_array($request->query('tab'), ['overview', 'campaigns', 'money', 'setup'], true) ? $request->query('tab') : 'overview',
             'payAccounts' => Account::where('archived', false)->where('scope', 'personal')->where('currency', 'BDT')->orderBy('name')->get(['id', 'name']),
             'range' => ['period' => $period, 'from' => $start->toDateString(), 'to' => $end->toDateString(), 'label' => PersonalAds::period($start, $end)],
-            'campaigns' => PersonalAds::table($client, $start, $end, $request->boolean('all')),
+            // Every campaign of theirs (the page groups them: running, then ended or paused).
+            'campaigns' => PersonalAds::table($client, $start, $end, true),
             'showAll' => $request->boolean('all'),
             'money' => PersonalAds::money($client, $start, $end),
             'ledger' => PersonalAds::ledger($client),
@@ -253,6 +255,54 @@ class AdClientController extends Controller
             'budget' => "“{$known['name']}” budget is now {$data['daily_budget']} a day.",
             'extend' => "“{$known['name']}” now runs to ".CarbonImmutable::parse($data['end'])->format('j M Y').'.',
         });
+    }
+
+    /** One campaign in full: its state and controls, the numbers for a period, a chart and every day. */
+    public function campaign(Request $request, PersonalClient $client, string $campaign): Response
+    {
+        $request->session()->put('mode', 'personal');
+        $known = $client->ad_campaigns[$campaign] ?? null;
+        $days = PersonalAdDay::where('personal_client_id', $client->id)->where('campaign_id', $campaign);
+        abort_unless($known || (clone $days)->exists(), 404);
+        $today = CarbonImmutable::today();
+        $period = (string) $request->input('period', 'last7');
+        [$start, $end] = match ($period) {
+            'today' => [$today, $today],
+            'yesterday' => [$today->subDay(), $today->subDay()],
+            'last15' => [$today->subDays(14), $today],
+            'last30' => [$today->subDays(29), $today],
+            'month' => [$today->startOfMonth(), $today],
+            'all' => [CarbonImmutable::parse((clone $days)->min('date') ?? $today), $today],
+            default => [$today->subDays(6), $today],
+        };
+        $rows = (clone $days)->whereBetween('date', [$start->toDateString(), $end->toDateString()])->orderBy('date')->get();
+        $type = $rows->whereNotNull('result_type')->last()?->result_type ?? (clone $days)->whereNotNull('result_type')->latest('date')->value('result_type');
+        $spend = (int) $rows->sum('spend');
+        $byDay = $rows->groupBy(fn ($r) => $r->date->toDateString());
+
+        return Inertia::render('Personal/AdClients/Campaign', [
+            'client' => $client->only('id', 'name'),
+            'campaign' => [
+                'id' => $campaign, 'name' => $known['name'] ?? (clone $days)->value('campaign_name'),
+                'status' => $known['status'] ?? null, 'daily_budget' => $known['daily_budget'] ?? null,
+                'start' => $known['start'] ?? null, 'end' => $known['end'] ?? null,
+                'currency' => (clone $days)->value('currency') ?? PersonalAdAssignment::where('account_id', $known['account'] ?? '')->value('currency') ?? 'BDT',
+                'goal' => AdPerformance::goal($known['objective'] ?? null, $type),
+            ],
+            'period' => $period,
+            'totals' => [
+                'spend' => $spend, 'impressions' => (int) $rows->sum('impressions'), 'clicks' => (int) $rows->sum('clicks'),
+                ...AdPerformance::present($known['objective'] ?? null, $type, $spend, (int) $rows->sum('results'), (int) $rows->sum('reach')),
+            ],
+            'days' => collect(range(0, $start->diffInDays($end)))->map(function ($d) use ($start, $byDay, $known, $type) {
+                $date = $start->addDays($d)->toDateString();
+                $list = $byDay[$date] ?? collect();
+                $spend = (int) $list->sum('spend');
+
+                return ['date' => $date, 'spend' => $spend, 'clicks' => (int) $list->sum('clicks'),
+                    ...AdPerformance::present($known['objective'] ?? null, $type, $spend, (int) $list->sum('results'), (int) $list->sum('reach'))];
+            })->values(),
+        ]);
     }
 
     /** The client's own page (no login, private link): their campaigns and results, nothing about my card. */

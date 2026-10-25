@@ -130,6 +130,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/{client}/payments', [AdClientController::class, 'payment'])->name('payments.store');
         Route::delete('/{client}/charges/{charge}', [AdClientController::class, 'removeCharge'])->name('charges.destroy');
         Route::post('/{client}/campaigns/{campaign}', [AdClientController::class, 'control'])->name('control');
+        Route::get('/{client}/campaigns/{campaign}', [AdClientController::class, 'campaign'])->name('campaign');
     });
     Route::post('/personal/investments', [InvestmentController::class, 'store'])->middleware('personal')->name('personal.investments.store');
     Route::put('/personal/investments/{investment}', [InvestmentController::class, 'update'])->middleware('personal')->name('personal.investments.update');
