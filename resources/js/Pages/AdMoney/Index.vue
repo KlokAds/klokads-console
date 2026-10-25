@@ -174,17 +174,18 @@ const dayLabel = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { 
                 </div>
                 <div v-if="campaigns.length" class="overflow-x-auto">
                     <table class="table">
-                        <thead><tr><th>Campaign</th><th class="num">Budget/day</th><th class="num">Spent</th><th class="num">Results</th><th class="num">Per result</th><th class="num">Clicks</th><th class="num">CTR</th></tr></thead>
+                        <thead><tr><th>Campaign</th><th>Goal</th><th class="num">Budget/day</th><th class="num">Spent</th><th class="num">Results</th><th class="num">Cost</th><th class="num">Clicks</th><th class="num">CTR</th></tr></thead>
                         <tbody>
                             <tr v-for="c in campaigns" :key="c.id">
                                 <td class="max-w-[16rem]">
                                     <div class="truncate font-medium text-ink-900">{{ c.name }}</div>
                                     <span v-if="c.status" class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold" :class="(STATUS[c.status] ?? [c.status, 'bg-ink-50 text-ink-600'])[1]">{{ (STATUS[c.status] ?? [c.status])[0] }}</span>
                                 </td>
+                                <td class="text-ink-600">{{ c.goal }}</td>
                                 <td class="num text-ink-600">{{ c.daily_budget ? m(c.daily_budget) : '—' }}</td>
                                 <td class="num font-semibold text-ink-900">{{ m(c.spend) }}</td>
                                 <td class="num">{{ c.results }} <span class="text-xs text-ink-400">{{ c.result_label }}</span></td>
-                                <td class="num font-semibold">{{ c.cost_per_result === null ? '—' : c.cost_per_result === 0 ? '< ' + m(1) : m(c.cost_per_result) }}</td>
+                                <td class="num font-semibold">{{ c.cost_per_result === null ? '—' : c.cost_per_result === 0 ? '< ' + m(1) : m(c.cost_per_result) }} <span class="block text-[10px] font-normal text-ink-400">{{ c.per }}</span></td>
                                 <td class="num text-ink-600">{{ c.clicks.toLocaleString() }}</td>
                                 <td class="num text-ink-600">{{ c.ctr !== null ? c.ctr + '%' : '—' }}</td>
                             </tr>

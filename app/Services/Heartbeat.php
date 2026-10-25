@@ -47,6 +47,7 @@ class Heartbeat
             'airwallex' => fn () => app(Airwallex::class)->run(),
             'ad_statements' => fn () => app(AdStatements::class)->draftMonthly(),
             'ad_performance' => fn () => app(AdPerformance::class)->run(),
+            'personal_ads' => fn () => app(PersonalAds::class)->run(),
             'emails' => fn () => app(EmailInbox::class)->poll(),
             'personal_invoices' => fn () => app(PersonalInvoicing::class)->runRecurring(),
             'personal_reminders' => fn () => app(PersonalReminders::class)->run(),

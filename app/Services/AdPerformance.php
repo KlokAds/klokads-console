@@ -20,7 +20,7 @@ class AdPerformance
     public const JUMP = 1.5;
 
     /** Delivery states worth a word when a campaign enters them. */
-    private const STATUS_TEXT = [
+    public const STATUS_TEXT = [
         'ACTIVE' => '▶️ running again',
         'PAUSED' => '⏸ paused',
         'CAMPAIGN_PAUSED' => '⏸ paused',
@@ -59,6 +59,45 @@ class AdPerformance
         };
     }
 
+    /** The campaign's goal in words, from Meta's objective (OUTCOME_* and the older names). */
+    public static function goal(?string $objective, ?string $resultType = null): string
+    {
+        $o = strtoupper((string) $objective);
+        $t = strtolower((string) $resultType);
+
+        return match (true) {
+            in_array($o, ['OUTCOME_AWARENESS', 'REACH', 'BRAND_AWARENESS', 'VIDEO_VIEWS'], true) => 'Awareness',
+            in_array($o, ['OUTCOME_TRAFFIC', 'LINK_CLICKS'], true) => 'Traffic',
+            in_array($o, ['OUTCOME_LEADS', 'LEAD_GENERATION'], true) => 'Leads',
+            in_array($o, ['OUTCOME_SALES', 'CONVERSIONS', 'PRODUCT_CATALOG_SALES'], true) => 'Sales',
+            in_array($o, ['OUTCOME_APP_PROMOTION', 'APP_INSTALLS'], true) => 'App',
+            $o === 'MESSAGES' || str_contains($t, 'messaging') || str_contains($t, 'conversation') => 'Messages',
+            in_array($o, ['OUTCOME_ENGAGEMENT', 'POST_ENGAGEMENT', 'PAGE_LIKES', 'EVENT_RESPONSES'], true) => 'Engagement',
+            str_contains($t, 'video') || str_contains($t, 'thruplay') || $t === 'reach' => 'Awareness',
+            str_contains($t, 'link_click') || str_contains($t, 'landing_page') => 'Traffic',
+            str_contains($t, 'lead') => 'Leads',
+            str_contains($t, 'purchase') => 'Sales',
+            default => 'Other',
+        };
+    }
+
+    /**
+     * What a campaign brought, the way its goal counts it: awareness by people reached (and the
+     * cost per 1,000), everything else by its own result (leads, messages, link clicks…) and the cost each.
+     *
+     * @return array{goal: string, results: int, result_label: string, cost_per_result: ?int, per: string}
+     */
+    public static function present(?string $objective, ?string $resultType, int $spend, int $results, int $reach): array
+    {
+        $goal = self::goal($objective, $resultType);
+        if ($goal === 'Awareness' && $reach > 0) {
+            return ['goal' => $goal, 'results' => $reach, 'result_label' => self::noun('reach', $reach), 'cost_per_result' => (int) round($spend * 1000 / $reach), 'per' => 'per 1,000 reached'];
+        }
+        $label = self::noun($resultType, $results);
+
+        return ['goal' => $goal, 'results' => $results, 'result_label' => $label, 'cost_per_result' => $results > 0 ? (int) round($spend / $results) : null, 'per' => 'per '.self::noun($resultType, 1)];
+    }
+
     /**
      * Per campaign over a period: spend, results, cost per result, clicks and CTR, budget and status.
      *
@@ -82,9 +121,7 @@ class AdPerformance
                     'status' => $known[$id]['status'] ?? null,
                     'daily_budget' => $known[$id]['daily_budget'] ?? null,
                     'spend' => $spend,
-                    'results' => $results,
-                    'result_label' => self::noun($type, $results),
-                    'cost_per_result' => $results > 0 ? (int) round($spend / $results) : null,
+                    ...self::present($known[$id]['objective'] ?? null, $type, $spend, $results, (int) $days->sum('reach')),
                     'impressions' => $impressions,
                     'clicks' => $clicks,
                     'ctr' => $impressions > 0 ? round($clicks / $impressions * 100, 2) : null,
@@ -106,15 +143,18 @@ class AdPerformance
         $m = fn ($c) => Notify::money((int) $c, $cur);
         $out = [];
 
-        $withResults = $rows->filter(fn ($c) => $c['results'] >= 3 && $c['cost_per_result']);
+        // Costs compare only within the same goal: a lead and a person reached are not the same thing.
+        $withResults = $rows->filter(fn ($c) => $c['results'] >= 3 && $c['cost_per_result'] && $c['goal'] !== 'Awareness');
         $best = $withResults->sortBy('cost_per_result')->first();
-        $avgCost = $withResults->sum('results') > 0 ? $withResults->sum('spend') / $withResults->sum('results') : null;
 
         foreach ($rows as $c) {
+            $same = $withResults->where('goal', $c['goal']);
+            $bestOfGoal = $same->sortBy('cost_per_result')->first();
+            $avgCost = $same->sum('results') > 0 ? $same->sum('spend') / $same->sum('results') : null;
             if ($c['results'] === 0 && $c['spend'] >= 1000) {
                 $out[] = ['tone' => 'bad', 'text' => "“{$c['name']}” spent {$m($c['spend'])} in 7 days with no {$c['result_label']}. Check the ad, the audience or the form — or pause it."];
-            } elseif ($avgCost && $best && $c['id'] !== $best['id'] && $c['results'] >= 3 && $c['cost_per_result'] > $avgCost * self::JUMP) {
-                $out[] = ['tone' => 'warn', 'text' => "“{$c['name']}” costs {$m($c['cost_per_result'])} per ".self::noun(null, 1)." — {$m($best['cost_per_result'])} on “{$best['name']}”. Move some budget from it to “{$best['name']}”."];
+            } elseif ($avgCost && $bestOfGoal && $c['id'] !== $bestOfGoal['id'] && $c['results'] >= 3 && $c['cost_per_result'] > $avgCost * self::JUMP) {
+                $out[] = ['tone' => 'warn', 'text' => "“{$c['name']}” costs {$m($c['cost_per_result'])} {$c['per']} — {$m($bestOfGoal['cost_per_result'])} on “{$bestOfGoal['name']}”. Move some budget from it to “{$bestOfGoal['name']}”."];
             }
         }
         // The cheapest campaign that keeps hitting its daily budget: it could take more.

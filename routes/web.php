@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdClientController;
 use App\Http\Controllers\AdMoneyController;
 use App\Http\Controllers\AppReleaseController;
 use App\Http\Controllers\CashflowController;
@@ -72,6 +73,8 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('/i/{token}', [PublicInvoiceController::class, 'show'])->name('public.invoice');
     // My personal invoices (client pays by bank / bKash / Nagad / Rocket / Upay / Bangla QR).
     Route::get('/pi/{token}', [PersonalInvoiceController::class, 'public'])->name('personal.invoice.public');
+    // A client's own ads report (private link, no login).
+    Route::get('/ads/{token}', [AdClientController::class, 'report'])->name('ad-report.show');
     Route::get('/pi/{token}/pdf', [PersonalInvoiceController::class, 'publicPdf'])->name('personal.invoice.public.pdf');
     Route::post('/pi/{token}/paid', [PersonalInvoiceController::class, 'report'])->middleware('throttle:6,1')->name('personal.invoice.public.report');
     Route::get('/i/{token}/pdf', [PublicInvoiceController::class, 'pdf'])->name('public.invoice.pdf');
@@ -109,6 +112,19 @@ Route::middleware('auth')->group(function () {
     Route::delete('/personal/envelope-spends/{spend}', [EnvelopeController::class, 'destroySpend'])->middleware('personal')->name('personal.envelopes.spends.destroy');
     Route::put('/personal/guide', [GuideController::class, 'update'])->middleware('personal')->name('personal.guide.update');
     Route::get('/personal/investments', [InvestmentController::class, 'index'])->middleware('personal')->name('personal.investments.index');
+
+    // My own clients' ads (Edge Education, Marine Orvion…): campaigns, controls, the ads bill ledger.
+    Route::middleware('personal')->prefix('personal/client-ads')->name('ad-clients.')->group(function () {
+        Route::get('/', [AdClientController::class, 'index'])->name('index');
+        Route::get('/campaigns', [AdClientController::class, 'campaignsOf'])->name('campaigns');
+        Route::post('/sync', [AdClientController::class, 'sync'])->name('sync');
+        Route::get('/{client}', [AdClientController::class, 'show'])->name('show');
+        Route::post('/{client}/assign', [AdClientController::class, 'assign'])->name('assign');
+        Route::delete('/{client}/assign/{assignment}', [AdClientController::class, 'unassign'])->name('unassign');
+        Route::put('/{client}/settings', [AdClientController::class, 'settings'])->name('settings');
+        Route::post('/{client}/bill', [AdClientController::class, 'bill'])->name('bill');
+        Route::post('/{client}/campaigns/{campaign}', [AdClientController::class, 'control'])->name('control');
+    });
     Route::post('/personal/investments', [InvestmentController::class, 'store'])->middleware('personal')->name('personal.investments.store');
     Route::put('/personal/investments/{investment}', [InvestmentController::class, 'update'])->middleware('personal')->name('personal.investments.update');
     Route::put('/personal/investments/{investment}/value', [InvestmentController::class, 'value'])->middleware('personal')->name('personal.investments.value');

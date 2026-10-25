@@ -156,8 +156,39 @@ class MetaAds
     {
         return self::viaPilot()
             ? collect($this->pilot('ad-accounts/'.self::act($accountId).'/campaigns')['data'] ?? [])
-                ->mapWithKeys(fn ($c) => [(string) $c['id'] => ['name' => $c['name'], 'status' => $c['status'] ?? null, 'objective' => $c['objective'] ?? null, 'daily_budget' => $c['daily_budget'] ?? null]])->all()
+                ->mapWithKeys(fn ($c) => [(string) $c['id'] => ['name' => $c['name'], 'status' => $c['status'] ?? null, 'objective' => $c['objective'] ?? null,
+                    'daily_budget' => $c['daily_budget'] ?? null, 'start' => $c['start'] ?? null, 'end' => $c['end'] ?? null]])->all()
             : [];
+    }
+
+    /**
+     * A campaign's limits now: on or paused, budget a day (cents), last day, and whether that can move.
+     *
+     * @return array{active: bool, daily_budget: ?int, end: ?string, extendable: bool, why_not: ?string}
+     */
+    public function limits(string $accountId, string $campaignId): array
+    {
+        return $this->pilot('ad-accounts/'.self::act($accountId).'/campaigns/'.$campaignId.'/limits')['data'];
+    }
+
+    /**
+     * Change a campaign on Meta: active (on / pause), daily_budget (in the account currency, not cents), new_end (Y-m-d).
+     *
+     * @param  array{active?: bool, daily_budget?: float, new_end?: string, reason?: string}  $change
+     * @return array<string, mixed> its limits afterwards
+     */
+    public function setLimits(string $accountId, string $campaignId, array $change): array
+    {
+        if (! self::viaPilot()) {
+            throw new RuntimeException('Connect Klok Pilot first — campaigns are changed through it.');
+        }
+        $res = Http::timeout(120)->acceptJson()->withHeaders(['X-Console-Key' => Setting::get('pilot_bridge_key')])
+            ->post(rtrim(Setting::get('pilot_url'), '/').'/internal/console/ad-accounts/'.self::act($accountId).'/campaigns/'.$campaignId.'/limits', $change);
+        if ($res->failed()) {
+            throw new RuntimeException('Meta: '.($res->json('error.message') ?? $res->json('message') ?? 'the change did not go through ('.$res->status().')'));
+        }
+
+        return $res->json('data');
     }
 
     /**

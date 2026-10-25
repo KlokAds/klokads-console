@@ -131,7 +131,23 @@ class SpendBilling
         if (! $client->history_from || ! $client->history_cursor || $client->history_cursor->lte($client->history_from)) {
             return null;
         }
+        // One import at a time per client (the heartbeat and a button press can meet).
+        $lock = Cache::lock('history-import:'.$client->id, 600);
+        if (! $lock->get()) {
+            return null;
+        }
+        try {
+            return $this->importSteps($client->fresh(), $steps);
+        } finally {
+            $lock->release();
+        }
+    }
 
+    private function importSteps(Client $client, int $steps): ?CarbonImmutable
+    {
+        if (! $client->history_cursor || $client->history_cursor->lte($client->history_from)) {
+            return null;
+        }
         $currency = $this->meta->account($client->meta_ad_account_id)['currency'];
         $cursor = CarbonImmutable::parse($client->history_cursor);
         $from = CarbonImmutable::parse($client->history_from);
@@ -144,8 +160,9 @@ class SpendBilling
 
         if ($cursor->lte($from)) {
             $total = (int) MetaSpendDay::where('client_id', $client->id)->sum('spend');
-            $this->notify->send('billing', '📚 '.$this->name($client).': full ad history in',
-                'Since '.$from->format('M Y').' — '.$this->money($total, $currency).' spent in all.', route('clients.show', $client), 'klok-history');
+            // Told once per client: a later refill (e.g. to add results) says nothing.
+            $this->notify->once('history-in:'.$client->id, 'billing', '📚 '.$this->name($client).': full ad history in',
+                'Since '.$from->format('M Y').' — '.$this->money($total, $currency).' spent in all.', route('clients.show', $client));
         }
 
         return $cursor;
