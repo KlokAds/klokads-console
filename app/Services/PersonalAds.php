@@ -330,6 +330,10 @@ class PersonalAds
     /** "October 2026" for a whole month, else "3 Oct – 25 Oct 2026". */
     public static function period(CarbonImmutable $from, CarbonImmutable $to): string
     {
+        if ($from->isSameDay($to)) {
+            return $from->format('j M Y');
+        }
+
         return $from->isSameDay($from->startOfMonth()) && $to->isSameDay($from->endOfMonth()->startOfDay())
             ? $from->format('F Y')
             : $from->format($from->year === $to->year ? 'j M' : 'j M Y').' – '.$to->format('j M Y');
