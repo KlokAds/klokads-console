@@ -2,6 +2,7 @@
 import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
 import Segmented from '@/Components/Ui/Segmented.vue';
+import TimePicker from '@/Components/Ui/TimePicker.vue';
 import Toggle from '@/Components/Ui/Toggle.vue';
 import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { confirmDialog } from '@/confirm';
@@ -18,7 +19,14 @@ const props = defineProps({
 const EVERY = [1, 2, 3, 7, 14, 30];
 const everyLabel = (n) => (n === 1 ? 'Every day' : n === 7 ? 'Every week' : n === 14 ? 'Every 2 weeks' : n === 30 ? 'Every month' : `Every ${n} days`);
 const WINDOW_LABEL = { morning: '🌅 Morning', afternoon: '🌤️ Afternoon', evening: '🌆 Evening', night: '🌙 Night', auto: '✨ Learn it' };
-const windowOptions = computed(() => [...Object.keys(props.windows), 'auto'].map((value) => ({ value, label: WINDOW_LABEL[value] })));
+const isTime = (w) => /^\d{2}:\d{2}$/.test(w ?? '');
+const windowOptions = computed(() => [...Object.keys(props.windows), 'auto', 'time'].map((value) => ({ value, label: value === 'time' ? '⏰ Time' : WINDOW_LABEL[value] })));
+// The segmented choice: a part of the day, "Learn it", or "Time" (then the exact time below).
+const windowChoice = computed({
+    get: () => (isTime(form.window) ? 'time' : form.window),
+    set: (v) => (form.window = v === 'time' ? (isTime(form.window) ? form.window : '20:00') : v),
+});
+const whenLabel = (w) => (isTime(w) ? `⏰ ${time(w)}` : WINDOW_LABEL[w]);
 const hour = (h) => `${h % 12 || 12} ${h < 12 ? 'am' : 'pm'}`;
 const time = (hhmm) => {
     const [h, m] = hhmm.split(':').map(Number);
@@ -84,7 +92,7 @@ onMounted(() => (highlight.value = Number(new URLSearchParams(window.location.se
                 <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-ink-50 text-2xl" :class="p.paused && 'opacity-40'">{{ p.emoji }}</span>
                 <span class="min-w-0 flex-1">
                     <span class="block truncate text-[15px] font-semibold text-ink-900">{{ p.name }}<span v-if="p.paused" class="ml-1 text-xs font-normal text-ink-400">paused</span></span>
-                    <span class="block truncate text-xs text-ink-500">{{ everyLabel(p.every_days) }} · {{ WINDOW_LABEL[p.window] }}<template v-if="p.usual_hour !== null"> (usually {{ hour(p.usual_hour) }})</template></span>
+                    <span class="block truncate text-xs text-ink-500">{{ everyLabel(p.every_days) }} · {{ whenLabel(p.window) }}<template v-if="p.usual_hour !== null"> (usually {{ hour(p.usual_hour) }})</template></span>
                 </span>
                 <span class="text-right text-xs text-ink-500">{{ sinceLabel(p) }}<span v-if="!p.phone" class="block text-amber-600">add number</span></span>
             </button>
@@ -123,7 +131,8 @@ onMounted(() => (highlight.value = Number(new URLSearchParams(window.location.se
                     </div>
                     <div>
                         <div class="label">When suits them</div>
-                        <Segmented v-model="form.window" :options="windowOptions" block size="sm" />
+                        <Segmented v-model="windowChoice" :options="windowOptions" block size="sm" />
+                        <div v-if="windowChoice === 'time'" class="mt-2 w-40"><TimePicker v-model="form.window" /></div>
                         <p class="mt-1 text-[11px] text-ink-500">“Learn it”: at the hour you usually talk to them (from your calls); evening until it knows.</p>
                     </div>
                     <div v-if="editing" class="flex items-center justify-between rounded-2xl bg-ink-50 px-4 py-3">

@@ -60,6 +60,18 @@ class KeepInTouchTest extends TestCase
         $this->assertNull($shoshur->fresh()->remind_at);
     }
 
+    public function test_my_own_time_for_a_person(): void
+    {
+        $abbu = $this->person('Abbu', '20:00');
+        $vaiya = $this->person('Vaiya', '13:00');
+        $this->post('/personal/keep-in-touch', ['name' => 'X', 'every_days' => 2, 'window' => '25:00'])->assertSessionHasErrors('window');
+
+        app(KeepInTouch::class)->run(CarbonImmutable::parse('2026-10-25 08:00', 'Asia/Dhaka'));
+
+        $this->assertSame('20:00', $this->localRemindAt($abbu));
+        $this->assertSame('13:00', $this->localRemindAt($vaiya));
+    }
+
     public function test_learn_it_uses_the_hour_i_usually_talk_to_them(): void
     {
         $vai = $this->person('Vai', 'auto');

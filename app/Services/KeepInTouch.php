@@ -86,7 +86,8 @@ class KeepInTouch
             ->map(fn ($at) => CarbonImmutable::parse($at)->setTimezone($local->timezone))->all();
         foreach ($toPlan->sortByDesc(fn ($t) => $t->last_talked_at ? $now->diffInHours($t->last_talked_at, true) : PHP_INT_MAX) as $t) {
             $hour = $t->window === 'auto' ? (self::usualHour($t) ?? 20) : null;
-            $slot = $hour !== null ? $today->setTime($hour, 0) : $today->setTimeFromTimeString(self::WINDOWS[$t->window] ?? self::WINDOWS['evening']);
+            // A part of the day, my own time ("21:00"), or the hour I usually call them.
+            $slot = $hour !== null ? $today->setTime($hour, 0) : $today->setTimeFromTimeString(self::WINDOWS[$t->window] ?? (self::isTime($t->window) ? $t->window : self::WINDOWS['evening']));
             if ($slot->lt($local)) {
                 $slot = $local->addMinutes(5);
             }
@@ -117,6 +118,11 @@ class KeepInTouch
         }
 
         return $sent;
+    }
+
+    public static function isTime(?string $window): bool
+    {
+        return (bool) preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', (string) $window);
     }
 
     public function later(Touch $touch, int $minutes = 60): void

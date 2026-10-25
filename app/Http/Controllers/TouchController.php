@@ -10,7 +10,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -88,7 +87,12 @@ class TouchController extends Controller
             'emoji' => ['nullable', 'string', 'max:16'],
             'phone' => ['nullable', 'string', 'max:30'],
             'every_days' => ['required', 'integer', 'between:1,90'],
-            'window' => ['required', Rule::in([...array_keys(KeepInTouch::WINDOWS), 'auto'])],
+            // A part of the day, "auto" (learnt from my calls), or my own time like "21:00".
+            'window' => ['required', 'string', function ($attribute, $value, $fail) {
+                if (! in_array($value, [...array_keys(KeepInTouch::WINDOWS), 'auto'], true) && ! KeepInTouch::isTime($value)) {
+                    $fail('Choose a part of the day or a time.');
+                }
+            }],
             'paused' => ['boolean'],
         ]);
     }
