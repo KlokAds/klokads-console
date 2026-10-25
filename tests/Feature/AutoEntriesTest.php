@@ -43,6 +43,8 @@ class AutoEntriesTest extends TestCase
                 ['provider' => 'nsave', 'direction' => 'out', 'amount' => 32700, 'currency' => 'USD', 'counterparty' => 'MD ANOWAR HOSSAIN']],
             'nsave received' => ['nsave', 'Money received. 💰 Received $327.00 from Md Mujaid Hossain',
                 ['provider' => 'nsave', 'direction' => 'in', 'amount' => 32700, 'currency' => 'USD']],
+            'nsave card payment' => ['nSave', 'Card payment approved. 💳 Paid $19.00 at FACEBK* Z25JQBJSD4 with your card ending 6903',
+                ['provider' => 'nsave', 'direction' => 'out', 'amount' => 1900, 'currency' => 'USD', 'last4' => '6903']],
             'nsave notification' => ['nSave', 'You received $250.00 from Upwork. Your new balance is $1,240.10',
                 ['provider' => 'nsave', 'direction' => 'in', 'amount' => 25000, 'currency' => 'USD', 'balance' => 124010]],
             'dbs card' => ['DBS', 'A card transaction of SGD 12.30 was made on your DBS card ending 5566 at FAIRPRICE XTRA on 24 Oct.',
@@ -141,5 +143,26 @@ class AutoEntriesTest extends TestCase
 
         InboxMessage::create(['source' => 'sms', 'sender' => 'x', 'body' => 'y', 'hash' => 'h', 'status' => 'review', 'parsed' => null]);
         $this->get('/personal/inbox')->assertOk()->assertInertia(fn ($page) => $page->component('Personal/Inbox')->has('messages', 1)->where('setup.sms_url', fn ($u) => str_contains($u, '/inbox/sms/')));
+    }
+
+    public function test_metas_charge_on_a_card_is_ad_spend_on_the_right_nsave_and_never_counted_twice(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $main = Account::create(['name' => 'nSave Main', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'nsave', 'currency' => 'USD', 'opening_balance' => 10064]);
+        $copy = Account::create(['name' => 'nSave Copy', 'scope' => 'business', 'kind' => 'wallet', 'provider' => 'nsave', 'currency' => 'USD', 'opening_balance' => 44766, 'app_profile' => 'clone']);
+        $auto = app(AutoEntries::class);
+
+        // From the second nSave app (a Klok Finance client's ads): business "Meta Ads spend".
+        $auto->ingest('app', 'nSave', 'Card payment approved. 💳 Paid $19.00 at FACEBK* Z25JQBJSD4 with your card ending 6903', CarbonImmutable::parse('2026-10-25 18:35'), 'clone');
+        $tx = MoneyTransaction::where('account_id', $copy->id)->sole();
+        $this->assertSame(['expense', 1900, 'meta_ads', 'Meta'], [$tx->kind, $tx->amount, $tx->category, $tx->counterparty]);
+        $this->assertSame(44766 - 1900, Ledger::balance($copy));
+
+        // A client's charge already booked from Meta's log (৳ ÷ rate ≈ $21.02): the card's message is that one, with its exact amount.
+        $booked = Ledger::save(['kind' => 'expense', 'account_id' => $main->id, 'amount' => 2102, 'category' => 'client_ads', 'counterparty' => 'Meta', 'occurred_on' => '2026-10-31']);
+        $message = $auto->ingest('app', 'nSave', 'Card payment approved. 💳 Paid $21.05 at FACEBK* Q7PL2 with your card ending 5372', CarbonImmutable::parse('2026-10-31 15:00'));
+        $this->assertSame('matched', $message->status);
+        $this->assertSame(1, MoneyTransaction::where('account_id', $main->id)->count());
+        $this->assertSame(2105, $booked->fresh()->amount);
     }
 }

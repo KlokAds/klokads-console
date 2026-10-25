@@ -26,7 +26,6 @@ class Catalog
         'office' => 'Office / admin',
         'tax' => 'Tax / GST',
         'bank_fees' => 'Bank & transfer fees',
-        'client_ads' => 'Client ads (Meta charged my card)',
         'other' => 'Other',
     ];
 
@@ -70,6 +69,7 @@ class Catalog
         'sadaqah' => 'Sadaqah (not recorded)',
         'envelope' => 'Monthly envelope',
         'bank_fees' => 'Bank & transfer fees',
+        'client_ads' => 'Client ads (Meta charged my card)',
         'other' => 'Other',
     ];
 

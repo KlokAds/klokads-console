@@ -109,6 +109,19 @@ class AutoEntries
                 return $message;
             }
 
+            // Meta took it from my card (FACEBK*): ad spend — business "Meta Ads", personal "Client ads".
+            // The same charge already booked from Meta's own log (a client's charge) is matched, not added twice.
+            if ($p['direction'] === 'out' && self::isMeta($message->body)) {
+                $category ??= $account->scope === 'business' ? 'meta_ads' : 'client_ads';
+                $p['counterparty'] = 'Meta';
+                if ($booked = self::bookedMetaCharge($account, $p['amount'], $date)) {
+                    Ledger::save(['amount' => $p['amount']], $booked); // the card's own amount is the exact one
+                    $message->update(['status' => 'matched', 'account_id' => $account->id, 'money_transaction_id' => $booked->id, 'note' => 'Meta charge already on record']);
+
+                    return $message;
+                }
+            }
+
             $tx = Ledger::save([
                 'kind' => $p['direction'] === 'in' ? 'income' : 'expense',
                 'account_id' => $account->id,
@@ -130,6 +143,27 @@ class AutoEntries
         }
 
         return $message;
+    }
+
+    public static function isMeta(string $text): bool
+    {
+        return (bool) preg_match('/\bfacebk\b|facebook ads|meta platforms/i', $text);
+    }
+
+    /**
+     * A Meta charge on this account already on record from the other side (Meta's log, or the card's
+     * message), within a few days and about the same amount (taka ÷ Meta's rate is close, not exact).
+     */
+    public static function bookedMetaCharge(Account $account, int $amount, string $date, bool $fromMetaLog = true): ?MoneyTransaction
+    {
+        $day = CarbonImmutable::parse($date);
+        $linked = InboxMessage::whereNotNull('money_transaction_id')->pluck('money_transaction_id');
+
+        return MoneyTransaction::where('account_id', $account->id)->where('kind', 'expense')->where('counterparty', 'Meta')
+            ->whereBetween('occurred_on', [$day->subDays(3)->toDateString(), $day->addDays(3)->toDateString()])
+            ->whereBetween('amount', [(int) floor($amount * 0.94), (int) ceil($amount * 1.06)])
+            ->when($fromMetaLog, fn ($q) => $q->whereNotIn('id', $linked), fn ($q) => $q->whereIn('id', $linked))
+            ->orderByRaw('abs(amount - ?)', [$amount])->first();
     }
 
     /** Undo an auto entry (and its invoice payment). */

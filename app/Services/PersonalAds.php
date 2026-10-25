@@ -144,6 +144,13 @@ class PersonalAds
         if (! $amount) {
             return null;
         }
+        // The card's own message booked it already: that entry is this charge.
+        if (! $balanceAsIs && ($card = AutoEntries::bookedMetaCharge($account, $amount, $charge->date->toDateString(), fromMetaLog: false))
+            && ! PersonalAdCharge::where('money_transaction_id', $card->id)->exists()) {
+            $charge->update(['money_transaction_id' => $card->id]);
+
+            return $card;
+        }
         $tx = Ledger::save([
             'kind' => 'expense', 'account_id' => $account->id, 'amount' => $amount, 'category' => 'client_ads', 'counterparty' => 'Meta',
             'description' => ($client->company ?: $client->name).' ads · Meta charged '.Notify::money($charge->amount, $charge->currency),
