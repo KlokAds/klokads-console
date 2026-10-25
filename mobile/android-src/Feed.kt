@@ -93,6 +93,9 @@ object Feed {
         val open = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra("url", url)
+        // One notification per chat (c=…): a newer message replaces it quietly instead of stacking up.
+        val chat = Regex("[?&]c=([a-f0-9]+)").find(url)?.groupValues?.get(1)
+        val shown = chat?.let { "chat-$it".hashCode() } ?: id.toInt()
         val tap = PendingIntent.getActivity(context, id.toInt(), open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val money = kind == "credit" || kind == "debit"
         val builder = NotificationCompat.Builder(context, if (money) MONEY else REMINDERS)
@@ -104,6 +107,7 @@ object Feed {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(if (money) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
+            .setOnlyAlertOnce(chat != null)
             .setContentIntent(tap)
         // A follow-up reminder: done or later, right from the notification. Everything else: "Seen".
         val followUpId = Regex("[?&]f=(\\d+)").find(url)?.groupValues?.get(1)
@@ -113,25 +117,25 @@ object Feed {
         listOfNotNull(taskId?.let { it to "tasks" }, touchId?.let { it to "touch" }).firstOrNull()?.let { (target, path) ->
             for ((action, label) in listOf("done" to (if (path == "touch") "Talked ✓" else "Done ✓"), "later" to "1 hour later")) {
                 val intent = Intent(context, TaskActionReceiver::class.java)
-                    .putExtra("id", target).putExtra("path", path).putExtra("action", action).putExtra("notification", id.toInt())
+                    .putExtra("id", target).putExtra("path", path).putExtra("action", action).putExtra("notification", shown)
                 builder.addAction(0, label, PendingIntent.getBroadcast(context, (id * 10 + if (action == "done") 4 else 5).toInt(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
             }
         }
         if (followUpId == null && taskId == null && touchId == null) {
-            val seen = Intent(context, SeenReceiver::class.java).putExtra("id", id).putExtra("notification", id.toInt())
+            val seen = Intent(context, SeenReceiver::class.java).putExtra("id", id).putExtra("notification", shown)
             builder.addAction(0, "✓ Seen", PendingIntent.getBroadcast(context, (id * 10 + 3).toInt(), seen, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         }
         followUpId?.let { followUp ->
             for ((action, label) in listOf("done" to "Done", "later" to "1 hour later")) {
                 val intent = Intent(context, FollowUpActionReceiver::class.java)
-                    .putExtra("id", followUp).putExtra("action", action).putExtra("notification", id.toInt())
+                    .putExtra("id", followUp).putExtra("action", action).putExtra("notification", shown)
                 val pending = PendingIntent.getBroadcast(context, (id * 10 + if (action == "done") 1 else 2).toInt(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                 builder.addAction(0, label, pending)
             }
         }
         val notification = builder.build()
         try {
-            NotificationManagerCompat.from(context).notify(id.toInt(), notification)
+            NotificationManagerCompat.from(context).notify(shown, notification)
         } catch (_: SecurityException) {
             // Notifications not allowed on this phone (yet).
         }

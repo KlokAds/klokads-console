@@ -75,6 +75,7 @@ object FollowUps {
 
         val person = person(extras) ?: return
         val text = latestText(extras)
+        if (otherAccount(source, person, text)) return
         if (NOISE.containsMatchIn(person) || NOISE.containsMatchIn(text) || person.equals(sbn.packageName, true)) return
         val missed = MISSED.containsMatchIn(text) || MISSED.containsMatchIn(person)
 
@@ -105,10 +106,15 @@ object FollowUps {
         val extras = sbn.notification.extras
         if (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         val person = person(extras) ?: return
+        if (otherAccount(source, person, latestText(extras))) return
         // A missed call stays open until I call back; only messages are "seen".
         if (MISSED.containsMatchIn(latestText(extras))) return
         queue(context, JSONObject().put("action", "seen").put("source", source).put("person", person).put("at", System.currentTimeMillis()))
     }
+
+    /** Messenger marks another logged-in account's chats with "[Account]": only the current account counts. */
+    private fun otherAccount(source: String, person: String, text: String): Boolean =
+        source == "messenger" && (person.trimStart().startsWith("[") || text.trimStart().startsWith("["))
 
     private fun person(extras: Bundle): String? {
         val title = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()

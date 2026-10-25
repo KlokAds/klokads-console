@@ -88,4 +88,26 @@ class FollowUpsTest extends TestCase
         $this->get('/personal/followups')->assertOk()->assertInertia(fn ($page) => $page->component('Personal/FollowUps')->has('closed', 1));
         $this->getJson('/app/followups/wrong')->assertNotFound();
     }
+
+    public function test_one_notification_per_chat_showing_the_latest_message(): void
+    {
+        $this->event(['action' => 'new', 'source' => 'whatsapp', 'kind' => 'message', 'person' => 'Rahim', 'text' => 'Bhai, ad ta kobe on hobe?']);
+        $this->event(['action' => 'new', 'source' => 'whatsapp', 'kind' => 'message', 'person' => 'Rahim', 'text' => 'Budget 50 dollar thik ache']);
+        $this->event(['action' => 'new', 'source' => 'whatsapp', 'kind' => 'message', 'person' => 'Karim', 'text' => 'Salam']);
+
+        $this->assertSame(2, AppNotification::count(), 'one per chat, not one per message');
+        $rahim = AppNotification::where('title', 'like', '%Rahim%')->sole();
+        $this->assertStringContainsString('Budget 50 dollar thik ache', $rahim->body);
+        $this->assertStringContainsString('(2 messages)', $rahim->body);
+        $this->assertMatchesRegularExpression('/[?&]c=[a-f0-9]{10}/', $rahim->url);
+    }
+
+    public function test_messenger_chats_of_another_logged_in_account_are_ignored(): void
+    {
+        $this->event(['action' => 'new', 'source' => 'messenger', 'kind' => 'message', 'person' => '[Klok Ads] Rahim', 'text' => 'Hi']);
+        $this->event(['action' => 'new', 'source' => 'messenger', 'kind' => 'message', 'person' => 'Rahim', 'text' => '[Klok Ads] Hi']);
+
+        $this->assertSame(0, FollowUp::count());
+        $this->assertSame(0, AppNotification::count());
+    }
 }

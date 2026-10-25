@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AppNotification;
 use App\Models\FollowUp;
 use App\Models\Loan;
 use App\Models\PersonalClient;
@@ -36,6 +37,10 @@ class FollowUps
     public function record(array $e): ?FollowUp
     {
         $at = isset($e['at']) ? CarbonImmutable::createFromTimestampMs($e['at']) : CarbonImmutable::now();
+        // Messenger shows another logged-in account's chats as "[Account] …": not mine to follow up.
+        if (($e['source'] ?? null) === 'messenger' && (str_starts_with(trim((string) ($e['person'] ?? '')), '[') || str_starts_with(trim((string) ($e['text'] ?? '')), '['))) {
+            return null;
+        }
         $key = self::key($e['source'], $e['person'] ?? null, $e['phone'] ?? null);
         if ($key === null) {
             return null;
@@ -61,6 +66,7 @@ class FollowUps
         if ($open) {
             $open->update(['count' => $open->count + 1, 'last_at' => $at, 'preview' => $this->clip($e['text'] ?? $open->preview),
                 'kind' => ($e['kind'] ?? 'message') === 'missed_call' ? 'missed_call' : $open->kind]);
+            $this->tellChat($open, $open->kind === 'missed_call' ? '📞 Missed call' : '💬 '.self::SOURCES[$open->source]);
 
             return $open;
         }
@@ -72,12 +78,23 @@ class FollowUps
             'remind_at' => $at->addMinutes(self::FIRST_AFTER_MINUTES),
         ]);
 
-        // Once, right away: it is on my list now.
-        $what = $f->kind === 'missed_call' ? '📞 Missed call' : '💬 '.self::SOURCES[$f->source];
-        $this->notify->send('reminder', "{$what}: {$f->person}", trim(($f->kind === 'message' && $f->preview ? '“'.$f->preview.'” · ' : '').($this->context($f) ? $this->context($f).' · ' : '').'I\'ll remind you in an hour if it is still open.'),
-            route('personal.followups.index'), 'klok-followup');
+        // Right away: it is on my list now.
+        $this->tellChat($f, $f->kind === 'missed_call' ? '📞 Missed call' : '💬 '.self::SOURCES[$f->source]);
 
         return $f;
+    }
+
+    /**
+     * One notification per chat, always showing the latest message: the earlier one for this
+     * person is replaced (on the phone and in the feed), not stacked.
+     */
+    private function tellChat(FollowUp $f, string $what, ?string $title = null, ?string $body = null): void
+    {
+        $chat = substr(md5($f->key), 0, 10);
+        AppNotification::where('tag', 'klok-chat-'.$chat)->delete();
+        $body ??= trim(($f->kind === 'message' && $f->preview ? '“'.$f->preview.'”'.($f->count > 1 ? " ({$f->count} messages)" : '').' · ' : ($f->count > 1 ? "{$f->count} times · " : ''))
+            .($this->context($f) ? $this->context($f).' · ' : '').'I\'ll remind you in an hour if it is still open.');
+        $this->notify->send('reminder', $title ?? "{$what}: {$f->person}", $body, route('personal.followups.index', ['f' => $f->id, 'c' => $chat]), 'klok-chat-'.$chat);
     }
 
     /** Heartbeat: remind what is still open after an hour (and again later). */
@@ -96,7 +113,7 @@ class FollowUps
                 $this->context($f),
                 $f->note ? "📝 {$f->note}" : null,
             ]);
-            $this->notify->send('reminder', "{$what}: {$f->person} · {$ago} ago", implode("\n", $lines) ?: 'Not answered yet.', route('personal.followups.index', ['f' => $f->id]), 'klok-followup');
+            $this->tellChat($f, $what, "{$what}: {$f->person} · {$ago} ago", implode("\n", $lines) ?: 'Not answered yet.');
 
             $f->update(['reminded' => $f->reminded + 1, 'remind_at' => $f->reminded + 1 < self::MAX_REMINDERS ? $now->addMinutes(self::AGAIN_AFTER_MINUTES) : null]);
             $sent++;
