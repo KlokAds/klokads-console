@@ -4,12 +4,16 @@
 // control all of it here (Phone: messages, senders, settings).
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -136,6 +140,26 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
       return;
     }
     web!.loadUrl(urlRequest: URLRequest(url: WebUri(target)));
+  }
+
+  /// Downloads the file (an invoice PDF on its public link) and opens the share sheet with it and the text.
+  Future<bool> shareFile(dynamic args) async {
+    if (args is! Map || args['url'] is! String) {
+      return false;
+    }
+    try {
+      final res = await http.get(Uri.parse(args['url'] as String));
+      if (res.statusCode != 200) {
+        return false;
+      }
+      final name = ((args['name'] as String?) ?? 'invoice.pdf').replaceAll(RegExp(r'[^\w.\-]'), '_');
+      final file = File('${(await getTemporaryDirectory()).path}/$name');
+      await file.writeAsBytes(res.bodyBytes);
+      final result = await SharePlus.instance.share(ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')], text: args['text'] as String?));
+      return result.status != ShareResultStatus.unavailable;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// A JSON request as me (the page's own cookies and CSRF token).
@@ -340,6 +364,8 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
                   // The site's "Phone app" button opens the native screens.
                   controller.addJavaScriptHandler(handlerName: 'appSettings', callback: (_) => openPhone());
                   controller.addJavaScriptHandler(handlerName: 'theme', callback: setBars);
+                  // An invoice PDF with its message: the phone's share sheet (WhatsApp, Gmail…), the file attached.
+                  controller.addJavaScriptHandler(handlerName: 'shareFile', callback: (args) => shareFile(args.isNotEmpty ? args.first : null));
                   // Opened by tapping a notification: go straight to its page.
                   final first = await nativeChannel.invokeMethod<String>('launchUrl') ?? waiting;
                   waiting = null;

@@ -173,6 +173,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/personal/invoices/{invoice}', [PersonalInvoiceController::class, 'destroy'])->middleware('personal')->name('personal.invoices.destroy');
     Route::post('/personal/invoices/{invoice}/void', [PersonalInvoiceController::class, 'void'])->middleware('personal')->name('personal.invoices.void');
     Route::post('/personal/invoices/{invoice}/send', [PersonalInvoiceController::class, 'send'])->middleware('personal')->name('personal.invoices.send');
+    Route::get('/personal/invoices/{invoice}/compose', [PersonalInvoiceController::class, 'compose'])->middleware('personal')->name('personal.invoices.compose');
+    Route::post('/personal/invoices/{invoice}/whatsapp', [PersonalInvoiceController::class, 'sharedOnWhatsApp'])->middleware('personal')->name('personal.invoices.whatsapp');
     Route::post('/personal/invoices/{invoice}/payments', [PersonalInvoiceController::class, 'pay'])->middleware('personal')->name('personal.invoices.pay');
     Route::post('/personal/invoices/{invoice}/link', [PersonalInvoiceController::class, 'link'])->middleware('personal')->name('personal.invoices.link');
     Route::post('/personal/invoices/{invoice}/dismiss-report', [PersonalInvoiceController::class, 'dismissReport'])->middleware('personal')->name('personal.invoices.dismiss');

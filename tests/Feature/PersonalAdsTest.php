@@ -47,7 +47,10 @@ class PersonalAdsTest extends TestCase
     private function fakePilot(string $edgeStatus = 'ACTIVE', bool $billing = true): void
     {
         if ($billing) {
-            Http::fake(['pilot.test/internal/console/ad-accounts/*/billing' => Http::response(['data' => ['currency' => 'BDT', 'amount_spent' => 1000000, 'unbilled' => 0, 'card' => 'VISA *5372']])]);
+            Http::fake([
+                'pilot.test/internal/console/ad-accounts/*/billing' => Http::response(['data' => ['currency' => 'BDT', 'amount_spent' => 1000000, 'unbilled' => 0, 'card' => 'VISA *5372']]),
+                'pilot.test/internal/console/ad-accounts/*/charges*' => Http::response(['data' => []]),
+            ]);
         }
         Http::preventStrayRequests();
         Http::fake([
@@ -113,7 +116,8 @@ class PersonalAdsTest extends TestCase
     {
         $this->fakePilot();
         $this->assignBoth();
-        $this->edge->update(['ad_billed_until' => '2026-10-15']); // settled up to 15 Oct, from my sheet
+        $this->edge->update(['ad_billed_until' => '2026-10-15', 'ad_bill_basis' => 'spend']); // settled up to 15 Oct, from my sheet
+        $this->marine->update(['ad_bill_basis' => 'spend']);
 
         // 2 Nov: the unbilled days of last month → Edge 16–31 Oct (only the 20 Oct spend), Marine in USD.
         $this->assertSame(0, app(PersonalAds::class)->bills(CarbonImmutable::parse('2026-11-01 10:00', 'Asia/Dhaka')), 'not on the 1st: Meta still corrects');
@@ -193,6 +197,11 @@ class PersonalAdsTest extends TestCase
         $this->assertSame('paid', $first->fresh()->status);
         $this->assertSame(500000 - $first->total, PersonalAds::credit($this->edge->fresh()));
         $this->assertSame(500000, (int) MoneyTransaction::where('account_id', $ucb->id)->sum('amount'), 'booked once, not again per bill');
+        // The payment shows what it paid; the charge shows it is paid.
+        $ledger = PersonalAds::ledger($this->edge->fresh());
+        $this->assertSame($first->number, $ledger['payments'][0]['paid'][0]['number']);
+        $this->assertSame($first->total, $ledger['payments'][0]['paid'][0]['amount']);
+        $this->assertSame('paid', $ledger['charges'][0]['state']);
 
         // The next bill takes the credit first.
         $this->post("/personal/client-ads/{$this->edge->id}/charges", ['date' => '2026-10-31', 'amount' => '10', 'currency' => 'USD']);
@@ -202,24 +211,28 @@ class PersonalAdsTest extends TestCase
         $this->assertSame(500000, (int) MoneyTransaction::where('account_id', $ucb->id)->sum('amount'));
     }
 
-    public function test_metas_charge_is_seen_from_its_numbers_and_added_by_itself(): void
+    public function test_metas_card_charges_come_from_its_log_once_each_and_settled_days_are_skipped(): void
     {
         $this->fakePilot(billing: false);
+        Http::fake([
+            'pilot.test/internal/console/ad-accounts/*/billing' => Http::response(['data' => ['currency' => 'BDT', 'amount_spent' => 1000000, 'unbilled' => 66322, 'card' => 'VISA *5372']]),
+            'pilot.test/internal/console/ad-accounts/act_1/charges*' => Http::response(['data' => [
+                ['id' => 'tx-old', 'time' => '2026-10-01T14:46:10+0000', 'amount' => 358572, 'currency' => 'BDT'],
+                ['id' => 'tx-new', 'time' => '2026-10-21T00:13:05+0000', 'amount' => 250194, 'currency' => 'BDT'],
+            ]]),
+            'pilot.test/internal/console/ad-accounts/*/charges*' => Http::response(['data' => []]),
+        ]);
+        $this->edge->update(['ad_billed_until' => '2026-10-20']); // paid up to 20 Oct
         $this->assignBoth();
-        $this->edge->update(['ad_bill_basis' => 'charges']);
-        Http::fake(['pilot.test/internal/console/ad-accounts/act_1/billing' => Http::sequence()
-            ->push(['data' => ['currency' => 'BDT', 'amount_spent' => 1000000, 'unbilled' => 240000, 'card' => 'VISA *5372']])
-            ->push(['data' => ['currency' => 'BDT', 'amount_spent' => 1010000, 'unbilled' => 0, 'card' => 'VISA *5372']])]);
+        app(PersonalAds::class)->sync(force: true);
 
-        app(PersonalAds::class)->sync(force: true); // first look: remembers
-        $this->assertSame(0, PersonalAdCharge::where('source', 'auto')->count());
-        app(PersonalAds::class)->sync(force: true); // spent ৳100 more, and ৳2,400 waiting is gone → charged ৳2,500
-
-        $charge = PersonalAdCharge::where('source', 'auto')->sole();
-        $this->assertSame(250000, $charge->amount);
-        $this->assertSame($this->edge->id, $charge->personal_client_id);
+        $charges = PersonalAdCharge::where('personal_client_id', $this->edge->id)->get();
+        $this->assertSame(['tx-new'], $charges->pluck('meta_id')->all(), 'the 1 Oct charge is settled already');
+        $this->assertSame('2026-10-21', $charges->first()->date->toDateString());
+        $this->assertSame(250194, $charges->first()->amount);
+        $this->assertSame('charges', $this->edge->fresh()->ad_bill_basis, 'my card: billed by charges, like Edge');
         $this->assertSame(1, AppNotification::where('title', 'like', '💳 Meta charged your card for Edge Education%')->count());
-        $this->assertSame(0, PersonalAdCharge::where('personal_client_id', $this->marine->id)->count(), 'their own card: nothing');
+        $this->assertSame(0, PersonalAdCharge::where('personal_client_id', $this->marine->id)->count());
     }
 
     public function test_billed_by_each_card_charge_i_enter_in_taka_or_dollars(): void

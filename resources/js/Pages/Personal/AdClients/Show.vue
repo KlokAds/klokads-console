@@ -2,6 +2,7 @@
 import CopyButton from '@/Components/CopyButton.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import Icon from '@/Components/Icon.vue';
+import SendInvoice from '@/Components/Personal/SendInvoice.vue';
 import Modal from '@/Components/Modal.vue';
 import DatePicker from '@/Components/Ui/DatePicker.vue';
 import Segmented from '@/Components/Ui/Segmented.vue';
@@ -121,6 +122,8 @@ const payAccountOptions = computed(() => [{ value: null, label: 'Already in my b
 const savePay = () => pay.post(route('ad-clients.payments.store', props.client.id), { preserveScroll: true, onSuccess: () => { pay.reset('amount', 'note'); sheet.value = null; } });
 const billTo = ref('');
 const billNow = () => router.post(route('ad-clients.bill', props.client.id), { to: billTo.value || yesterday }, { preserveScroll: true, onSuccess: () => (sheet.value = null) });
+const sending = ref(null);
+const CHARGE = { to_bill: ['To bill', 'text-sky-600'], unpaid: ['Billed · unpaid', 'text-amber-600'], partial: ['Part paid', 'text-amber-600'], paid: ['Paid ✓', 'text-emerald-600'], void: ['Void', 'text-ink-400'] };
 const INVOICE = { unpaid: ['Unpaid', 'text-amber-600'], partial: ['Part paid', 'text-amber-600'], paid: ['Paid', 'text-emerald-600'], void: ['Void', 'text-ink-400'] };
 const byCharges = computed(() => props.client.ad_bill_basis === 'charges');
 
@@ -184,7 +187,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                 <div><div class="text-[11px] font-semibold text-white/60">Spent · {{ range.label }}</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ sum(money, 'spend') }}</div></div>
                 <div><div class="text-[11px] font-semibold text-white/60">Results</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ results.toLocaleString() }}</div></div>
                 <template v-if="myCard">
-                    <div><div class="text-[11px] font-semibold text-white/60">Meta will charge soon</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ ledger.meta.length ? ledger.meta.map((x) => m(x.unbilled, x.currency)).join(' + ') : '—' }}</div></div>
+                    <div><div class="text-[11px] font-semibold text-white/60">Not charged yet · not billed</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ ledger.meta.length ? ledger.meta.map((x) => m(x.unbilled, x.currency)).join(' + ') : '—' }}</div></div>
                     <div><div class="text-[11px] font-semibold text-white/60">{{ ledger.credit > 0 && !totalDue ? 'Their credit' : 'They owe' }}</div>
                         <div class="mt-0.5 text-lg font-extrabold tabular-nums" :class="totalDue ? 'text-amber-300' : 'text-emerald-300'">{{ ledger.credit > 0 && !totalDue ? m(ledger.credit, 'BDT') : m(totalDue, 'BDT') }}</div></div>
                 </template>
@@ -291,7 +294,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                         <span class="w-24 text-ink-500">{{ date(ch.date) }}</span>
                         <span class="min-w-0 flex-1 truncate text-ink-600">{{ ch.note }}<span v-if="ch.auto" class="ml-1.5 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">seen from Meta</span></span>
                         <span class="font-semibold tabular-nums">{{ m(ch.amount, ch.currency) }}</span>
-                        <span class="w-16 text-right text-xs font-bold" :class="ch.billed ? 'text-emerald-600' : 'text-amber-600'">{{ ch.billed ? 'Billed' : 'To bill' }}</span>
+                        <span class="w-28 text-right text-xs font-bold" :class="CHARGE[ch.state]?.[1]">{{ CHARGE[ch.state]?.[0] }}<span v-if="ch.invoice" class="block font-normal text-ink-400">{{ ch.invoice }}</span></span>
                         <button v-if="!ch.billed" class="icon-btn" aria-label="Remove" @click="removeCharge(ch)"><Icon name="trash" :size="14" /></button>
                     </div>
                     <p v-if="!ledger.charges.length" class="py-2 text-xs text-ink-500">None yet.</p>
@@ -306,7 +309,8 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                         <span class="min-w-0 flex-1"><b class="text-ink-900">{{ b.period }}</b><span v-if="b.invoice" class="ml-2 text-xs text-ink-500">{{ b.invoice.number }}{{ b.invoice.sent ? '' : ' · not sent' }}</span></span>
                         <span class="tabular-nums font-semibold">{{ m(b.invoice?.total ?? b.spend, 'BDT') }}</span>
                         <span v-if="b.invoice" class="w-20 text-right text-xs font-bold" :class="INVOICE[b.invoice.status]?.[1]">{{ INVOICE[b.invoice.status]?.[0] }}</span>
-                        <a v-if="b.invoice" :href="b.invoice.url" target="_blank" class="text-xs font-semibold text-teal-700">Open</a>
+                        <a v-if="b.invoice" :href="b.invoice.url" target="_blank" class="text-xs font-semibold text-ink-500 hover:text-teal-700">Open</a>
+                        <button v-if="b.invoice && b.invoice.status !== 'paid'" class="rounded-lg bg-teal-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-teal-700" @click="sending = { id: b.invoice.id, number: b.invoice.number }">{{ b.invoice.sent ? 'Send again' : 'Send' }}</button>
                     </div>
                     <p v-if="!ledger.bills.length" class="py-2 text-xs text-ink-500">No bills yet.</p>
                 </div>
@@ -316,11 +320,21 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
             <section class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm sm:p-5">
                 <h3 class="text-sm font-bold text-ink-900">Their payments</h3>
                 <div class="mt-2 divide-y divide-line/70">
-                    <div v-for="p in ledger.payments" :key="p.id" class="flex items-center gap-3 py-2.5 text-sm">
-                        <span class="w-24 text-ink-500">{{ date(p.date) }}</span>
-                        <span class="min-w-0 flex-1 truncate text-ink-600">{{ p.account ?? 'In my books already' }}{{ p.note ? ' · ' + p.note : '' }}</span>
-                        <span class="font-semibold tabular-nums text-emerald-600">+{{ m(p.amount, 'BDT') }}</span>
-                        <span class="w-24 text-right text-xs text-ink-500">{{ p.applied >= p.amount ? 'on bills' : m(p.amount - p.applied, 'BDT') + ' credit' }}</span>
+                    <div v-for="p in ledger.payments" :key="p.id" class="py-3 text-sm">
+                        <div class="flex items-center gap-3">
+                            <span class="w-24 text-ink-500">{{ date(p.date) }}</span>
+                            <span class="min-w-0 flex-1 truncate text-ink-600">{{ p.account ?? 'In my books already' }}{{ p.note ? ' · ' + p.note : '' }}</span>
+                            <span class="font-bold tabular-nums text-emerald-600">+{{ m(p.amount, 'BDT') }}</span>
+                        </div>
+                        <!-- What this payment paid -->
+                        <div class="ml-24 mt-1.5 space-y-1">
+                            <div v-for="(a, i) in p.paid" :key="i" class="flex items-center gap-2 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                <Icon name="check" :size="12" /> <span class="min-w-0 flex-1 truncate">{{ a.number }} · {{ a.period }}</span><span class="tabular-nums font-semibold">{{ m(a.amount, 'BDT') }}</span>
+                            </div>
+                            <div v-if="p.amount > p.applied" class="flex items-center gap-2 rounded-lg bg-teal-50 px-2.5 py-1 text-xs text-teal-800 dark:bg-teal-500/10 dark:text-teal-300">
+                                <Icon name="wallet" :size="12" /> <span class="flex-1">Left as credit for the next bill</span><span class="tabular-nums font-semibold">{{ m(p.amount - p.applied, 'BDT') }}</span>
+                            </div>
+                        </div>
                     </div>
                     <p v-if="!ledger.payments.length" class="py-2 text-xs text-ink-500">No payments yet.</p>
                 </div>
@@ -372,6 +386,8 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                 </div>
             </section>
         </div>
+
+        <SendInvoice :invoice="sending" @close="sending = null" />
 
         <!-- Budget / end date -->
         <Modal :show="!!editing" max-width="sm" @close="editing = null">

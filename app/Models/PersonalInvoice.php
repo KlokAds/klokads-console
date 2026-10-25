@@ -11,7 +11,7 @@ class PersonalInvoice extends Model
 {
     protected $fillable = [
         'number', 'personal_client_id', 'personal_recurring_id', 'currency', 'items', 'total', 'paid', 'status',
-        'issued_on', 'due_on', 'paid_on', 'public_token', 'note', 'sent_at', 'reported',
+        'issued_on', 'due_on', 'paid_on', 'public_token', 'note', 'sent_at', 'sent_via', 'sent_to', 'reported',
     ];
 
     protected $casts = ['items' => 'array', 'reported' => 'array', 'issued_on' => 'date', 'due_on' => 'date', 'paid_on' => 'date', 'sent_at' => 'datetime'];

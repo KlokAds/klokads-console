@@ -17,7 +17,8 @@ class PersonalInvoiceMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public PersonalInvoice $invoice) {}
+    /** $subject / $body: as written in the send window; $attach: the PDF; $link: the pay-page button. */
+    public function __construct(public PersonalInvoice $invoice, public ?string $mailSubject = null, public ?string $mailBody = null, public bool $attach = true, public bool $link = true) {}
 
     public function envelope(): Envelope
     {
@@ -26,7 +27,7 @@ class PersonalInvoiceMail extends Mailable
         return new Envelope(
             from: new Address(config('mail.from.address'), $me['name']),
             replyTo: array_filter([$me['email']]),
-            subject: "Invoice {$this->invoice->number} from {$me['name']}",
+            subject: $this->mailSubject ?: "Invoice {$this->invoice->number} from {$me['name']}",
         );
     }
 
@@ -35,13 +36,17 @@ class PersonalInvoiceMail extends Mailable
         return new Content(view: 'mail.personal-invoice', with: [
             'invoice' => $this->invoice->loadMissing('client'),
             'me' => PersonalInvoicing::profile(),
-            'url' => $this->invoice->publicUrl(),
+            'url' => $this->link ? $this->invoice->publicUrl() : null,
+            'body' => $this->mailBody,
+            'attached' => $this->attach,
         ]);
     }
 
     /** @return array<int, Attachment> */
     public function attachments(): array
     {
-        return [Attachment::fromData(fn () => app(PersonalInvoicing::class)->pdf($this->invoice)->output(), "{$this->invoice->number}.pdf")->withMime('application/pdf')];
+        return $this->attach
+            ? [Attachment::fromData(fn () => app(PersonalInvoicing::class)->pdf($this->invoice)->output(), "{$this->invoice->number}.pdf")->withMime('application/pdf')]
+            : [];
     }
 }

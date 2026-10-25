@@ -3,6 +3,7 @@ import CopyButton from '@/Components/CopyButton.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
+import SendInvoice from '@/Components/Personal/SendInvoice.vue';
 import RowMenu from '@/Components/RowMenu.vue';
 import DatePicker from '@/Components/Ui/DatePicker.vue';
 import Segmented from '@/Components/Ui/Segmented.vue';
@@ -61,7 +62,9 @@ function saveInv() {
     const opts = { preserveScroll: true, onSuccess: () => (showInv.value = false) };
     editingInv.value ? invForm.put(route('personal.invoices.update', editingInv.value.id), opts) : invForm.post(route('personal.invoices.store'), opts);
 }
-const send = (i) => router.post(route('personal.invoices.send', i.id), {}, { preserveScroll: true });
+// The send window: email (to, cc, subject, message, PDF/link) or WhatsApp (message + link, or the PDF itself).
+const sending = ref(null);
+const send = (i) => (sending.value = i);
 const voidInv = (i) => router.post(route('personal.invoices.void', i.id), {}, { preserveScroll: true });
 async function removeInv(i) {
     if (await confirmDialog({ title: `Delete ${i.number}?`, message: 'Its payments and their money entries are removed too.', confirmLabel: 'Delete', tone: 'danger' })) {
@@ -191,7 +194,7 @@ if (wantsNew()) openInv();
                         <RowMenu>
                             <button class="menu-item" @click="openInv(i)"><Icon name="pencil" :size="15" /> Edit</button>
                             <a :href="route('personal.invoices.pdf', i.id)" target="_blank" class="menu-item"><Icon name="download" :size="15" /> PDF</a>
-                            <button v-if="i.client.email" class="menu-item" @click="send(i)"><Icon name="send" :size="15" /> {{ i.sent_at ? 'Email again' : 'Email' }}</button>
+                            <button class="menu-item font-semibold text-teal-700" @click="send(i)"><Icon name="send" :size="15" /> {{ i.sent_at ? 'Send again' : 'Send' }} — email / WhatsApp</button>
                             <button class="menu-item" @click="voidInv(i)"><Icon name="close" :size="15" /> {{ i.status === 'void' ? 'Restore' : 'Void' }}</button>
                             <button class="menu-item text-rose-600 hover:bg-rose-50 hover:text-rose-700" @click="removeInv(i)"><Icon name="trash" :size="15" /> Delete</button>
                         </RowMenu>
@@ -426,5 +429,6 @@ if (wantsNew()) openInv();
                 </div>
             </form>
         </Modal>
+        <SendInvoice :invoice="sending" @close="sending = null" />
     </PersonalLayout>
 </template>

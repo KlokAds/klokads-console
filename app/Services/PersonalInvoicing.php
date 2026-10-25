@@ -165,17 +165,73 @@ class PersonalInvoicing
             .' via '.(Catalog::PAY_METHODS[$data['method']] ?? $data['method']).(! empty($data['reference']) ? " · {$data['reference']}" : '').' — confirm when it arrives.');
     }
 
-    public function send(PersonalInvoice $invoice): void
+    /**
+     * Email it: to, cc, subject and message as I wrote them in the send window (or the defaults),
+     * with the PDF attached and/or the link to the pay page.
+     *
+     * @param  array{to?: string, cc?: array<int, string>, subject?: string, body?: string, attach?: bool, link?: bool}  $mail
+     */
+    public function send(PersonalInvoice $invoice, array $mail = []): void
     {
-        if (! $invoice->client->email) {
+        $to = $mail['to'] ?? $invoice->client->email;
+        if (! $to) {
             throw new RuntimeException('This client has no email address.');
         }
         if (! MailSettings::configured()) {
             throw new RuntimeException('Set up email in Settings → Email first.');
         }
 
-        Mail::to($invoice->client->email)->send(new PersonalInvoiceMail($invoice));
-        $invoice->update(['sent_at' => now()]);
+        Mail::to($to)->cc(array_filter($mail['cc'] ?? []))->send(new PersonalInvoiceMail($invoice, $mail['subject'] ?? null, $mail['body'] ?? null, $mail['attach'] ?? true, $mail['link'] ?? true));
+        $invoice->update(['sent_at' => now(), 'sent_via' => 'email', 'sent_to' => $to]);
+    }
+
+    /**
+     * What the send window starts with: a proper subject and message for email, a message for
+     * WhatsApp, the client's number in WhatsApp's form, and the links.
+     *
+     * @return array<string, mixed>
+     */
+    public function compose(PersonalInvoice $invoice): array
+    {
+        $invoice->loadMissing('client');
+        $me = self::profile();
+        $name = $invoice->client->company ?: $invoice->client->name;
+        $amount = $this->money($invoice->due() ?: $invoice->total, $invoice->currency);
+        $due = $invoice->due_on ? $invoice->due_on->format('j M Y') : null;
+        $what = collect($invoice->items)->pluck('description')->first();
+        $url = $invoice->publicUrl();
+        $body = "Dear {$name},\n\n"
+            ."Please find invoice {$invoice->number}".($what ? " for {$what}" : '')." — {$amount}".($due ? ", due on {$due}" : '').".\n\n"
+            ."You can pay by bKash, Nagad, bank transfer or Bangla QR. After paying, please tap “I've paid” on the invoice page so I can confirm it.\n\n"
+            ."Thank you for working with me.\n\nBest regards,\n{$me['name']}".($me['phone'] ? "\n{$me['phone']}" : '');
+        $whatsapp = "Assalamu Alaikum {$name},\n\n"
+            ."Invoice *{$invoice->number}*".($what ? " — {$what}" : '')."\n"
+            ."Amount: *{$amount}*".($due ? "\nDue: {$due}" : '')."\n\n"
+            ."View & pay: {$url}\n\n"
+            ."bKash, Nagad, bank or Bangla QR — after paying, please tap “I've paid” on the page.\n"
+            ."Thank you! 🙏\n— {$me['name']}";
+        $digits = preg_replace('/\D/', '', (string) $invoice->client->phone);
+
+        return [
+            'from' => ['name' => $me['name'], 'address' => config('mail.from.address'), 'reply_to' => $me['email']],
+            'to' => $invoice->client->email,
+            'subject' => "Invoice {$invoice->number} from {$me['name']} — {$amount}",
+            'body' => $body,
+            'whatsapp' => $whatsapp,
+            // 01XXXXXXXXX → 8801XXXXXXXXX, as WhatsApp wants it
+            'phone' => $digits === '' ? null : (str_starts_with($digits, '01') && strlen($digits) === 11 ? '88'.$digits : $digits),
+            'url' => $url,
+            'pdf' => route('personal.invoice.public.pdf', $invoice->public_token),
+            'file' => "{$invoice->number}.pdf",
+            'mail_ready' => MailSettings::configured(),
+            'sent' => $invoice->sent_at ? ['at' => $invoice->sent_at->toIso8601String(), 'via' => $invoice->sent_via, 'to' => $invoice->sent_to] : null,
+        ];
+    }
+
+    /** Sent by WhatsApp (from my phone): noted on the invoice. */
+    public function sharedOnWhatsApp(PersonalInvoice $invoice, ?string $to): void
+    {
+        $invoice->update(['sent_at' => $invoice->sent_at ?? now(), 'sent_via' => 'whatsapp', 'sent_to' => $to]);
     }
 
     public function pdf(PersonalInvoice $invoice): \Barryvdh\DomPDF\PDF

@@ -172,6 +172,16 @@ class MetaAds
     }
 
     /**
+     * Meta's card charges since a day, from the account's activity log (with Meta's transaction id).
+     *
+     * @return array<int, array{id: string, time: string, amount: int, currency: string}>
+     */
+    public function charges(string $accountId, CarbonInterface $since): array
+    {
+        return $this->pilot('ad-accounts/'.self::act($accountId).'/charges', ['since' => $since->toDateString()])['data'] ?? [];
+    }
+
+    /**
      * A campaign's limits now: on or paused, budget a day (cents), last day, and whether that can move.
      *
      * @return array{active: bool, daily_budget: ?int, end: ?string, extendable: bool, why_not: ?string}

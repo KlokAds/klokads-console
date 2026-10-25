@@ -14,9 +14,17 @@
                 <div style="font-size:13px;color:#b6bbcf;margin-top:4px">from {{ $me['name'] }}@if ($invoice->due_on) · due {{ $invoice->due_on->format('j M Y') }}@endif</div>
             </td></tr>
             <tr><td style="padding:22px 28px;font-size:14px;line-height:1.6">
-                <p style="margin:0 0 14px">Hi {{ $invoice->client->name }},</p>
-                <p style="margin:0 0 18px">Here is invoice {{ $invoice->number }}. You can pay by any of the methods below — after paying, tap <b>“I've paid”</b> on the invoice page so I can confirm it.</p>
-                <p style="margin:0 0 22px"><a href="{{ $url }}" style="display:inline-block;background:#5b45e8;color:#fff;text-decoration:none;padding:12px 22px;border-radius:12px;font-weight:bold">View &amp; pay</a></p>
+                @if ($body)
+                    @foreach (preg_split('/\R{2,}/', trim($body)) as $para)
+                        <p style="margin:0 0 14px">{!! nl2br(e($para)) !!}</p>
+                    @endforeach
+                @else
+                    <p style="margin:0 0 14px">Hi {{ $invoice->client->name }},</p>
+                    <p style="margin:0 0 18px">Here is invoice {{ $invoice->number }}. You can pay by any of the methods below — after paying, tap <b>“I've paid”</b> on the invoice page so I can confirm it.</p>
+                @endif
+                @if ($url)
+                    <p style="margin:8px 0 22px"><a href="{{ $url }}" style="display:inline-block;background:#5b45e8;color:#fff;text-decoration:none;padding:12px 22px;border-radius:12px;font-weight:bold">View &amp; pay</a></p>
+                @endif
                 @foreach ($me['methods'] as $m)
                     <div style="border:1px solid #e6e8ef;border-radius:12px;padding:10px 14px;margin-bottom:8px">
                         <b>{{ $m['label'] ?? ($labels[$m['type']] ?? $m['type']) }}</b><br>
@@ -25,7 +33,7 @@
                         @if (! empty($m['extra']))<br><span style="color:#646a85;font-size:12px">{{ $m['extra'] }}</span>@endif
                     </div>
                 @endforeach
-                <p style="margin:18px 0 0;color:#646a85;font-size:12px">The invoice PDF is attached. Questions? Just reply to this email.</p>
+                <p style="margin:18px 0 0;color:#646a85;font-size:12px">{{ $attached ? 'The invoice PDF is attached. ' : '' }}Questions? Just reply to this email.</p>
             </td></tr>
         </table>
     </td></tr>

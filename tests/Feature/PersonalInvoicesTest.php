@@ -133,4 +133,29 @@ class PersonalInvoicesTest extends TestCase
         $this->assertSame('2026-11-25', PersonalRecurring::latest('id')->first()->next_on->toDateString());
         $this->assertSame('2027-02-28', PersonalInvoicing::nextOn(CarbonImmutable::parse('2027-01-31'), 31)->toDateString());
     }
+
+    public function test_the_send_window_email_with_cc_subject_my_message_and_whatsapp(): void
+    {
+        Mail::fake();
+        Setting::put('smtp_host', 'smtp.example.com');
+        Setting::put('smtp_username', 'billing@klokads.com');
+        Setting::put('smtp_password', 'secret');
+        $inv = $this->invoice();
+
+        $c = $this->getJson("/personal/invoices/{$inv->id}/compose")->assertOk()->json();
+        $this->assertSame('8801711000000', $c['phone'], 'WhatsApp form of 01711000000');
+        $this->assertStringContainsString($inv->number, $c['subject']);
+        $this->assertStringContainsString($inv->publicUrl(), $c['whatsapp']);
+
+        $this->post("/personal/invoices/{$inv->id}/send", ['to' => 'accounts@rafiq.com', 'cc' => 'boss@rafiq.com, me@klokads.com', 'subject' => 'Your October invoice',
+            'body' => "Dear Rafiq,\n\nPlease see the invoice.", 'attach' => false, 'link' => true])->assertSessionHas('success');
+        Mail::assertSent(PersonalInvoiceMail::class, fn ($m) => $m->hasTo('accounts@rafiq.com') && $m->hasCc('boss@rafiq.com') && $m->hasCc('me@klokads.com')
+            && $m->mailSubject === 'Your October invoice' && ! $m->attach && $m->attachments() === []);
+        $this->assertSame('email', $inv->fresh()->sent_via);
+
+        $this->post("/personal/invoices/{$inv->id}/send", ['to' => 'accounts@rafiq.com', 'cc' => 'not-an-email'])->assertSessionHasErrors('cc');
+
+        $this->postJson("/personal/invoices/{$inv->id}/whatsapp", ['to' => '8801711000000'])->assertOk();
+        $this->assertSame('whatsapp', $inv->fresh()->sent_via);
+    }
 }

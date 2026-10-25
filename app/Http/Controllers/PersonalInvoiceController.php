@@ -12,6 +12,7 @@ use App\Models\Setting;
 use App\Services\PersonalInvoicing;
 use App\Support\Catalog;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -102,9 +103,44 @@ class PersonalInvoiceController extends Controller
         return back()->with('success', $invoice->status === 'void' ? 'Marked void.' : 'Restored.');
     }
 
-    public function send(PersonalInvoice $invoice): RedirectResponse
+    /** Email it as written in the send window (to, cc, subject, message, PDF and/or link). */
+    public function send(Request $request, PersonalInvoice $invoice): RedirectResponse
     {
-        return $this->trySend($invoice, "Emailed to {$invoice->client->email}.");
+        $data = $request->validate([
+            'to' => ['nullable', 'email', 'max:190'],
+            'cc' => ['nullable', 'string', 'max:500'],
+            'subject' => ['nullable', 'string', 'max:200'],
+            'body' => ['nullable', 'string', 'max:5000'],
+            'attach' => ['boolean'],
+            'link' => ['boolean'],
+        ]);
+        $cc = collect(preg_split('/[\s,;]+/', (string) ($data['cc'] ?? ''), -1, PREG_SPLIT_NO_EMPTY));
+        if ($bad = $cc->first(fn ($e) => ! filter_var($e, FILTER_VALIDATE_EMAIL))) {
+            return back()->withErrors(['cc' => "“{$bad}” is not an email address."]);
+        }
+        try {
+            $this->invoicing->send($invoice->loadMissing('client'), array_filter([
+                'to' => $data['to'] ?? null, 'cc' => $cc->all(), 'subject' => $data['subject'] ?? null, 'body' => $data['body'] ?? null,
+            ]) + ['attach' => $request->boolean('attach', true), 'link' => $request->boolean('link', true)]);
+        } catch (Throwable $e) {
+            return back()->with('error', 'Not emailed: '.$e->getMessage());
+        }
+
+        return back()->with('success', 'Emailed to '.($data['to'] ?? $invoice->client->email).($cc->isNotEmpty() ? ' (cc '.$cc->implode(', ').')' : '').'.');
+    }
+
+    /** The send window's starting text and links. */
+    public function compose(PersonalInvoice $invoice): JsonResponse
+    {
+        return response()->json($this->invoicing->compose($invoice));
+    }
+
+    /** Sent on WhatsApp from my phone: noted on the invoice. */
+    public function sharedOnWhatsApp(Request $request, PersonalInvoice $invoice): JsonResponse
+    {
+        $this->invoicing->sharedOnWhatsApp($invoice, $request->string('to')->limit(40)->toString() ?: null);
+
+        return response()->json(['ok' => true]);
     }
 
     public function pay(Request $request, PersonalInvoice $invoice): RedirectResponse
