@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdMoneyController;
 use App\Http\Controllers\AppReleaseController;
 use App\Http\Controllers\CashflowController;
 use App\Http\Controllers\ChargeRequestController;
@@ -227,6 +228,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/money/accounts/{account}', [MoneyController::class, 'destroyAccount'])->name('money.accounts.destroy');
 
     Route::get('/payouts', [PayoutController::class, 'index'])->name('payouts.index');
+    Route::get('/ad-money', [AdMoneyController::class, 'index'])->name('ad-money.index');
     Route::post('/payouts/bank', [PayoutController::class, 'updateBank'])->name('payouts.bank');
     Route::post('/payouts', [PayoutController::class, 'store'])->name('payouts.store');
     Route::post('/payouts/schedule', [PayoutController::class, 'updateSchedule'])->name('payouts.schedule');

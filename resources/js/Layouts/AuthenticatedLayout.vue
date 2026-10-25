@@ -30,6 +30,7 @@ const businessSections = [
         items: [
             { name: 'Dashboard', route: 'dashboard', match: 'dashboard', icon: 'home' },
             { name: 'Cashflow', route: 'cashflow.index', match: 'cashflow.*', icon: 'flow' },
+            { name: 'Ad money', route: 'ad-money.index', match: 'ad-money.*', icon: 'chart' },
             { name: 'Payouts', route: 'payouts.index', match: 'payouts.*', icon: 'bank' },
             { name: 'Bank & money', route: 'money.index', params: { scope: 'business' }, match: 'money.*', icon: 'wallet' },
         ],

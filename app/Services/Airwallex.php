@@ -29,6 +29,9 @@ class Airwallex
     /** A payout not in Airwallex this many days after Stripe's arrival date is late. */
     public const LATE_DAYS = 3;
 
+    /** Bringing in older history: store it, but don't notify about each old movement. */
+    private bool $quiet = false;
+
     public function __construct(private Notify $notify) {}
 
     public static function configured(): bool
@@ -95,14 +98,14 @@ class Airwallex
     }
 
     /** Hourly from the heartbeat (every 15 min at most). */
-    public function run(bool $force = false): array
+    public function run(bool $force = false, int $days = 14): array
     {
         if (! self::configured() || (! $force && ! Cache::add('airwallex-run', 1, now()->addMinutes(14)))) {
             return ['skipped' => true];
         }
 
         try {
-            $new = $this->sync();
+            $new = $this->sync($days);
             $balances = $this->balances();
             Setting::put('airwallex_balances', json_encode($balances));
             Setting::put('airwallex_synced_at', now()->toIso8601String());
@@ -124,6 +127,7 @@ class Airwallex
     /** Pull the last two weeks: deposits and fees from the ledger, card charges from Issuing. Returns new entries. */
     public function sync(int $days = 14): int
     {
+        $this->quiet = $days > 14;
         $from = now()->subDays($days)->utc()->format('Y-m-d\TH:i:sP');
         $new = 0;
 
@@ -169,7 +173,7 @@ class Airwallex
         }
         $entry->save();
 
-        if ($isNew) {
+        if ($isNew && ! $this->quiet) {
             $kind === 'deposit' && $amount > 0 ? $this->arrived($entry) : $this->tellEntry($entry);
         }
 

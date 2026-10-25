@@ -153,7 +153,7 @@ class SettingsController extends Controller
             return back()->with('error', $e->getMessage().' — nothing was changed.');
         }
         Setting::put('airwallex_balances', json_encode($balances));
-        $airwallex->run(force: true);
+        $airwallex->run(force: true, days: 90); // the last three months, so the history is there from the start
 
         return back()->with('success', 'Airwallex connected — '.(collect($balances)->map(fn ($c, $cur) => Notify::money($c, $cur))->implode(', ') ?: 'no balance yet').'.');
     }
