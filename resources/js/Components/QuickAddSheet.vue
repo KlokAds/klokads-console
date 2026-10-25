@@ -108,6 +108,10 @@ async function show(detail = {}) {
         f.kind = detail.kind ?? 'expense';
         f.category = firstCategory(f.kind);
         f.account_id = detail.account_id ?? data.value?.last_account_id ?? accounts.value[0]?.id ?? '';
+        if (detail.to_account_id) {
+            f.to_account_id = detail.to_account_id;
+            if (Number(f.account_id) === Number(detail.to_account_id)) f.account_id = '';
+        }
     }
     await nextTick();
     amountEl.value?.focus();

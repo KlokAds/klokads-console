@@ -9,6 +9,7 @@ use App\Http\Controllers\ClientCardController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\DollarController;
 use App\Http\Controllers\EnvelopeController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\FollowUpController;
@@ -112,6 +113,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/personal/envelope-spends/{spend}', [EnvelopeController::class, 'destroySpend'])->middleware('personal')->name('personal.envelopes.spends.destroy');
     Route::put('/personal/guide', [GuideController::class, 'update'])->middleware('personal')->name('personal.guide.update');
     Route::get('/personal/investments', [InvestmentController::class, 'index'])->middleware('personal')->name('personal.investments.index');
+    Route::get('/personal/dollars', [DollarController::class, 'index'])->middleware('personal')->name('personal.dollars');
 
     // My own clients' ads (Edge Education, Marine Orvion…): campaigns, controls, the ads bill ledger.
     Route::middleware('personal')->prefix('personal/client-ads')->name('ad-clients.')->group(function () {

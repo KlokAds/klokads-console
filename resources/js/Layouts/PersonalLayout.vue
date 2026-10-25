@@ -28,6 +28,7 @@ const NAV = [
     { name: 'Home', route: 'personal.dashboard', match: 'personal.dashboard', icon: 'home' },
     { name: 'Activity', route: 'personal.activity', match: 'personal.activity', icon: 'flow' },
     { name: 'Plan', route: 'personal.plan', match: 'personal.plan', icon: 'chart', hint: 'Budgets, goals, bills' },
+    { name: 'Dollars', route: 'personal.dollars', match: 'personal.dollars', icon: 'wallet', hint: 'nSave Main: where each dollar came from, your rate' },
     { name: 'Client ads', route: 'ad-clients.index', match: 'ad-clients.*', icon: 'megaphone', hint: 'Edge, Marine Orvion… campaigns and ads bills' },
     { name: 'Investments', route: 'personal.investments.index', match: 'personal.investments.*', icon: 'trend', hint: 'Land, business share, shares, FDR' },
     { name: 'Keep in touch', route: 'personal.touch.index', match: 'personal.touch.*', icon: 'users', hint: 'Call family on time' },
