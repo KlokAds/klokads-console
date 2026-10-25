@@ -21,6 +21,9 @@ class KeepInTouch
     /** Not answered: once more after this long, then tomorrow. */
     public const AGAIN_AFTER_MINUTES = 120;
 
+    /** Never remind later than this after their time (a late repeat, a changed time): wait for the next day. */
+    public const LATEST_AFTER_MINUTES = 150;
+
     public const SUGGESTIONS = [
         ['name' => 'Ma', 'emoji' => '👩‍🦳', 'every_days' => 1, 'window' => 'evening'],
         ['name' => 'Baba', 'emoji' => '👴', 'every_days' => 2, 'window' => 'evening'],
@@ -85,9 +88,7 @@ class KeepInTouch
         $taken = Touch::whereDate('planned_on', $today->toDateString())->whereNotNull('remind_at')->pluck('remind_at')
             ->map(fn ($at) => CarbonImmutable::parse($at)->setTimezone($local->timezone))->all();
         foreach ($toPlan->sortByDesc(fn ($t) => $t->last_talked_at ? $now->diffInHours($t->last_talked_at, true) : PHP_INT_MAX) as $t) {
-            $hour = $t->window === 'auto' ? (self::usualHour($t) ?? 20) : null;
-            // A part of the day, my own time ("21:00"), or the hour I usually call them.
-            $slot = $hour !== null ? $today->setTime($hour, 0) : $today->setTimeFromTimeString(self::WINDOWS[$t->window] ?? (self::isTime($t->window) ? $t->window : self::WINDOWS['evening']));
+            $slot = self::slot($t, $today);
             // Their time has passed today: no catch-up now — the reminder comes at their time tomorrow.
             if ($slot->lt($local)) {
                 $t->update(['planned_on' => $today->toDateString(), 'remind_at' => null, 'reminded' => 0]);
@@ -103,7 +104,8 @@ class KeepInTouch
 
         $sent = 0;
         foreach (Touch::where('paused', false)->whereNotNull('remind_at')->where('remind_at', '<=', $now->utc())->get() as $t) {
-            if (! self::due($t, $today)) {
+            // Not due any more, or far past their time today (e.g. the time was changed): nothing now.
+            if (! self::due($t, $today) || $local->gt(self::slot($t, $today)->addMinutes(self::LATEST_AFTER_MINUTES))) {
                 $t->update(['remind_at' => null]);
 
                 continue;
@@ -111,7 +113,7 @@ class KeepInTouch
             $since = $t->last_talked_at ? (int) $t->last_talked_at->setTimezone($local->timezone)->startOfDay()->diffInDays($today) : null;
             $usual = self::usualHour($t);
             $body = implode(' · ', array_filter([
-                $since === null ? 'Not on record yet' : ($since <= 1 ? 'Last talked yesterday' : "{$since} days since you talked"),
+                $since === null ? 'Time to call' : ($since <= 1 ? 'Last talked yesterday' : "{$since} days since you talked"),
                 $usual !== null ? 'you usually call around '.($usual % 12 ?: 12).($usual < 12 ? ' am' : ' pm') : null,
                 $t->phone ? "📞 {$t->phone}" : null,
             ]));
@@ -121,6 +123,16 @@ class KeepInTouch
         }
 
         return $sent;
+    }
+
+    /** Today's time for them: a part of the day, my own time ("21:00"), or the hour I usually call them. */
+    public static function slot(Touch $touch, CarbonImmutable $today): CarbonImmutable
+    {
+        if ($touch->window === 'auto') {
+            return $today->setTime(self::usualHour($touch) ?? 20, 0);
+        }
+
+        return $today->setTimeFromTimeString(self::WINDOWS[$touch->window] ?? (self::isTime($touch->window) ? $touch->window : self::WINDOWS['evening']));
     }
 
     public static function isTime(?string $window): bool

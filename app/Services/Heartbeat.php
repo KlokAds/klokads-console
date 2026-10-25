@@ -2,7 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\FollowUp;
 use App\Models\Setting;
+use App\Models\Task;
+use App\Models\Touch;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -31,6 +35,37 @@ class Heartbeat
         }
 
         return $this->run();
+    }
+
+    /**
+     * Just the reminders set for a time (tasks, follow-ups, family calls) — cheap, so the phone's
+     * check runs them on the spot instead of waiting up to 5 minutes for the next full run.
+     */
+    public function reminders(): void
+    {
+        if (! Cache::add('heartbeat-reminders', 1, 20)) {
+            return;
+        }
+        foreach ([Tasks::class, FollowUps::class, KeepInTouch::class] as $job) {
+            try {
+                app($job)->run();
+            } catch (Throwable $e) {
+                Log::warning("Heartbeat {$job} failed: ".$e->getMessage());
+            }
+        }
+    }
+
+    /** When the next timed reminder is due (the phone sets an exact alarm for it). */
+    public static function nextReminderAt(): ?int
+    {
+        $now = now();
+        $next = collect([
+            Touch::where('paused', false)->where('remind_at', '>', $now)->min('remind_at'),
+            Task::whereNull('done_at')->where('remind_at', '>', $now)->where('reminded', '<', Tasks::MAX_REMINDERS)->min('remind_at'),
+            FollowUp::open()->where('remind_at', '>', $now)->where('reminded', '<', FollowUps::MAX_REMINDERS)->min('remind_at'),
+        ])->filter()->map(fn ($at) => CarbonImmutable::parse($at, 'UTC')->timestamp)->min();
+
+        return $next ? (int) $next : null;
     }
 
     public function run(): array

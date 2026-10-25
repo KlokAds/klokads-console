@@ -58,6 +58,8 @@ patch(manifest, r'(<manifest[^>]*>)', r'''\1
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />''')
 patch(manifest, r'(\n(\s*)<activity)', r'''
@@ -73,6 +75,7 @@ patch(manifest, r'(\n(\s*)<activity)', r'''
         </receiver>
         <receiver android:exported="false" android:name=".UpdateReceiver" />
         <receiver android:exported="false" android:name=".SeenReceiver" />
+        <receiver android:exported="false" android:name=".FeedAlarmReceiver" />
         <receiver android:exported="false" android:name=".TaskActionReceiver" />
         <receiver android:exported="false" android:name=".FollowUpActionReceiver" />
         <service android:name=".WalletListener" android:exported="false" android:label="MH-Bot wallet alerts"

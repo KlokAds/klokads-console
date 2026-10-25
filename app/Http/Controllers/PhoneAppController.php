@@ -8,6 +8,7 @@ use App\Models\FollowUp;
 use App\Models\Setting;
 use App\Services\AutoEntries;
 use App\Services\FollowUps;
+use App\Services\Heartbeat;
 use App\Services\Notify;
 use App\Services\PersonalReminders;
 use App\Support\InboxRules;
@@ -153,10 +154,13 @@ class PhoneAppController extends Controller
             Setting::put('app_seen_at', now()->toIso8601String());
         }
         $after = (int) $request->integer('after');
+        // A reminder whose time has come goes out now, not at the server's next run.
+        app(Heartbeat::class)->reminders();
 
         return response()->json([
             'items' => AppNotification::where('id', '>', $after)->orderBy('id')->limit(30)->get(['id', 'kind', 'title', 'body', 'url', 'created_at']),
             'last_id' => (int) AppNotification::max('id'),
+            'next_at' => Heartbeat::nextReminderAt(),
         ]);
     }
 }

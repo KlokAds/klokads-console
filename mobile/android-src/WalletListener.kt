@@ -1,6 +1,8 @@
 package com.klokads.app
 
 import android.app.Notification
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
@@ -10,6 +12,39 @@ import android.service.notification.StatusBarNotification
  * this after I turn on "Notification access" for Klok in the phone's settings.
  */
 class WalletListener : NotificationListenerService() {
+    private val ticker = Handler(Looper.getMainLooper())
+    private val tick = object : Runnable {
+        override fun run() {
+            pollNow()
+            ticker.postDelayed(this, POLL_EVERY_MS)
+        }
+    }
+    private var lastPoll = 0L
+
+    /** Android keeps this listener running, so it fetches the server's notifications every minute (not every 15). */
+    override fun onListenerConnected() {
+        ticker.removeCallbacks(tick)
+        ticker.post(tick)
+    }
+
+    override fun onListenerDisconnected() {
+        ticker.removeCallbacks(tick)
+    }
+
+    private fun pollNow() {
+        val now = System.currentTimeMillis()
+        if (now - lastPoll < 20_000) {
+            return
+        }
+        lastPoll = now
+        Thread {
+            try {
+                Feed.poll(applicationContext)
+            } catch (_: Exception) {
+            }
+        }.start()
+    }
+
     override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap, reason: Int) {
         FollowUps.onRemoved(this, sbn, reason)
     }
@@ -18,6 +53,7 @@ class WalletListener : NotificationListenerService() {
         /** Words in a wallet app's package or name; set from the app (Settings), these by default. */
         val DEFAULT_APPS = listOf("nsave", "rizon", "elevatepay", "worldfirst", "airwallex", "payoneer", "redotpay", "binance")
         private const val SEEN = "klok_wallet_seen"
+        private const val POLL_EVERY_MS = 60_000L
     }
 
     private fun watched(): List<String> =
@@ -58,6 +94,8 @@ class WalletListener : NotificationListenerService() {
         if (sbn.packageName == packageName) {
             return
         }
+        // The phone is awake (something just came in): a good moment to fetch ours too.
+        pollNow()
         // A bank's email in Gmail (BRAC, Midland…): sent like its SMS — the server books it once.
         if (sbn.packageName == "com.google.android.gm") {
             fromGmail(sbn)

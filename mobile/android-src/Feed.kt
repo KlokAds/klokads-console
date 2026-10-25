@@ -1,5 +1,6 @@
 package com.klokads.app
 
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -25,8 +26,11 @@ import java.util.concurrent.TimeUnit
 
 /**
  * The server's notifications (money in/out, reminders, invoices) as phone notifications.
- * Asked every 15 minutes (the shortest Android allows in the background), right after a
- * message was forwarded, and whenever the app opens. Each one is shown once.
+ * On time, on any Android phone:
+ *  - a reminder due at a set time: the server says when the next one is, and an exact alarm wakes the phone then;
+ *  - anything else: every minute while the notification listener runs (WalletListener), right after a
+ *    message was forwarded, whenever the app opens, and every 15 minutes as the fallback.
+ * Each one is shown once.
  */
 object Feed {
     private const val FLUTTER = "FlutterSharedPreferences"
@@ -64,7 +68,28 @@ object Feed {
         })
     }
 
+    /** Wake the phone exactly when the server's next reminder is due (a few seconds after, so it is ready). */
+    fun alarmAt(context: Context, epochSeconds: Long) {
+        val at = epochSeconds * 1000 + 5000
+        if (at <= System.currentTimeMillis()) {
+            return
+        }
+        val alarms = context.getSystemService(AlarmManager::class.java) ?: return
+        val wake = PendingIntent.getBroadcast(context, 7101, Intent(context, FeedAlarmReceiver::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarms.canScheduleExactAlarms()) {
+                alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, wake)
+            } else {
+                alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, wake)
+            }
+        } catch (_: SecurityException) {
+            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, wake)
+        }
+    }
+
     /** @return false when the server could not be reached (try again later). */
+    @Synchronized
     fun poll(context: Context): Boolean {
         val prefs = flutter(context)
         val url = prefs.getString("flutter.feed.url", null) ?: return true
@@ -76,6 +101,9 @@ object Feed {
         } ?: return false
 
         val json = JSONObject(body)
+        if (!json.isNull("next_at")) {
+            alarmAt(context, json.optLong("next_at"))
+        }
         val items = json.optJSONArray("items") ?: return true
         var last = after
         channels(context)
@@ -201,6 +229,23 @@ class SeenReceiver : BroadcastReceiver() {
                 connection.setRequestProperty("Accept", "application/json")
                 connection.responseCode
                 connection.disconnect()
+            } catch (_: Exception) {
+            } finally {
+                pending.finish()
+            }
+        }.start()
+    }
+}
+
+/** The exact alarm for a reminder's time: fetch it now. */
+class FeedAlarmReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val pending = goAsync()
+        Thread {
+            try {
+                if (!Feed.poll(context)) {
+                    Feed.pollSoon(context)
+                }
             } catch (_: Exception) {
             } finally {
                 pending.finish()

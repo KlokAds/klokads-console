@@ -85,6 +85,31 @@ class KeepInTouchTest extends TestCase
         $this->assertSame('13:00', $this->localRemindAt($vaiya));
     }
 
+    public function test_no_reminder_long_after_their_time(): void
+    {
+        $vai = $this->person('Vai', '13:00');
+        $run = app(KeepInTouch::class);
+        $run->run(CarbonImmutable::parse('2026-10-25 08:00', 'Asia/Dhaka'));
+
+        // Something left it waiting till evening (the time was changed later in the day): nothing at 19:20.
+        $vai->update(['remind_at' => CarbonImmutable::parse('2026-10-25 19:18', 'Asia/Dhaka')->utc()]);
+        $this->assertSame(0, $run->run(CarbonImmutable::parse('2026-10-25 19:20', 'Asia/Dhaka')));
+        $this->assertNull($vai->fresh()->remind_at);
+    }
+
+    public function test_the_phone_check_sends_a_due_reminder_now_and_says_when_the_next_is(): void
+    {
+        $ma = $this->person('Ma', '13:00');
+        $this->person('Baba', '20:00');
+        app(KeepInTouch::class)->run(CarbonImmutable::parse('2026-10-25 08:00', 'Asia/Dhaka'));
+        $this->assertSame('13:00', $this->localRemindAt($ma));
+
+        $this->travelTo(CarbonImmutable::parse('2026-10-25 13:00:10', 'Asia/Dhaka'));
+        $this->getJson('/app/feed/'.AutoEntries::token())->assertOk()
+            ->assertJsonPath('items.0.title', '📞 Call Ma 🙂')
+            ->assertJsonPath('next_at', CarbonImmutable::parse('2026-10-25 15:00:10', 'Asia/Dhaka')->timestamp); // Ma once more 2 hours later
+    }
+
     public function test_learn_it_uses_the_hour_i_usually_talk_to_them(): void
     {
         $vai = $this->person('Vai', 'auto');
