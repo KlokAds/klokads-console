@@ -25,6 +25,13 @@ class PersonalQuickController extends Controller
                 'currency' => strtoupper($a->currency),
                 'balance' => Ledger::balance($a),
             ])->values(),
+            // Moves can go to / come from a business account (capital in, owner draw out).
+            'business' => Account::where('scope', 'business')->where('archived', false)->orderBy('name')->get()->map(fn (Account $a) => [
+                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4'),
+                'currency' => strtoupper($a->currency),
+                'balance' => Ledger::balance($a),
+                'business' => true,
+            ])->values(),
             'categories' => [
                 'expense' => Catalog::options(collect(Catalog::PERSONAL_CATEGORIES)->except(Catalog::AUTO_CATEGORIES)->all()),
                 'income' => Catalog::options(Catalog::INCOME_CATEGORIES['personal']),

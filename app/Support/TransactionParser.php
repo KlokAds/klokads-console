@@ -21,6 +21,7 @@ class TransactionParser
         'ebl' => ['ebl', 'eastern bank'],
         'islami' => ['islami', 'ibbl'],
         'ucb' => ['ucb', 'united commercial'],
+        'dhaka' => ['dhaka bank', 'dhakabank', 'dhbl'],
         'mtb' => ['mtb', 'mutual trust'],
         'prime' => ['prime bank', 'primebank'],
         'scb' => ['standard chartered', 'stanchart', 'sc bank'],

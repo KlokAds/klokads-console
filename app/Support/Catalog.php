@@ -75,6 +75,7 @@ class Catalog
             'rocket' => ['Rocket', 'wallet'],
             'upay' => ['Upay', 'wallet'],
             'ucb' => ['UCB', 'bank'],
+            'dhaka' => ['Dhaka Bank', 'bank'],
             'city' => ['City Bank', 'bank'],
             'brac' => ['BRAC Bank', 'bank'],
             'dbbl' => ['Dutch-Bangla Bank', 'bank'],

@@ -49,6 +49,27 @@ class PersonalAutomationTest extends TestCase
         $this->assertStringContainsString('Balance ৳20,000.00', $note->body);
     }
 
+    public function test_business_accounts_live_beside_mine_but_never_count_as_my_money(): void
+    {
+        $this->post('/money/accounts', ['name' => 'Dhaka Bank', 'scope' => 'business', 'kind' => 'bank', 'provider' => 'dhaka', 'last4' => '7781', 'currency' => 'BDT'])->assertSessionHasNoErrors();
+        $dhaka = Account::firstWhere('name', 'Dhaka Bank');
+
+        // Its SMS is business money, with a business category.
+        app(AutoEntries::class)->ingest('sms', 'DHAKA BANK', 'Your A/C ***7781 has been debited BDT 2,500.00 for POS purchase. Avl Bal: BDT 47,500.00');
+        $tx = MoneyTransaction::sole();
+        $this->assertSame([$dhaka->id, 'other'], [$tx->account_id, $tx->category]);
+        $this->assertStringStartsWith('💸 💼 Dhaka Bank', AppNotification::latest('id')->first()->title);
+
+        $this->get('/personal/activity?tab=accounts')->assertInertia(fn ($page) => $page->has('business', 1)->where('business.0.name', 'Dhaka Bank')->has('accounts', 1));
+        $this->get('/personal')->assertInertia(fn ($page) => $page->where('stats.BDT.total', 5000000)->where('stats.BDT.current.spent', 0));
+
+        // A move from bKash into the business, with its fee: the fee is my spending, the move is not.
+        $this->getJson('/personal/quick')->assertJsonPath('business.0.name', 'Dhaka Bank');
+        $this->post('/money', ['kind' => 'transfer', 'account_id' => $this->bkash->id, 'to_account_id' => $dhaka->id, 'amount' => 10000, 'fee' => 18.5, 'occurred_on' => now()->toDateString()])->assertSessionHasNoErrors();
+        $this->assertSame(5000000 - 1000000 - 1850, Ledger::balance($this->bkash));
+        $this->get('/personal')->assertInertia(fn ($page) => $page->where('stats.BDT.current.spent', 1850)->where('stats.BDT.current.out', 1000000));
+    }
+
     public function test_two_accounts_in_the_same_wallet_app_are_told_apart_by_the_app_clone(): void
     {
         $main = Account::create(['name' => 'nSave', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'nsave', 'currency' => 'USD', 'app_profile' => 'main']);

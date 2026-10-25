@@ -23,6 +23,7 @@ const props = defineProps({
     mfs: Array,
     guides: Object,
     familyGuide: Object,
+    business: { type: Array, default: () => [] },
 });
 
 const tab = ref('entries');
@@ -86,7 +87,7 @@ const providerList = computed(() => Object.entries(props.providers[form.currency
 function openAccount(a = null) {
     editing.value = a;
     form.defaults(a
-        ? { ...blankAccount(), name: a.name, kind: a.kind, currency: a.currency, provider: a.provider ?? '', last4: a.last4 ?? '', app_profile: a.app_profile ?? 'main', purpose: a.purpose ?? 'spending', opening_balance: a.opening_balance ? String(a.opening_balance / 100) : '', notes: a.notes ?? '', guide: a.guide ?? '', archived: !!a.archived }
+        ? { ...blankAccount(), scope: a.scope ?? 'personal', name: a.name, kind: a.kind, currency: a.currency, provider: a.provider ?? '', last4: a.last4 ?? '', app_profile: a.app_profile ?? 'main', purpose: a.purpose ?? 'spending', opening_balance: a.opening_balance ? String(a.opening_balance / 100) : '', notes: a.notes ?? '', guide: a.guide ?? '', archived: !!a.archived }
         : blankAccount());
     form.reset();
     form.clearErrors();
@@ -113,6 +114,17 @@ async function removeAccount() {
     if (ok) router.delete(route('money.accounts.destroy', a.id), { preserveScroll: true, onSuccess: () => (sheet.value = false) });
 }
 const restore = (a) => router.put(route('money.accounts.update', a.id), { ...a, opening_balance: a.opening_balance / 100, archived: false }, { preserveScroll: true });
+
+// Business accounts: their money is the business's, never in my personal totals.
+const businessTotals = computed(() => {
+    const map = {};
+    for (const a of props.business) map[a.currency] = (map[a.currency] ?? 0) + a.balance;
+    return Object.entries(map);
+});
+function newBusinessAccount() {
+    openAccount();
+    form.scope = 'business';
+}
 
 // ---------------------------------------------------------------- family guide
 const guideForm = useForm({ message: props.familyGuide.message ?? '', new_link: false });
@@ -214,6 +226,33 @@ onMounted(() => {
                     <Icon name="plus" :size="18" /> Add account
                 </button>
 
+                <!-- Business accounts: kept here, counted apart -->
+                <section class="rounded-3xl border border-indigo-200 bg-indigo-50/40 p-2 shadow-sm sm:p-3 dark:border-indigo-500/30 dark:bg-indigo-500/5">
+                    <div class="flex items-start justify-between gap-3 px-3 pb-2 pt-2">
+                        <div>
+                            <h3 class="font-display text-[15px] font-bold text-ink-900">💼 Business</h3>
+                            <p class="text-[11px] text-ink-500">Business money — never in your personal totals. Its SMS go to the business side.</p>
+                        </div>
+                        <div class="text-right">
+                            <div v-for="[c, total] in businessTotals" :key="c" class="text-sm font-bold tabular-nums text-ink-900">{{ cash(total, c) }}</div>
+                        </div>
+                    </div>
+                    <button v-for="a in business" :key="a.id" class="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition hover:bg-surface" @click="openAccount(a)">
+                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 text-sm font-extrabold text-indigo-700">{{ a.name.slice(0, 1) }}</span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-[15px] font-semibold text-ink-900">{{ a.name }}<span class="font-normal text-ink-400">{{ digits(a) }}</span></span>
+                            <span class="block truncate text-xs text-ink-500">{{ a.currency }} · {{ kinds.find((k) => k.value === a.kind)?.label.split(' (')[0] }}<template v-if="!a.last4 && a.kind !== 'cash'"> · <span class="text-amber-600">add last 4 digits</span></template></span>
+                        </span>
+                        <span class="text-right">
+                            <span class="block text-[15px] font-bold tabular-nums" :class="a.balance < 0 ? 'text-rose-600' : 'text-ink-900'">{{ cash(a.balance, a.currency) }}</span>
+                            <span v-if="bankDiffers(a)" class="block text-[11px] font-semibold text-amber-600">bank says {{ cash(a.bank_balance, a.currency) }}</span>
+                        </span>
+                    </button>
+                    <button class="mt-1 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-bold text-indigo-700 transition hover:bg-surface" @click="newBusinessAccount">
+                        <Icon name="plus" :size="16" /> Business account
+                    </button>
+                </section>
+
                 <!-- Family guide -->
                 <section class="rounded-3xl border border-line/70 bg-surface p-5 shadow-sm">
                     <div class="flex items-start gap-3">
@@ -256,6 +295,11 @@ onMounted(() => {
                 </div>
                 <div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 pb-5 pt-2">
                     <div>
+                        <div class="label">Belongs to</div>
+                        <Segmented v-model="form.scope" :options="[{ value: 'personal', label: '👤 Personal' }, { value: 'business', label: '💼 Business' }]" block />
+                        <p v-if="form.scope === 'business'" class="mt-1 text-[11px] text-ink-500">Business money: kept on the business side, never in your personal totals. Its SMS are booked there.</p>
+                    </div>
+                    <div>
                         <div class="label">Currency</div>
                         <Segmented :model-value="form.currency" :options="currencies" block @update:model-value="setCurrency" />
                         <div v-if="form.errors.currency" class="error">{{ form.errors.currency }}</div>
@@ -280,7 +324,7 @@ onMounted(() => {
                         </div>
                     </div>
                     <p v-if="form.kind !== 'cash'" class="-mt-3 text-[11px] text-ink-500">{{ isMfs ? 'Last 4 of the mobile number on this wallet.' : 'Last 4 of the account or card number.' }} Bank messages are matched to this account by these digits.</p>
-                    <div>
+                    <div v-if="form.scope === 'personal'">
                         <div class="label">Used for</div>
                         <Segmented v-model="form.purpose" :options="[{ value: 'spending', label: '💳 Spending' }, { value: 'savings', label: '🐷 Savings' }]" block />
                     </div>

@@ -14,7 +14,7 @@ class InboxRules
     /** Starting list: name as it appears as the SMS sender (or the app's name), and where it comes from. */
     public const DEFAULT_SENDERS = [
         ['name' => 'bKash', 'type' => 'sms'], ['name' => 'NAGAD', 'type' => 'sms'], ['name' => '16216', 'type' => 'sms'],
-        ['name' => 'upay', 'type' => 'sms'], ['name' => 'UCB', 'type' => 'sms'], ['name' => 'CITY BANK', 'type' => 'sms'],
+        ['name' => 'upay', 'type' => 'sms'], ['name' => 'UCB', 'type' => 'sms'], ['name' => 'DHAKA BANK', 'type' => 'sms'], ['name' => 'CITY BANK', 'type' => 'sms'],
         ['name' => 'BRAC BANK', 'type' => 'sms'], ['name' => 'DBBL', 'type' => 'sms'], ['name' => 'EBL', 'type' => 'sms'],
         ['name' => 'IBBL', 'type' => 'sms'], ['name' => 'MTB', 'type' => 'sms'], ['name' => 'PRIME BANK', 'type' => 'sms'],
         ['name' => 'AB BANK', 'type' => 'sms'], ['name' => 'BANK ASIA', 'type' => 'sms'], ['name' => 'StanChart', 'type' => 'sms'],

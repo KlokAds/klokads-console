@@ -28,12 +28,15 @@ const firstCategory = (kind) => data.value?.categories?.[kind === 'income' ? 'in
 const f = reactive(blank());
 
 const accounts = computed(() => data.value?.accounts ?? []);
-const from = computed(() => accounts.value.find((a) => a.id === Number(f.account_id)));
-const to = computed(() => accounts.value.find((a) => a.id === Number(f.to_account_id)));
+// A move can also be to or from a business account; spending and income stay personal.
+const allAccounts = computed(() => [...accounts.value, ...(data.value?.business ?? [])]);
+const fromList = computed(() => (f.kind === 'transfer' ? allAccounts.value : accounts.value));
+const from = computed(() => allAccounts.value.find((a) => a.id === Number(f.account_id)));
+const to = computed(() => allAccounts.value.find((a) => a.id === Number(f.to_account_id)));
 const converting = computed(() => f.kind === 'transfer' && from.value && to.value && from.value.currency !== to.value.currency);
 const categories = computed(() => data.value?.categories?.[f.kind === 'income' ? 'income' : 'expense'] ?? []);
 const payees = computed(() => (data.value?.payees ?? []).filter((p) => p.kind === f.kind).map((p) => p.name));
-const symbol = computed(() => (from.value?.currency === 'SGD' ? 'S$' : '৳'));
+const symbol = computed(() => ({ SGD: 'S$', USD: '$' })[from.value?.currency] ?? '৳');
 const canSave = computed(() => Number(f.amount) > 0 && f.account_id && (f.kind !== 'transfer' || (f.to_account_id && (!converting.value || Number(f.to_amount) > 0))));
 const KINDS = [['expense', 'Spent', 'text-rose-600'], ['income', 'Received', 'text-emerald-600'], ['transfer', 'Move', 'text-brand-600']];
 
@@ -200,9 +203,9 @@ onUnmounted(() => {
                                 <div v-if="!data" class="h-14 animate-pulse rounded-2xl bg-ink-100"></div>
                                 <div v-else-if="!accounts.length" class="rounded-2xl border border-dashed border-line p-3 text-sm text-ink-500">Add an account first on the Activity page.</div>
                                 <div v-else class="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5">
-                                    <button v-for="a in accounts" :key="a.id" type="button" class="shrink-0 rounded-2xl border px-3.5 py-2.5 text-left transition"
+                                    <button v-for="a in fromList" :key="a.id" type="button" class="shrink-0 rounded-2xl border px-3.5 py-2.5 text-left transition"
                                         :class="Number(f.account_id) === a.id ? 'border-teal-400 bg-teal-50 ring-2 ring-teal-400/20' : 'border-line bg-surface'" @click="f.account_id = a.id">
-                                        <span class="block text-sm font-bold text-ink-900">{{ a.name }}</span>
+                                        <span class="block text-sm font-bold text-ink-900">{{ a.name }}<span v-if="a.last4" class="font-normal text-ink-400"> ••{{ a.last4 }}</span><span v-if="a.business" class="ml-1">💼</span></span>
                                         <span class="block text-[11px] tabular-nums text-ink-500">{{ cash(a.balance, a.currency) }}</span>
                                     </button>
                                 </div>
@@ -212,11 +215,19 @@ onUnmounted(() => {
                             <template v-if="f.kind === 'transfer'">
                                 <div class="mt-4 mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">To</div>
                                 <div class="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5">
-                                    <button v-for="a in accounts.filter((x) => x.id !== Number(f.account_id))" :key="a.id" type="button" class="shrink-0 rounded-2xl border px-3.5 py-2.5 text-left transition"
+                                    <button v-for="a in allAccounts.filter((x) => x.id !== Number(f.account_id))" :key="a.id" type="button" class="shrink-0 rounded-2xl border px-3.5 py-2.5 text-left transition"
                                         :class="Number(f.to_account_id) === a.id ? 'border-brand-400 bg-brand-50 ring-2 ring-brand-400/20' : 'border-line bg-surface'" @click="f.to_account_id = a.id">
-                                        <span class="block text-sm font-bold text-ink-900">{{ a.name }}<span v-if="a.purpose === 'savings'" class="ml-1">🐷</span></span>
+                                        <span class="block text-sm font-bold text-ink-900">{{ a.name }}<span v-if="a.last4" class="font-normal text-ink-400"> ••{{ a.last4 }}</span><span v-if="a.purpose === 'savings'" class="ml-1">🐷</span><span v-if="a.business" class="ml-1">💼</span></span>
                                         <span class="block text-[11px] text-ink-500">{{ a.currency }}</span>
                                     </button>
+                                </div>
+                                <p v-if="from?.business !== to?.business && to" class="mt-2 text-[11px] text-ink-500">
+                                    {{ to.business ? '💼 Money put into the business — not personal spending.' : '💼 Taken out of the business (owner draw / salary) — not counted as personal income.' }}
+                                </p>
+                                <!-- A move usually costs a fee (bank / bKash charge): asked right here. -->
+                                <div class="mt-3">
+                                    <label class="label">Transfer fee <span class="font-normal text-ink-400">({{ symbol }}, from {{ from?.name ?? 'the first account' }})</span></label>
+                                    <input v-model="f.fee" type="text" inputmode="decimal" class="input" placeholder="0" />
                                 </div>
                                 <div v-if="converting" class="mt-3">
                                     <label class="label">Arrived in {{ to.name }} ({{ to.currency }})</label>
@@ -251,10 +262,10 @@ onUnmounted(() => {
                             <div class="mt-5 grid grid-cols-2 gap-2">
                                 <Suggest v-if="f.kind !== 'transfer'" v-model="f.counterparty" :suggestions="payees" class="col-span-2" :placeholder="f.kind === 'income' ? 'From whom (optional)' : 'Paid to — shop, person (optional)'" />
                                 <DatePicker v-model="f.occurred_on" class="col-span-2" :max="today()" />
-                                <button v-if="!showMore" type="button" class="btn-link col-span-2 justify-self-start text-xs" @click="showMore = true">+ Note or fee</button>
+                                <button v-if="!showMore" type="button" class="btn-link col-span-2 justify-self-start text-xs" @click="showMore = true">{{ f.kind === 'transfer' ? '+ Note' : '+ Note or fee' }}</button>
                                 <template v-else>
                                     <input v-model="f.description" class="input col-span-2" placeholder="Note — what it was for" />
-                                    <input v-model="f.fee" type="text" inputmode="decimal" class="input col-span-2" :placeholder="`Bank / transfer fee (${symbol})`" />
+                                    <input v-if="f.kind !== 'transfer'" v-model="f.fee" type="text" inputmode="decimal" class="input col-span-2" :placeholder="`Bank / transfer fee (${symbol})`" />
                                 </template>
                             </div>
                             <div v-for="(e, k) in errors" :key="k" class="error">{{ e }}</div>

@@ -113,7 +113,8 @@ class AutoEntries
                 'account_id' => $account->id,
                 'amount' => $p['amount'],
                 'fee' => $p['fee'] ?? 0,
-                'category' => $category ?? ($p['direction'] === 'in' ? 'other_income' : $this->guess($p['counterparty'].' '.$message->body)),
+                // Business accounts keep business categories; personal ones get a guessed spending category.
+                'category' => $category ?? ($p['direction'] === 'in' ? 'other_income' : ($account->scope === 'business' ? 'other' : $this->guess($p['counterparty'].' '.$message->body))),
                 'counterparty' => $p['counterparty'],
                 'description' => 'Auto · '.ucfirst($p['provider'] ?? $message->source).' '.$message->source.($p['reference'] ? " · {$p['reference']}" : ''),
                 'occurred_on' => $date,
@@ -259,7 +260,7 @@ class AutoEntries
     private function tellEntry(Account $account, array $p, ?string $extra = null): void
     {
         $in = $p['direction'] === 'in';
-        $name = $account->name.($account->last4 && ! str_contains($account->name, $account->last4) ? " ••{$account->last4}" : '');
+        $name = ($account->scope === 'business' ? '💼 ' : '').$account->name.($account->last4 && ! str_contains($account->name, $account->last4) ? " ••{$account->last4}" : '');
         $parts = array_filter([
             $p['counterparty'] ? ($in ? 'From ' : 'To ').$p['counterparty'] : null,
             $extra,

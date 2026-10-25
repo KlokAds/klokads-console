@@ -23,6 +23,8 @@ class PersonalActivityController extends Controller
 
         $all = Account::where('scope', 'personal')->orderBy('archived')->orderBy('name')->get();
         $ids = $all->pluck('id')->all();
+        // Business accounts kept here too (their money is never in my personal totals).
+        $business = Account::where('scope', 'business')->where('archived', false)->orderBy('name')->get();
         $savingsIds = $all->where('purpose', 'savings')->pluck('id')->all();
 
         $transactions = MoneyTransaction::with('account:id,name,currency,scope,provider,purpose', 'toAccount:id,name,currency,scope,provider,purpose')
@@ -54,6 +56,11 @@ class PersonalActivityController extends Controller
             'providers' => Catalog::PROVIDERS,
             'kinds' => Catalog::options(Catalog::ACCOUNT_KINDS),
             'currencies' => Catalog::PERSONAL_CURRENCIES,
+            'business' => $business->map(fn (Account $a) => [
+                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'app_profile', 'opening_balance', 'notes', 'guide', 'bank_balance', 'archived', 'scope'),
+                'currency' => strtoupper($a->currency),
+                'balance' => Ledger::balance($a),
+            ])->values(),
             'mfs' => Catalog::MFS,
             'guides' => Catalog::WITHDRAW_GUIDES,
             'familyGuide' => ['url' => route('guide.show', GuideController::token()), 'message' => Setting::get('guide_message')],
