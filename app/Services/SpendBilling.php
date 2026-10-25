@@ -26,8 +26,8 @@ class SpendBilling
     /** History is imported this many days per step (one bridge request). */
     private const HISTORY_STEP_DAYS = 31;
 
-    /** Meta keeps insights for 37 months. */
-    private const HISTORY_MONTHS = 37;
+    /** Meta keeps insights for 37 months; from the 1st of a month, 36 stays inside. */
+    private const HISTORY_MONTHS = 36;
 
     public function __construct(private MetaAds $meta, private StripeService $stripe, private Notify $notify) {}
 
