@@ -45,6 +45,7 @@ class Heartbeat
             'ad_history' => fn () => app(SpendBilling::class)->importAllHistory(),
             'stripe_payouts' => fn () => app(StripeService::class)->syncRecentPayouts(),
             'airwallex' => fn () => app(Airwallex::class)->run(),
+            'ad_statements' => fn () => app(AdStatements::class)->draftMonthly(),
             'emails' => fn () => app(EmailInbox::class)->poll(),
             'personal_invoices' => fn () => app(PersonalInvoicing::class)->runRecurring(),
             'personal_reminders' => fn () => app(PersonalReminders::class)->run(),

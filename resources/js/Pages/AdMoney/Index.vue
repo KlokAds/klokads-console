@@ -37,6 +37,8 @@ const periodOptions = computed(() => [
 ]);
 const clientValue = ref(props.client?.id ?? null);
 const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: c.company || c.name })));
+// The client's statement for exactly the period on screen: opens as a draft to check and send.
+const statement = () => router.post(route('statements.store'), { client: props.client.id, from: props.range.from, to: props.range.to });
 const go = () => {
     if (periodValue.value === 'custom' && !(from.value && to.value)) return;
     router.get(route('ad-money.index'), {
@@ -91,6 +93,7 @@ const dayLabel = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { 
             <div class="flex flex-wrap items-center justify-end gap-2">
                 <div v-if="clients.length > 1" class="w-56"><Select v-model="clientValue" :options="clientOptions" @change="go" /></div>
                 <div class="w-48"><Select v-model="periodValue" :options="periodOptions" :searchable="false" @change="go" /></div>
+                <button class="btn-secondary" @click="statement"><Icon name="receipt" :size="16" /> Statement</button>
             </div>
             <div v-if="periodValue === 'custom'" class="mt-3 flex flex-wrap items-center justify-end gap-2">
                 <DatePicker v-model="from" :max="to || null" size="sm" class="w-40" placeholder="From" />

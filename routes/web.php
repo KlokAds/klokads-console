@@ -35,6 +35,7 @@ use App\Http\Controllers\RecurringPlanController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SpendBillingController;
+use App\Http\Controllers\StatementController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TouchController;
@@ -229,6 +230,10 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/payouts', [PayoutController::class, 'index'])->name('payouts.index');
     Route::get('/ad-money', [AdMoneyController::class, 'index'])->name('ad-money.index');
+    Route::post('/statements', [StatementController::class, 'store'])->name('statements.store');
+    Route::get('/statements/{statement}', [StatementController::class, 'show'])->name('statements.show');
+    Route::put('/statements/{statement}', [StatementController::class, 'update'])->name('statements.update');
+    Route::post('/statements/{statement}/send', [StatementController::class, 'send'])->name('statements.send');
     Route::post('/payouts/bank', [PayoutController::class, 'updateBank'])->name('payouts.bank');
     Route::post('/payouts', [PayoutController::class, 'store'])->name('payouts.store');
     Route::post('/payouts/schedule', [PayoutController::class, 'updateSchedule'])->name('payouts.schedule');

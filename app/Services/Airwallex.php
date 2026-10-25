@@ -254,10 +254,41 @@ class Airwallex
             }
         }
 
+        if ($client) {
+            $this->checkMetaCharges($client);
+        }
+
         foreach (Payout::whereIn('status', ['paid', 'in_transit'])->whereDoesntHave('airwallexEntries')
             ->whereBetween('arrival_at', [now()->subDays(20), now()->subDays(self::LATE_DAYS)])->get() as $payout) {
             $this->notify->once('payout-late:'.$payout->id, 'billing', '⏳ Stripe payout not in Airwallex yet',
                 Notify::money($payout->amount, strtoupper($payout->currency)).' was due '.$payout->arrival_at->format('j M').' — check Stripe and Airwallex.', route('payouts.index'));
+        }
+    }
+
+    /**
+     * Meta bills after the spend — at its threshold or its monthly billing date, sometimes weeks
+     * later — so each charge should be no more than what the ads spent since Meta's previous charge.
+     * More than that (5% or S$5 of slack), and something is off: a wrong charge, or the card paying
+     * for another ad account. Told once per charge; charges of the last 30 days are checked.
+     */
+    public function checkMetaCharges(Client $client): void
+    {
+        $charges = AirwallexEntry::where('kind', 'meta')->where('client_id', $client->id)->where('amount', '<', 0)->orderBy('occurred_at')->get();
+        $currency = strtoupper($client->currency ?: 'SGD');
+        foreach ($charges as $i => $charge) {
+            if ($charge->occurred_at->lt(now()->subDays(30))) {
+                continue;
+            }
+            $since = $i > 0 ? $charges[$i - 1]->occurred_at->toDateString() : $charge->occurred_at->copy()->subDays(60)->toDateString();
+            $spent = (int) MetaSpendDay::where('client_id', $client->id)->where('date', '>=', $since)->where('date', '<=', $charge->occurred_at->toDateString())->sum('spend');
+            $amount = -$charge->amount;
+            if ($amount <= $spent + max(500, (int) round($spent * 0.05))) {
+                continue;
+            }
+            $this->notify->once('meta-mismatch:'.$charge->id, 'billing', '🔎 Meta charged more than the ads spent',
+                'On '.$charge->occurred_at->format('j M').' Meta charged the Airwallex card '.Notify::money($amount, $currency).', but '.($client->company ?: $client->name)."'s ads spent only "
+                .Notify::money($spent, $currency).' since '.CarbonImmutable::parse($since)->format('j M').". Check Meta's billing (Payment activity) and which ad account uses this card.",
+                route('ad-money.index', ['client' => $client->id, 'period' => 'last30']));
         }
     }
 
