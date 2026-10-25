@@ -14,6 +14,8 @@ const props = defineProps({
 });
 
 const m = (cents, cur = null) => money(cents, cur ?? props.currency);
+// The money prop has the same name as money(): the template uses this.
+const flow = computed(() => props.money ?? { entries: [] });
 const today = new Date().toISOString().slice(0, 10);
 const name = computed(() => props.client?.company || props.client?.name);
 
@@ -137,8 +139,8 @@ const KIND = { spend: '📊 Ads + fee', top_up: '💳 Top-up', manual: '✍️ A
             <div v-if="tab === 'money'" class="mt-3 space-y-3">
                 <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm"><div class="text-xs text-ink-500">Their balance</div><div class="mt-1 text-lg font-extrabold tabular-nums">{{ m(now.balance) }}</div></div>
-                    <div class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm"><div class="text-xs text-ink-500">Topped up · period</div><div class="mt-1 text-lg font-extrabold tabular-nums text-emerald-600">{{ m(money.topped_up) }}</div></div>
-                    <div class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm"><div class="text-xs text-ink-500">Meta charged · period</div><div class="mt-1 text-lg font-extrabold tabular-nums">{{ m(money.meta_charged) }}</div></div>
+                    <div class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm"><div class="text-xs text-ink-500">Topped up · period</div><div class="mt-1 text-lg font-extrabold tabular-nums text-emerald-600">{{ m(flow.topped_up) }}</div></div>
+                    <div class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm"><div class="text-xs text-ink-500">Meta charged · period</div><div class="mt-1 text-lg font-extrabold tabular-nums">{{ m(flow.meta_charged) }}</div></div>
                     <div class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm"><div class="text-xs text-ink-500">Spent today</div><div class="mt-1 text-lg font-extrabold tabular-nums">{{ m(now.today) }}</div></div>
                 </div>
                 <div class="grid grid-cols-3 gap-2 text-sm font-bold">
@@ -149,12 +151,12 @@ const KIND = { spend: '📊 Ads + fee', top_up: '💳 Top-up', manual: '✍️ A
                 <section class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm">
                     <h3 class="text-sm font-bold text-ink-900">Balance movements</h3>
                     <div class="mt-2 divide-y divide-line/70">
-                        <div v-for="e in money.entries" :key="e.id" class="flex items-center gap-3 py-2.5 text-sm">
+                        <div v-for="e in flow.entries" :key="e.id" class="flex items-center gap-3 py-2.5 text-sm">
                             <span class="w-20 shrink-0 text-xs text-ink-500">{{ date(e.date) }}</span>
                             <span class="min-w-0 flex-1 truncate text-ink-700">{{ KIND[e.kind] ?? e.kind }}<span v-if="e.note" class="text-ink-400"> · {{ e.note }}</span></span>
                             <span class="font-semibold tabular-nums" :class="e.amount >= 0 ? 'text-emerald-600' : 'text-ink-900'">{{ e.amount >= 0 ? '+' : '−' }}{{ m(Math.abs(e.amount)) }}</span>
                         </div>
-                        <p v-if="!money.entries.length" class="py-2 text-sm text-ink-500">Nothing yet.</p>
+                        <p v-if="!flow.entries.length" class="py-2 text-sm text-ink-500">Nothing yet.</p>
                     </div>
                 </section>
             </div>
