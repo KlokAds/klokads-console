@@ -7,6 +7,7 @@ use App\Models\Account;
 use App\Models\MoneyTransaction;
 use App\Support\Catalog;
 use App\Support\Ledger;
+use App\Support\PayeeMemory;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -110,6 +111,7 @@ class MoneyController extends Controller
     {
         $this->guardAccounts($request, [$request->input('account_id'), $request->input('to_account_id')]);
         $tx = Ledger::save($this->transactionData($request));
+        PayeeMemory::remember($tx);
 
         // Entries made offline are sent later by the app itself and only need a yes.
         if ($request->wantsJson()) {
@@ -159,7 +161,7 @@ class MoneyController extends Controller
     public function update(Request $request, MoneyTransaction $transaction): RedirectResponse
     {
         $this->guardAccounts($request, [$transaction->account_id, $transaction->to_account_id, $request->input('account_id'), $request->input('to_account_id')]);
-        Ledger::save($this->transactionData($request), $transaction);
+        PayeeMemory::remember(Ledger::save($this->transactionData($request), $transaction));
 
         return back()->with('success', 'Updated.');
     }

@@ -9,6 +9,7 @@ export const CATEGORY = {
     bills: ['💡', 'bg-yellow-100 text-yellow-700'],
     transport: ['🚕', 'bg-sky-100 text-sky-700'],
     family: ['👨‍👩‍👧', 'bg-rose-100 text-rose-700'],
+    staff_salary: ['🧑‍🔧', 'bg-indigo-100 text-indigo-700'],
     shopping: ['🛍️', 'bg-fuchsia-100 text-fuchsia-700'],
     health: ['💊', 'bg-emerald-100 text-emerald-700'],
     education: ['📚', 'bg-indigo-100 text-indigo-700'],

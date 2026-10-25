@@ -2,11 +2,15 @@
 
 namespace App\Services;
 
+use App\Models\Account;
 use App\Models\Loan;
+use App\Models\MoneyTransaction;
 use App\Models\PersonalInvoice;
 use App\Models\PushSubscription;
 use App\Models\Setting;
+use App\Support\Catalog;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Reminders that must land at a set time, each sent once:
@@ -33,6 +37,55 @@ class PersonalReminders
         $local = ($now ?? CarbonImmutable::now())->setTimezone(self::timezone());
 
         return $this->loans($local) + $this->invoices($local);
+    }
+
+    /** "Did you write down what you spent?" — its own job on the clock. */
+    public function spendingCheck(?CarbonImmutable $now = null): int
+    {
+        return $this->spending(($now ?? CarbonImmutable::now())->setTimezone(self::timezone()));
+    }
+
+    /** Three times a day (morning, afternoon, evening): did I write down what I spent? */
+    public const SPEND_CHECKS = ['10:00', '15:00', '20:00'];
+
+    /** And once an hour before the day ends, with the day's total. */
+    public const SPEND_LAST = '23:00';
+
+    private function spending(CarbonImmutable $local): int
+    {
+        $today = $local->toDateString();
+        $time = $local->format('H:i');
+        $ids = Account::where('scope', 'personal')->pluck('id');
+        $entries = MoneyTransaction::with('account:id,currency')->whereIn('account_id', $ids)->whereDate('occurred_on', $today)
+            ->where(fn ($q) => $q->whereNull('category')->orWhere('category', '!=', Catalog::SADAQAH))->get();
+        $spent = $entries->where('kind', 'expense')->reject(fn ($t) => array_key_exists((string) $t->category, Catalog::LOAN_CATEGORIES))
+            ->groupBy(fn ($t) => strtoupper($t->account->currency))
+            ->map(fn ($list, $currency) => Notify::money((int) $list->sum(fn ($t) => $t->amount + $t->fee), $currency))->implode(' · ');
+        $url = route('personal.activity', ['new' => 1]);
+        $sent = 0;
+
+        // The last one, an hour before midnight: the day's total, and a last call.
+        if ($time >= self::SPEND_LAST) {
+            return (int) $this->notify->once("spend:{$today}:last", 'reminder', '🌙 Day ends in an hour — anything not written down?',
+                ($spent ? "Today: {$spent} spent." : 'Nothing written down today.').' Cash, rickshaw, tea… tap to add.', $url);
+        }
+
+        // During the day: only the latest check that is due, and not if I added something by hand in the last 2 hours.
+        $due = collect(self::SPEND_CHECKS)->filter(fn ($t) => $time >= $t)->last();
+        if (! $due) {
+            return 0;
+        }
+        $recentByHand = $entries->contains(fn ($t) => ! str_starts_with((string) $t->description, 'Auto ·') && $t->created_at?->gte($local->subHours(2)));
+        if ($recentByHand) {
+            DB::table('reminder_sends')->insertOrIgnore(['key' => "spend:{$today}:{$due}", 'created_at' => now()]);
+
+            return 0;
+        }
+        $label = ['10:00' => '☀️ Morning', '15:00' => '🌤️ Afternoon', '20:00' => '🌆 Evening'][$due] ?? '🧾';
+        $sent += (int) $this->notify->once("spend:{$today}:{$due}", 'reminder', "{$label} — spent anything?",
+            ($spent ? "So far today: {$spent}." : 'Nothing written down yet today.').' Tap to add it now.', $url);
+
+        return $sent;
     }
 
     private function loans(CarbonImmutable $local): int

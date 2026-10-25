@@ -11,6 +11,7 @@ use App\Models\Setting;
 use App\Support\Catalog;
 use App\Support\InboxRules;
 use App\Support\Ledger;
+use App\Support\PayeeMemory;
 use App\Support\TransactionParser;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -113,8 +114,9 @@ class AutoEntries
                 'account_id' => $account->id,
                 'amount' => $p['amount'],
                 'fee' => $p['fee'] ?? 0,
-                // Business accounts keep business categories; personal ones get a guessed spending category.
-                'category' => $category ?? ($p['direction'] === 'in' ? 'other_income' : ($account->scope === 'business' ? 'other' : $this->guess($p['counterparty'].' '.$message->body))),
+                // What I chose for this payee before; otherwise business "other" or a guessed personal category.
+                'category' => $category ?? PayeeMemory::category($account->scope, $p['counterparty'])
+                    ?? ($p['direction'] === 'in' ? 'other_income' : ($account->scope === 'business' ? 'other' : $this->guess($p['counterparty'].' '.$message->body))),
                 'counterparty' => $p['counterparty'],
                 'description' => 'Auto · '.ucfirst($p['provider'] ?? $message->source).' '.$message->source.($p['reference'] ? " · {$p['reference']}" : ''),
                 'occurred_on' => $date,

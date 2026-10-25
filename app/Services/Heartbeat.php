@@ -45,6 +45,7 @@ class Heartbeat
             'emails' => fn () => app(EmailInbox::class)->poll(),
             'personal_invoices' => fn () => app(PersonalInvoicing::class)->runRecurring(),
             'personal_reminders' => fn () => app(PersonalReminders::class)->run(),
+            'spending_checks' => fn () => app(PersonalReminders::class)->spendingCheck(),
             'envelopes' => fn () => app(Envelopes::class)->remindDue(),
             'follow_ups' => fn () => app(FollowUps::class)->run(),
         ] as $job => $task) {

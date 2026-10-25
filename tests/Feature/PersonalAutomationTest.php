@@ -115,6 +115,34 @@ class PersonalAutomationTest extends TestCase
         $this->assertStringContainsString('UCB ••1603 → UCB salary ••6318', AppNotification::latest('id')->first()->title);
     }
 
+    public function test_the_category_i_choose_for_a_person_is_used_for_their_next_alert(): void
+    {
+        $m = app(AutoEntries::class)->ingest('sms', 'bKash', 'Send Money Tk 8,000.00 to MD ANOWAR HOSSAIN successful. Fee Tk 0.00. TrxID 1SAL0001 at 25/10/2026 10:00');
+        $tx = MoneyTransaction::find($m->money_transaction_id);
+        $this->put("/money/{$tx->id}", ['kind' => 'expense', 'account_id' => $this->bkash->id, 'amount' => 8000, 'category' => 'staff_salary', 'counterparty' => 'MD ANOWAR HOSSAIN', 'occurred_on' => now()->toDateString()]);
+
+        $next = app(AutoEntries::class)->ingest('sms', 'bKash', 'Send Money Tk 8,000.00 to MD ANOWAR HOSSAIN successful. Fee Tk 0.00. TrxID 1SAL0002 at 25/11/2026 10:00');
+        $this->assertSame('staff_salary', MoneyTransaction::find($next->money_transaction_id)->category);
+    }
+
+    public function test_spending_reminders_three_times_a_day_and_an_hour_before_midnight(): void
+    {
+        $check = fn (string $at) => app(PersonalReminders::class)->spendingCheck(CarbonImmutable::parse($at, 'Asia/Dhaka'));
+
+        $this->assertSame(0, $check('2026-10-25 09:30'));
+        $this->assertSame(1, $check('2026-10-25 10:05'));
+        $this->assertSame(0, $check('2026-10-25 12:00'), 'once');
+
+        // Added something by hand: the afternoon one is skipped.
+        $this->travelTo(CarbonImmutable::parse('2026-10-25 14:30', 'Asia/Dhaka'));
+        $this->post('/money', ['kind' => 'expense', 'account_id' => $this->bkash->id, 'amount' => 120, 'category' => 'food', 'occurred_on' => '2026-10-25']);
+        $this->assertSame(0, $check('2026-10-25 15:10'));
+
+        $this->assertSame(1, $check('2026-10-25 20:00'));
+        $this->assertSame(1, $check('2026-10-25 23:01'));
+        $this->assertStringContainsString('Today: ৳120.00 spent', AppNotification::latest('id')->first()->body);
+    }
+
     public function test_sadaqah_only_lowers_the_balance_and_leaves_no_record(): void
     {
         // Sent by bKash: the SMS came in as an entry; I mark it sadaqah.
