@@ -41,6 +41,11 @@ class FollowUps
             return null;
         }
 
+        // A real call with family (I called or answered, and it lasted): we talked.
+        if ($e['action'] === 'called_back' && ($e['duration'] ?? 1) > 0) {
+            app(KeepInTouch::class)->talked($e['phone'] ?? null, $at);
+        }
+
         // I opened the chat, or called them back: done by itself.
         if (in_array($e['action'], ['seen', 'called_back'], true)) {
             $query = FollowUp::open()->where('first_at', '<=', $at->addMinute());

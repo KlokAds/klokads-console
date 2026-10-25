@@ -35,6 +35,7 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SpendBillingController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\TaskController;
+use App\Http\Controllers\TouchController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -47,6 +48,7 @@ Route::get('/reminders/ping/{token}', [NotificationController::class, 'ping'])->
 // An Android SMS-forwarder app posts bank / wallet SMS here (secret token in the URL).
 Route::post('/inbox/sms/{token}', [InboxController::class, 'sms'])->middleware('throttle:120,1')->name('inbox.sms');
 Route::get('/app/feed/{token}', [PhoneAppController::class, 'feed'])->middleware('throttle:60,1')->name('app.feed');
+Route::post('/app/touch/{token}/{touch}/{action}', [TouchController::class, 'fromPhone'])->middleware('throttle:60,1')->name('app.touch.action');
 Route::post('/app/tasks/{token}/{task}/{action}', [TaskController::class, 'fromPhone'])->middleware('throttle:60,1')->name('app.tasks.action');
 Route::post('/app/feed/{token}/read', [PhoneAppController::class, 'read'])->middleware('throttle:60,1')->name('app.feed.read');
 Route::post('/app/followups/{token}', [PhoneAppController::class, 'followUps'])->middleware('throttle:120,1')->name('app.followups');
@@ -109,6 +111,11 @@ Route::middleware('auth')->group(function () {
     Route::put('/personal/investments/{investment}/value', [InvestmentController::class, 'value'])->middleware('personal')->name('personal.investments.value');
     Route::post('/personal/investments/{investment}/move', [InvestmentController::class, 'move'])->middleware('personal')->name('personal.investments.move');
     Route::post('/personal/investments/{investment}/return', [InvestmentController::class, 'return'])->middleware('personal')->name('personal.investments.return');
+    Route::get('/personal/keep-in-touch', [TouchController::class, 'index'])->middleware('personal')->name('personal.touch.index');
+    Route::post('/personal/keep-in-touch', [TouchController::class, 'store'])->middleware('personal')->name('personal.touch.store');
+    Route::put('/personal/keep-in-touch/{touch}', [TouchController::class, 'update'])->middleware('personal')->name('personal.touch.update');
+    Route::delete('/personal/keep-in-touch/{touch}', [TouchController::class, 'destroy'])->middleware('personal')->name('personal.touch.destroy');
+    Route::post('/personal/keep-in-touch/{touch}/talked', [TouchController::class, 'talked'])->middleware('personal')->name('personal.touch.talked');
     Route::get('/personal/tasks', [TaskController::class, 'index'])->middleware('personal')->name('personal.tasks.index');
     Route::post('/personal/tasks', [TaskController::class, 'store'])->middleware('personal')->name('personal.tasks.store');
     Route::put('/personal/tasks/{task}', [TaskController::class, 'update'])->middleware('personal')->name('personal.tasks.update');

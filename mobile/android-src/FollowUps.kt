@@ -153,7 +153,7 @@ object FollowUps {
                             JSONObject().put("action", "called_back")
                         else -> continue
                     }
-                    queue(context, event.put("source", "call").put("person", name ?: number).put("phone", number).put("at", at), send = false)
+                    queue(context, event.put("source", "call").put("person", name ?: number).put("phone", number).put("at", at).put("duration", c.getLong(4)), send = false)
                 }
             }
         } catch (_: SecurityException) {

@@ -108,14 +108,16 @@ object Feed {
         // A follow-up reminder: done or later, right from the notification. Everything else: "Seen".
         val followUpId = Regex("[?&]f=(\\d+)").find(url)?.groupValues?.get(1)
         val taskId = Regex("[?&]t=(\\d+)").find(url)?.groupValues?.get(1)
-        taskId?.let { task ->
-            for ((action, label) in listOf("done" to "Done ✓", "later" to "1 hour later")) {
+        val touchId = Regex("[?&]k=(\\d+)").find(url)?.groupValues?.get(1)
+        // A task (Done ✓) or a family call (Talked ✓), each with "1 hour later".
+        listOfNotNull(taskId?.let { it to "tasks" }, touchId?.let { it to "touch" }).firstOrNull()?.let { (target, path) ->
+            for ((action, label) in listOf("done" to (if (path == "touch") "Talked ✓" else "Done ✓"), "later" to "1 hour later")) {
                 val intent = Intent(context, TaskActionReceiver::class.java)
-                    .putExtra("id", task).putExtra("action", action).putExtra("notification", id.toInt())
+                    .putExtra("id", target).putExtra("path", path).putExtra("action", action).putExtra("notification", id.toInt())
                 builder.addAction(0, label, PendingIntent.getBroadcast(context, (id * 10 + if (action == "done") 4 else 5).toInt(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
             }
         }
-        if (followUpId == null && taskId == null) {
+        if (followUpId == null && taskId == null && touchId == null) {
             val seen = Intent(context, SeenReceiver::class.java).putExtra("id", id).putExtra("notification", id.toInt())
             builder.addAction(0, "✓ Seen", PendingIntent.getBroadcast(context, (id * 10 + 3).toInt(), seen, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         }
@@ -161,7 +163,8 @@ class TaskActionReceiver : BroadcastReceiver() {
         val pending = goAsync()
         Thread {
             try {
-                val connection = URL(feed.replace("/app/feed/", "/app/tasks/") + "/$id/$action").openConnection() as HttpURLConnection
+                val path = intent.getStringExtra("path") ?: "tasks"
+                val connection = URL(feed.replace("/app/feed/", "/app/$path/") + "/$id/$action").openConnection() as HttpURLConnection
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 8000
                 connection.readTimeout = 8000

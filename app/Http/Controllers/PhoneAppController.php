@@ -86,6 +86,7 @@ class PhoneAppController extends Controller
             'events.*.phone' => ['nullable', 'string', 'max:30'],
             'events.*.text' => ['nullable', 'string', 'max:2000'],
             'events.*.at' => ['nullable', 'integer'],
+            'events.*.duration' => ['nullable', 'integer', 'min:0'],
         ]);
         foreach ($data['events'] as $event) {
             $followUps->record($event);

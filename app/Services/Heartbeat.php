@@ -49,6 +49,7 @@ class Heartbeat
             'envelopes' => fn () => app(Envelopes::class)->remindDue(),
             'follow_ups' => fn () => app(FollowUps::class)->run(),
             'tasks' => fn () => app(Tasks::class)->run(),
+            'keep_in_touch' => fn () => app(KeepInTouch::class)->run(),
         ] as $job => $task) {
             try {
                 $result[$job] = $task();
