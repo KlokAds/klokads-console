@@ -104,8 +104,12 @@ class PersonalAds
      *
      * @return array<int, array<string, mixed>>
      */
-    public static function table(PersonalClient $client, CarbonImmutable $start, CarbonImmutable $end): array
+    public static function table(PersonalClient $client, CarbonImmutable $start, CarbonImmutable $end, bool $all = false): array
     {
+        // Meta keeps old campaigns "ACTIVE" for ever: by default only those that spent in the period,
+        // or ran in the last 30 days and now have a problem. "Show all" lists every one (to switch one back on).
+        $recent = PersonalAdDay::where('personal_client_id', $client->id)->where('date', '>=', CarbonImmutable::today()->subDays(30)->toDateString())
+            ->where('spend', '>', 0)->distinct()->pluck('campaign_id')->map(fn ($id) => (string) $id)->all();
         $known = $client->ad_campaigns ?? [];
         $days = PersonalAdDay::where('personal_client_id', $client->id)->whereBetween('date', [$start->toDateString(), $end->toDateString()])->get()->groupBy('campaign_id');
         $ids = collect($known)->keys()->map(fn ($k) => (string) $k)->merge($days->keys())->unique();
@@ -133,7 +137,7 @@ class PersonalAds
                 'clicks' => $clicks,
                 'ctr' => $impressions > 0 ? round($clicks / $impressions * 100, 2) : null,
             ];
-        })->filter(fn ($c) => $c['spend'] > 0 || in_array($c['status'], ['ACTIVE', 'WITH_ISSUES', 'DISAPPROVED', 'PENDING_REVIEW'], true))
+        })->filter(fn ($c) => $all || $c['spend'] > 0 || (in_array($c['id'], $recent, true) && in_array($c['status'], ['WITH_ISSUES', 'DISAPPROVED', 'PENDING_REVIEW', 'ACTIVE'], true)))
             ->sortBy([fn ($a, $b) => ($b['status'] === 'ACTIVE') <=> ($a['status'] === 'ACTIVE'), fn ($a, $b) => $b['spend'] <=> $a['spend']])->values()->all();
     }
 

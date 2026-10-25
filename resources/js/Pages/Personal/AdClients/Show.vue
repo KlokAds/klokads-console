@@ -23,6 +23,7 @@ const props = defineProps({
     assignments: Array,
     reportUrl: String,
     accounts: { type: Array, default: null },
+    showAll: Boolean,
 });
 
 const m = (cents, cur) => money(cents, cur);
@@ -41,8 +42,10 @@ const PERIODS = [
 ];
 const go = () => {
     if (period.value === 'custom' && !(from.value && to.value)) return;
-    router.get(route('ad-clients.show', props.client.id), { period: period.value, ...(period.value === 'custom' ? { from: from.value, to: to.value } : {}) }, { preserveScroll: true, preserveState: true });
+    router.get(route('ad-clients.show', props.client.id), { period: period.value, ...(period.value === 'custom' ? { from: from.value, to: to.value } : {}), ...(props.showAll ? { all: 1 } : {}) }, { preserveScroll: true, preserveState: true });
 };
+const toggleAll = () =>
+    router.get(route('ad-clients.show', props.client.id), { period: period.value, ...(period.value === 'custom' ? { from: from.value, to: to.value } : {}), ...(props.showAll ? {} : { all: 1 }) }, { preserveScroll: true, preserveState: true });
 const syncing = ref(false);
 const sync = () => router.post(route('ad-clients.sync'), {}, { preserveScroll: true, onStart: () => (syncing.value = true), onFinish: () => (syncing.value = false) });
 
@@ -160,7 +163,10 @@ const accountOptions = computed(() => props.accounts ?? []);
 
         <!-- Campaigns -->
         <section class="mt-5">
-            <h3 class="px-1 text-sm font-bold text-ink-900">Campaigns</h3>
+            <div class="flex items-center justify-between px-1">
+                <h3 class="text-sm font-bold text-ink-900">Campaigns</h3>
+                <button class="text-xs font-semibold text-teal-700" @click="toggleAll">{{ showAll ? 'Only those with spend' : 'Show all (turn an old one on)' }}</button>
+            </div>
             <div class="mt-2 space-y-3">
                 <div v-for="c in campaigns" :key="c.id" class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm sm:p-5">
                     <div class="flex flex-wrap items-start gap-3">

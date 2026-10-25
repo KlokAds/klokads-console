@@ -66,6 +66,7 @@ class AdPerformance
         $t = strtolower((string) $resultType);
 
         return match (true) {
+            $o === 'MESSAGES' || str_contains($t, 'messaging') || str_contains($t, 'conversation') => 'Messages',
             in_array($o, ['OUTCOME_AWARENESS', 'REACH', 'BRAND_AWARENESS', 'VIDEO_VIEWS'], true) => 'Awareness',
             in_array($o, ['OUTCOME_TRAFFIC', 'LINK_CLICKS'], true) => 'Traffic',
             in_array($o, ['OUTCOME_LEADS', 'LEAD_GENERATION'], true) => 'Leads',

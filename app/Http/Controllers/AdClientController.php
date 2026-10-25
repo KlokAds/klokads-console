@@ -49,7 +49,8 @@ class AdClientController extends Controller
         return Inertia::render('Personal/AdClients/Show', [
             'client' => $client->only('id', 'name', 'ad_bill', 'ad_fee_percent') + ['billed_until' => $client->ad_billed_until?->toDateString()],
             'range' => ['period' => $period, 'from' => $start->toDateString(), 'to' => $end->toDateString(), 'label' => PersonalAds::period($start, $end)],
-            'campaigns' => PersonalAds::table($client, $start, $end),
+            'campaigns' => PersonalAds::table($client, $start, $end, $request->boolean('all')),
+            'showAll' => $request->boolean('all'),
             'money' => PersonalAds::money($client, $start, $end),
             'ledger' => PersonalAds::ledger($client),
             'assignments' => $client->adAssignments()->orderBy('account_name')->get()
