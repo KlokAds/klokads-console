@@ -319,7 +319,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                             <span v-if="b.how" class="block text-[11px] text-ink-400">🔒 {{ b.how }} — only you see this</span></span>
                         <span class="tabular-nums font-semibold">{{ m(b.invoice?.total ?? b.spend, 'BDT') }}</span>
                         <span v-if="b.invoice" class="w-20 text-right text-xs font-bold" :class="INVOICE[b.invoice.status]?.[1]">{{ INVOICE[b.invoice.status]?.[0] }}</span>
-                        <a v-if="b.invoice" :href="b.invoice.url" target="_blank" class="text-xs font-semibold text-ink-500 hover:text-teal-700">Open</a>
+                        <Link v-if="b.invoice" :href="route('personal.invoices.show', b.invoice.id)" class="text-xs font-semibold text-ink-500 hover:text-teal-700">Open</Link>
                         <button v-if="b.invoice && b.invoice.status !== 'paid'" class="rounded-lg bg-teal-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-teal-700" @click="sending = { id: b.invoice.id, number: b.invoice.number }">{{ b.invoice.sent ? 'Send again' : 'Send' }}</button>
                     </div>
                     <p v-if="!ledger.bills.length" class="py-2 text-xs text-ink-500">No bills yet.</p>

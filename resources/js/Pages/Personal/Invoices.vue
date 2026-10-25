@@ -11,7 +11,7 @@ import Select from '@/Components/Ui/Select.vue';
 import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { date, money, wantsNew } from '@/money';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps({
@@ -178,20 +178,21 @@ if (wantsNew()) openInv();
             <ul v-else-if="shown.length" class="divide-y divide-line/70">
                 <li v-for="i in shown" :key="i.id" class="px-5 py-4 sm:px-6">
                     <div class="flex items-start gap-3">
-                        <div class="min-w-0 flex-1">
+                        <Link :href="route('personal.invoices.show', i.id)" class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="font-semibold text-ink-900">{{ clientName(i.client) }}</span>
                                 <span class="badge" :class="STATUS[i.status][1]">{{ STATUS[i.status][0] }}</span>
                                 <span v-if="i.overdue" class="badge bg-rose-50 text-rose-700">Overdue</span>
                                 <span v-if="i.reported && i.status !== 'paid'" class="badge bg-amber-50 text-amber-700">On hold</span>
                             </div>
-                            <div class="mt-0.5 truncate text-xs text-ink-500">{{ i.number }} · {{ date(i.issued_on) }}<template v-if="i.due_on"> · due {{ date(i.due_on) }}</template> · {{ i.sent_at ? 'emailed' : 'not emailed' }}</div>
-                        </div>
+                            <div class="mt-0.5 truncate text-xs text-ink-500">{{ i.number }} · {{ date(i.issued_on) }}<template v-if="i.due_on"> · due {{ date(i.due_on) }}</template> · {{ i.sent_at ? 'sent' : 'not sent' }}</div>
+                        </Link>
                         <div class="text-right">
                             <div class="font-bold tabular-nums text-ink-900">{{ T(i.due || i.total, i.currency) }}</div>
                             <div v-if="i.paid" class="text-[11px] text-ink-500">paid {{ T(i.paid, i.currency) }}</div>
                         </div>
                         <RowMenu>
+                            <Link :href="route('personal.invoices.show', i.id)" class="menu-item"><Icon name="invoice" :size="15" /> Open</Link>
                             <button class="menu-item" @click="openInv(i)"><Icon name="pencil" :size="15" /> Edit</button>
                             <a :href="route('personal.invoices.pdf', i.id)" target="_blank" class="menu-item"><Icon name="download" :size="15" /> PDF</a>
                             <button class="menu-item font-semibold text-teal-700" @click="send(i)"><Icon name="send" :size="15" /> {{ i.sent_at ? 'Send again' : 'Send' }} — email / WhatsApp</button>

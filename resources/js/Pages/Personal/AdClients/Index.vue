@@ -22,18 +22,18 @@ const amounts = (byCurrency, key) => Object.entries(byCurrency).map(([cur, m]) =
     <PersonalLayout title="Client ads" subtitle="Edge Education, Marine Orvion… — their campaigns, results and ads bills, in each account's currency">
         <div class="space-y-3">
             <Link v-for="c in clients" :key="c.id" :href="route('ad-clients.show', c.id)"
-                class="flex items-center gap-4 rounded-3xl border border-line/70 bg-surface p-4 shadow-sm transition hover:border-teal-300 sm:p-5">
-                <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-teal-50 text-teal-700"><Icon name="megaphone" :size="22" /></span>
-                <span class="min-w-0 flex-1">
-                    <span class="block truncate text-base font-bold text-ink-900">{{ c.name }}</span>
-                    <span class="block text-sm text-ink-500">
-                        This month {{ Object.keys(c.month).length ? amounts(c.month, 'spend') : '—' }}
-                        · {{ c.running }} running
-                        · {{ c.my_card ? 'my card — billed' : 'their own card' }}
-                    </span>
-                </span>
-                <span v-if="Object.keys(c.due).length" class="shrink-0 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">Due {{ amounts(c.due) }}</span>
-                <Icon name="chevron" :size="16" class="shrink-0 -rotate-90 text-ink-300" />
+                class="block rounded-3xl border border-line/70 bg-surface p-4 shadow-sm transition hover:border-teal-300">
+                <div class="flex items-center gap-3">
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-sm font-extrabold text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">{{ c.name.charAt(0) }}</span>
+                    <span class="min-w-0 flex-1 truncate font-bold text-ink-900">{{ c.name }}</span>
+                    <span v-if="Object.keys(c.due).length" class="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold tabular-nums text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">Due {{ amounts(c.due) }}</span>
+                    <Icon name="chevron" :size="15" class="shrink-0 -rotate-90 text-ink-300" />
+                </div>
+                <div class="mt-2.5 flex flex-wrap gap-1.5 pl-[3.25rem] text-xs font-semibold">
+                    <span class="rounded-full bg-ink-50 px-2.5 py-1 tabular-nums text-ink-700">{{ Object.keys(c.month).length ? amounts(c.month, 'spend') : '—' }} this month</span>
+                    <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">{{ c.running }} running</span>
+                    <span class="rounded-full px-2.5 py-1" :class="c.my_card ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-ink-50 text-ink-500'">{{ c.my_card ? 'My card · billed' : 'Their card' }}</span>
+                </div>
             </Link>
             <EmptyState v-if="!clients.length" icon="megaphone" title="No client ads yet" text="Pick a client below, then add their ad account or campaigns." />
         </div>

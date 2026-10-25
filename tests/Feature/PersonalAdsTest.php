@@ -255,6 +255,9 @@ class PersonalAdsTest extends TestCase
         $this->assertStringNotContainsString('119', $invoice->items[0]['description'], 'my rate stays with me');
         $this->assertStringNotContainsString('129', $invoice->items[0]['description']);
         $this->assertSame('$21.02 × 129.83 + 20%', PersonalAds::ledger($this->edge->fresh())['bills'][0]['how']);
+        // Inside the app: the invoice, its receipt, and the working for me only.
+        $this->get("/personal/invoices/{$invoice->id}")->assertInertia(fn ($page) => $page->component('Personal/InvoiceView')
+            ->where('invoice.number', $invoice->number)->where('working.how', '$21.02 × 129.83 + 20% commission')->has('payments', 0));
 
         // A charge entered in dollars (what the card was cut): straight × rate + 20%. The first is not billed again.
         $this->post("/personal/client-ads/{$this->edge->id}/charges", ['date' => '2026-10-31', 'amount' => '10', 'currency' => 'USD']);

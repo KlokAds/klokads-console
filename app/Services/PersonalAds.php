@@ -448,14 +448,14 @@ class PersonalAds
         $rate = rtrim(rtrim(number_format($taka['fx'], 2), '0'), '.');
         $fee = $c->ad_fee_percent > 0 ? (int) round($taka['bdt'] * $c->ad_fee_percent / 100) : 0;
         // The client sees the campaigns and the total — never my rate, the dollars or my commission.
-        $items = self::campaignLines($c, $spentFrom ?? $from, $to, $taka['bdt'] + $fee, $period);
+        $items = self::campaignLines($c, $spentFrom ?? $from, $to, $taka['bdt'] + $fee, self::period($spentFrom ?? $from, $to));
         $invoice = app(PersonalInvoicing::class)->create($c, $items, CarbonImmutable::today(), CarbonImmutable::today()->addDays(7), null, null, 'BDT');
         // How it was worked out stays with me (the Money tab), not on the invoice.
         $bill = PersonalAdBill::create(['personal_client_id' => $c->id, 'period_from' => $from->toDateString(), 'period_to' => $to->toDateString(),
             'currency' => 'BDT', 'spend' => (int) array_sum($amounts), 'basis' => $basis, 'usd' => $taka['usd'], 'fx_rate' => $taka['fx'], 'personal_invoice_id' => $invoice->id]);
         $this->applyCredit($c); // money they paid ahead goes on it at once
         $this->notify->send('invoice', "🧾 {$c->name}: ads bill ready — ".Notify::money($invoice->total, 'BDT'),
-            "{$period} · ".Notify::money($taka['usd'], 'USD')." × {$rate} + commission. Drafted in My invoices — check it, then send it.", route('personal.invoices.index'));
+            "{$period} · ".Notify::money($taka['usd'], 'USD')." × {$rate} + commission. Drafted — check it, then send it.", route('personal.invoices.show', $invoice));
 
         return $bill;
     }

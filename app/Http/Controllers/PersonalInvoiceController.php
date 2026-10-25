@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Account;
 use App\Models\MoneyTransaction;
+use App\Models\PersonalAdBill;
 use App\Models\PersonalClient;
 use App\Models\PersonalInvoice;
 use App\Models\PersonalInvoicePayment;
 use App\Models\PersonalRecurring;
 use App\Models\Setting;
+use App\Services\Notify;
 use App\Services\PersonalInvoicing;
 use App\Support\Catalog;
 use Carbon\CarbonImmutable;
@@ -277,6 +279,37 @@ class PersonalInvoiceController extends Controller
     }
 
     // ---------------------------------------------------------------- client-facing
+
+    /** The invoice inside the app (header and bottom bar): lines, its payments as the receipt, send / PDF. */
+    public function show(Request $request, PersonalInvoice $invoice): Response
+    {
+        $request->session()->put('mode', 'personal');
+        $invoice->load('client', 'payments.account');
+        $bill = PersonalAdBill::where('personal_invoice_id', $invoice->id)->first();
+
+        return Inertia::render('Personal/InvoiceView', [
+            'invoice' => [
+                ...$invoice->only('id', 'number', 'currency', 'items', 'total', 'paid', 'status', 'note', 'sent_via', 'sent_to'),
+                'due' => $invoice->due(),
+                'issued_on' => $invoice->issued_on->toDateString(),
+                'due_on' => $invoice->due_on?->toDateString(),
+                'paid_on' => $invoice->paid_on?->toDateString(),
+                'sent_at' => $invoice->sent_at?->toIso8601String(),
+                'client' => $invoice->client->only('id', 'name', 'company', 'email', 'phone'),
+                'url' => $invoice->publicUrl(),
+                'reported' => $invoice->reported,
+            ],
+            'payments' => $invoice->payments->sortBy('paid_on')->values()->map(fn ($p) => [
+                'id' => $p->id, 'amount' => $p->amount, 'paid_on' => $p->paid_on->toDateString(),
+                'method' => Catalog::PAY_METHODS[$p->method] ?? $p->method, 'reference' => $p->reference, 'account' => $p->account?->name,
+            ]),
+            // An ads bill: how it was worked out — for me only, never on the invoice.
+            'working' => $bill?->usd ? [
+                'how' => Notify::money((int) $bill->usd, 'USD').' × '.rtrim(rtrim(number_format((float) $bill->fx_rate, 2), '0'), '.').' + '.rtrim(rtrim(number_format($invoice->client->ad_fee_percent, 2), '0'), '.').'% commission',
+                'client_ads' => route('ad-clients.show', ['client' => $invoice->client->id, 'tab' => 'money']),
+            ] : null,
+        ]);
+    }
 
     public function public(string $token): Response
     {
