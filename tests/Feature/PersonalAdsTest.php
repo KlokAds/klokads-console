@@ -112,7 +112,8 @@ class PersonalAdsTest extends TestCase
         $this->assertSame(2, app(PersonalAds::class)->bills(CarbonImmutable::parse('2026-11-02 10:00', 'Asia/Dhaka')));
         $bill = PersonalAdBill::where('personal_client_id', $this->edge->id)->sole();
         $this->assertSame(['2026-10-16', '2026-10-31'], [$bill->period_from->toDateString(), $bill->period_to->toDateString()]);
-        $this->assertSame(80000, $bill->invoice->total);
+        $this->assertSame(80000 + 16000, $bill->invoice->total, 'the ads + 20% commission');
+        $this->assertSame('Commission (20%)', $bill->invoice->items[1]['description']);
         $this->assertSame('BDT', $bill->invoice->currency);
         $this->assertNull($bill->invoice->sent_at, 'drafted, not sent');
         $this->assertSame('USD', PersonalAdBill::where('personal_client_id', $this->marine->id)->sole()->currency);
@@ -123,7 +124,7 @@ class PersonalAdsTest extends TestCase
         $this->assertSame(2, PersonalInvoice::count());
 
         $ledger = PersonalAds::ledger($this->edge->fresh());
-        $this->assertSame(80000, $ledger['totals']['BDT']['due']);
+        $this->assertSame(96000, $ledger['totals']['BDT']['due']);
         $this->assertSame('2026-11-01', $ledger['unbilled_from']);
     }
 

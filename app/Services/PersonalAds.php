@@ -275,7 +275,7 @@ class PersonalAds
         $period = self::period($from, $to);
         $items = [['description' => "Meta ads — {$period}", 'qty' => 1, 'rate' => $spend]];
         if ($c->ad_fee_percent > 0) {
-            $items[] = ['description' => 'Ads management ('.rtrim(rtrim(number_format($c->ad_fee_percent, 2), '0'), '.').'%)', 'qty' => 1, 'rate' => (int) round($spend * $c->ad_fee_percent / 100)];
+            $items[] = ['description' => 'Commission ('.rtrim(rtrim(number_format($c->ad_fee_percent, 2), '0'), '.').'%)', 'qty' => 1, 'rate' => (int) round($spend * $c->ad_fee_percent / 100)];
         }
         $invoice = app(PersonalInvoicing::class)->create($c, $items, CarbonImmutable::today(), CarbonImmutable::today()->addDays(7), "Meta ads paid by my card, {$period}.", null, $currency);
         $bill = PersonalAdBill::create(['personal_client_id' => $c->id, 'period_from' => $from->toDateString(), 'period_to' => $to->toDateString(),

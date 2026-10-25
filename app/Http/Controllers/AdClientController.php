@@ -99,6 +99,10 @@ class AdClientController extends Controller
         } catch (Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
+        // A new ad client is billed the ads + my 20% commission, unless I set something else.
+        if (! $client->adAssignments()->exists() && (float) $client->ad_fee_percent === 0.0) {
+            $client->update(['ad_fee_percent' => 20]);
+        }
         $base = ['personal_client_id' => $client->id, 'account_name' => $info['name'], 'currency' => $info['currency'], 'paid_by' => $data['paid_by'], 'from_date' => $data['from']];
 
         $ids = ($data['whole'] ?? false) ? [null] : $data['campaigns'];
