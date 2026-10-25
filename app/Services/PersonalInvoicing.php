@@ -9,6 +9,7 @@ use App\Models\PersonalInvoice;
 use App\Models\PersonalInvoicePayment;
 use App\Models\PersonalRecurring;
 use App\Models\Setting;
+use App\Models\User;
 use App\Support\Catalog;
 use App\Support\Ledger;
 use App\Support\MailSettings;
@@ -30,7 +31,8 @@ class PersonalInvoicing
     public static function profile(): array
     {
         return [
-            'name' => Setting::get('personal_name') ?: (auth()->user()?->name ?? 'Me'),
+            // My name from the profile; else my account's (also on the public page, where nobody is signed in).
+            'name' => Setting::get('personal_name') ?: (auth()->user()?->name ?? User::where('is_owner', true)->value('name') ?? 'Invoice'),
             'email' => Setting::get('personal_email'),
             'phone' => Setting::get('personal_phone'),
             'address' => Setting::get('personal_address'),
