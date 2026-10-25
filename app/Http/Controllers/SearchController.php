@@ -72,7 +72,7 @@ class SearchController extends Controller
                 'url' => route('expenses.index', ['month' => $e->spent_on->format('Y-m')]),
                 'icon' => 'card',
             ]),
-            'Money' => $any(MoneyTransaction::query()->with('account:id,name,currency,scope'), ['counterparty', 'description'])
+            'Money' => $any(MoneyTransaction::query()->with('account:id,name,currency,scope')->where(fn ($q) => $q->whereNull('category')->orWhere('category', '!=', Catalog::SADAQAH)), ['counterparty', 'description'])
                 ->latest('occurred_on')->limit(self::LIMIT)->get()->map(fn (MoneyTransaction $t) => [
                     'title' => $t->counterparty ?: $t->description ?: ucfirst($t->kind),
                     'sub' => $t->occurred_on->format('j M Y').' · '.$t->account->name.' · '.$amount((int) $t->amount, $t->account->currency),

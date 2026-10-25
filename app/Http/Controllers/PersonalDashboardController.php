@@ -52,6 +52,7 @@ class PersonalDashboardController extends Controller
         $transactions = MoneyTransaction::with('account:id,name,currency,scope,provider,purpose', 'toAccount:id,name,currency,scope,provider,purpose')
             ->where(fn ($q) => $q->whereIn('account_id', $ids)->orWhereIn('to_account_id', $ids))
             ->where('occurred_on', '>=', $from->toDateString())
+            ->where(fn ($q) => $q->whereNull('category')->orWhere('category', '!=', Catalog::SADAQAH))
             ->latest('occurred_on')->latest('id')
             ->get();
 

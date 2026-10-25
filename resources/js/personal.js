@@ -16,7 +16,8 @@ export const CATEGORY = {
     travel: ['✈️', 'bg-cyan-100 text-cyan-700'],
     savings: ['🐷', 'bg-teal-100 text-teal-700'],
     loan: ['🏦', 'bg-slate-100 text-slate-700'],
-    charity: ['🤲', 'bg-lime-100 text-lime-700'],
+    charity: ['💝', 'bg-lime-100 text-lime-700'],
+    sadaqah: ['🤲', 'bg-emerald-100 text-emerald-700'],
     bank_fees: ['🧾', 'bg-slate-100 text-slate-600'],
     other: ['✨', 'bg-slate-100 text-slate-600'],
     // money in

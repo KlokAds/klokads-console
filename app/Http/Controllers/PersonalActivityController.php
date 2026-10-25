@@ -30,6 +30,7 @@ class PersonalActivityController extends Controller
         $transactions = MoneyTransaction::with('account:id,name,currency,scope,provider,purpose', 'toAccount:id,name,currency,scope,provider,purpose')
             ->where(fn ($q) => $q->whereIn('account_id', $ids)->orWhereIn('to_account_id', $ids))
             ->whereBetween('occurred_on', [$start->toDateString(), $start->endOfMonth()->toDateString().' 23:59:59'])
+            ->where(fn ($q) => $q->whereNull('category')->orWhere('category', '!=', Catalog::SADAQAH))
             ->latest('occurred_on')->latest('id')
             ->get();
 

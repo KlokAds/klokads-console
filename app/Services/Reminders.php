@@ -143,6 +143,7 @@ class Reminders
         $ids = Account::where('scope', 'personal')->pluck('id');
         $entries = MoneyTransaction::with('account:id,currency')->whereIn('account_id', $ids)
             ->whereDate('occurred_on', $local->toDateString())->get();
+        $entries = $entries->reject(fn ($t) => $t->category === Catalog::SADAQAH);
         $spent = $entries->where('kind', 'expense')->reject(fn ($t) => array_key_exists((string) $t->category, Catalog::LOAN_CATEGORIES))
             ->groupBy(fn ($t) => strtoupper($t->account->currency))
             ->map(fn (Collection $list, $currency) => $this->money((int) $list->sum(fn ($t) => $t->amount + $t->fee), $currency));

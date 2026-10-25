@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Account;
 use App\Models\Expense;
+use App\Models\InboxMessage;
 use App\Models\MoneyTransaction;
 use App\Models\Payout;
 use App\Models\Setting;
@@ -89,6 +90,10 @@ class Ledger
         return DB::transaction(function () use ($data, $tx) {
             $tx ??= new MoneyTransaction;
             $tx->fill($data);
+            if ($tx->category === Catalog::SADAQAH) {
+                $tx->counterparty = null;
+                $tx->description = null;
+            }
             $from = Account::findOrFail($tx->account_id);
 
             $tx->base_amount = match ($tx->kind) {
@@ -106,6 +111,9 @@ class Ledger
             }
 
             $tx->save();
+            if ($tx->category === Catalog::SADAQAH) {
+                InboxMessage::where('money_transaction_id', $tx->id)->update(['body' => '🤲', 'sender' => null, 'parsed' => null, 'note' => null]);
+            }
             self::syncExpenses($tx->load('account', 'toAccount'));
 
             return $tx;

@@ -62,6 +62,7 @@ class Catalog
         'savings' => 'Savings & investment',
         'loan' => 'Loan / EMI',
         'charity' => 'Charity / zakat',
+        'sadaqah' => 'Sadaqah (not recorded)',
         'envelope' => 'Monthly envelope',
         'bank_fees' => 'Bank & transfer fees',
         'other' => 'Other',
@@ -153,6 +154,12 @@ class Catalog
         'payoneer' => "1. Open Payoneer and log in.\n2. Choose Withdraw → To bank account.\n3. Pick a Bangladesh bank account.\n4. Confirm — it arrives in taka in 1–2 working days.",
         'wise' => "1. Open the Wise app and log in.\n2. Choose Send → Bangladesh (BDT).\n3. Pick a bank account or bKash receiver.\n4. Confirm the amount.",
     ];
+
+    /**
+     * Sadaqah is between me and Allah: only the balance goes down. Who, why and any note are
+     * erased, and it shows in no list, total, search or report.
+     */
+    public const SADAQAH = 'sadaqah';
 
     /** Personal categories that are set by the app, never picked by hand. */
     public const AUTO_CATEGORIES = ['envelope', 'bank_fees'];

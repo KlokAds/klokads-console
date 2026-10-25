@@ -115,6 +115,24 @@ class PersonalAutomationTest extends TestCase
         $this->assertStringContainsString('UCB ••1603 → UCB salary ••6318', AppNotification::latest('id')->first()->title);
     }
 
+    public function test_sadaqah_only_lowers_the_balance_and_leaves_no_record(): void
+    {
+        // Sent by bKash: the SMS came in as an entry; I mark it sadaqah.
+        $m = app(AutoEntries::class)->ingest('sms', 'bKash', 'Send Money Tk 1,000.00 to 01811000000 successful. Ref Masjid. Fee Tk 0.00. TrxID 4SADQ123 at 25/10/2026 10:00');
+        $tx = MoneyTransaction::find($m->money_transaction_id);
+        $this->put("/money/{$tx->id}", ['kind' => 'expense', 'account_id' => $this->bkash->id, 'amount' => 1000, 'category' => 'sadaqah', 'counterparty' => 'Masjid', 'description' => 'Friday', 'occurred_on' => now()->toDateString()])->assertSessionHasNoErrors();
+
+        $this->assertSame(4900000, Ledger::balance($this->bkash), 'the balance goes down');
+        $tx->refresh();
+        $this->assertSame([null, null], [$tx->counterparty, $tx->description], 'who and why are erased');
+        $this->assertSame('🤲', $m->fresh()->body, 'the SMS text is erased too');
+        $this->assertNull($m->fresh()->parsed);
+
+        $this->get('/personal/activity')->assertInertia(fn ($page) => $page->has('entries', 0));
+        $this->get('/personal')->assertInertia(fn ($page) => $page->has('recent', 0)->where('stats.BDT.current.spent', 0));
+        $this->getJson('/search?q=Masjid')->assertOk()->assertDontSee('Masjid');
+    }
+
     public function test_an_account_set_to_other_bank_still_matches_by_its_last_4(): void
     {
         $midland = Account::create(['name' => 'Midland Bank', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'other', 'last4' => '2093', 'currency' => 'BDT']);
