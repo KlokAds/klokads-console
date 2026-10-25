@@ -96,6 +96,15 @@ const marginPct = (s) => (s.revenue ? Math.round((s.margin / s.revenue) * 100) :
                 <CampaignCard v-for="c in adDesk.campaigns" :key="c.id" :campaign="c" :currency="adDesk.currency" :control-url="route('clients.campaigns.control', [adDesk.client.id, c.id])" />
             </div>
             <EmptyState v-if="!adDesk.campaigns.length" compact icon="megaphone" title="No campaign spend in the last 7 days" text="Campaigns show here as soon as they spend." />
+
+            <div v-if="adDesk.advice.length" class="mt-3 rounded-3xl border border-sky-200 bg-sky-50/60 p-4 shadow-sm dark:border-sky-500/30 dark:bg-sky-500/10">
+                <div class="text-sm font-bold text-ink-900">Meta says</div>
+                <div v-for="(a, i) in adDesk.advice" :key="i" class="mt-2.5 rounded-2xl bg-surface p-3 ring-1 ring-line/70">
+                    <div class="text-sm font-bold text-ink-900">{{ a.title }}</div>
+                    <div class="mt-0.5 whitespace-pre-line text-xs text-ink-600">{{ a.body }}</div>
+                    <a v-if="a.url" :href="a.url" target="_blank" class="mt-1 inline-block text-xs font-semibold text-sky-700">Open in Ads Manager →</a>
+                </div>
+            </div>
             <div v-if="adDesk.suggestions.length" class="mt-3 rounded-3xl border border-line/70 bg-surface p-4 shadow-sm">
                 <div class="text-sm font-bold text-ink-900">Suggestions</div>
                 <ul class="mt-2 space-y-1.5 text-sm text-ink-700"><li v-for="(s, i) in adDesk.suggestions" :key="i">💡 {{ s.text }}</li></ul>

@@ -10,6 +10,7 @@ use App\Models\MetaSpendDay;
 use App\Models\Payout;
 use App\Models\RecurringPlan;
 use App\Models\Setting;
+use App\Services\AdAdvice;
 use App\Services\AdPerformance;
 use App\Services\Airwallex;
 use App\Services\CashflowReport;
@@ -118,6 +119,7 @@ class DashboardController extends Controller
             'waiting' => ChargeRequest::where('client_id', $client->id)->where('status', 'pending')->first()?->only('id', 'amount'),
             'campaigns' => $this->allCampaigns($client, $today),
             'suggestions' => AdPerformance::suggestions($client),
+            'advice' => AdAdvice::forOwner($client->company ?: $client->name),
         ];
     }
 }

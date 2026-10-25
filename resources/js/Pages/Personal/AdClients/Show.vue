@@ -31,6 +31,7 @@ const props = defineProps({
     rate: Object,
     tab: String,
     payAccounts: { type: Array, default: () => [] },
+    advice: { type: Array, default: () => [] },
 });
 
 const m = (cents, cur) => money(cents, cur);
@@ -225,6 +226,14 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                 </button>
             </div>
             <EmptyState v-if="!campaigns.length" compact icon="megaphone" title="No campaign spend in this period" text="Add their ad account in Setup, or pick another period." />
+            <div v-if="advice.length" class="mt-3 rounded-3xl border border-sky-200 bg-sky-50/60 p-4 shadow-sm dark:border-sky-500/30 dark:bg-sky-500/10">
+                <div class="text-sm font-bold text-ink-900">Meta says</div>
+                <div v-for="(a, i) in advice" :key="i" class="mt-2.5 rounded-2xl bg-surface p-3 ring-1 ring-line/70">
+                    <div class="text-sm font-bold text-ink-900">{{ a.title }}</div>
+                    <div class="mt-0.5 whitespace-pre-line text-xs text-ink-600">{{ a.body }}</div>
+                    <a v-if="a.url" :href="a.url" target="_blank" class="mt-1 inline-block text-xs font-semibold text-sky-700">Open in Ads Manager →</a>
+                </div>
+            </div>
             <div class="flex flex-wrap items-center gap-2 rounded-3xl border border-line/70 bg-surface p-4 shadow-sm">
                 <Icon name="link" :size="18" class="text-teal-600" />
                 <div class="min-w-0 flex-1"><div class="text-sm font-semibold text-ink-900">Their report link</div><div class="truncate text-xs text-ink-500">No login · their campaigns and results, updated hourly</div></div>

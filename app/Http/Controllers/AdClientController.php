@@ -7,6 +7,7 @@ use App\Models\PersonalAdAssignment;
 use App\Models\PersonalAdCharge;
 use App\Models\PersonalAdDay;
 use App\Models\PersonalClient;
+use App\Services\AdAdvice;
 use App\Services\KlokOneRate;
 use App\Services\MetaAds;
 use App\Services\PersonalAds;
@@ -53,6 +54,7 @@ class AdClientController extends Controller
         return Inertia::render('Personal/AdClients/Show', [
             'client' => $client->only('id', 'name', 'ad_bill', 'ad_fee_percent', 'ad_bill_basis', 'ad_meta_rate') + ['billed_until' => $client->ad_billed_until?->toDateString()],
             'rate' => KlokOneRate::current(),
+            'advice' => AdAdvice::forOwner($client->name),
             'tab' => in_array($request->query('tab'), ['overview', 'campaigns', 'money', 'setup'], true) ? $request->query('tab') : 'overview',
             'payAccounts' => Account::where('archived', false)->where('scope', 'personal')->where('currency', 'BDT')->orderBy('name')->get(['id', 'name']),
             'range' => ['period' => $period, 'from' => $start->toDateString(), 'to' => $end->toDateString(), 'label' => PersonalAds::period($start, $end)],

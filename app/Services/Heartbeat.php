@@ -48,6 +48,7 @@ class Heartbeat
             'ad_statements' => fn () => app(AdStatements::class)->draftMonthly(),
             'ad_performance' => fn () => app(AdPerformance::class)->run(),
             'personal_ads' => fn () => app(PersonalAds::class)->run(),
+            'ad_advice' => fn () => app(AdAdvice::class)->run(),
             'emails' => fn () => app(EmailInbox::class)->poll(),
             'personal_invoices' => fn () => app(PersonalInvoicing::class)->runRecurring(),
             'personal_reminders' => fn () => app(PersonalReminders::class)->run(),

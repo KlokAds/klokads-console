@@ -172,6 +172,16 @@ class MetaAds
     }
 
     /**
+     * What Meta says about the account: its recommendations and the running campaigns' delivery issues.
+     *
+     * @return array<int, array{kind: string, type: string, objects: array<int, string>, title: ?string, body: ?string, lift: mixed, url: ?string}>
+     */
+    public function advice(string $accountId): array
+    {
+        return $this->pilot('ad-accounts/'.self::act($accountId).'/advice')['data'] ?? [];
+    }
+
+    /**
      * Meta's card charges since a day, from the account's activity log (with Meta's transaction id).
      *
      * @return array<int, array{id: string, time: string, amount: int, currency: string}>
