@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\PersonalAdAssignment;
 use App\Models\PersonalAdBill;
+use App\Models\PersonalAdCharge;
 use App\Models\PersonalAdDay;
 use App\Models\PersonalClient;
 use Carbon\CarbonImmutable;
@@ -245,9 +246,9 @@ class PersonalAds
     }
 
     /**
-     * Bill the days from the first unbilled one up to $to, one invoice per currency; then those days
-     * are billed for good (the next bill starts the day after). Days my card paid nothing for still
-     * move the date on, so a later bill never reaches back.
+     * Bill what is not billed yet, up to $to (finished days only): by spend — the days right after
+     * the last bill — or, for a client billed by card charges, every charge not billed yet. One bill
+     * in taka; each day or charge is billed once.
      *
      * @return array<int, PersonalAdBill>
      */
@@ -255,33 +256,73 @@ class PersonalAds
     {
         // Only finished days: today's spend is still growing, and a billed day is never billed again.
         $to = $to->min(CarbonImmutable::yesterday());
+
+        if ($c->ad_bill_basis === 'charges') {
+            $charges = PersonalAdCharge::where('personal_client_id', $c->id)->whereNull('personal_ad_bill_id')->whereDate('date', '<=', $to->toDateString())->orderBy('date')->get();
+            if ($charges->isEmpty()) {
+                return [];
+            }
+            $bill = $this->draftBill($c, CarbonImmutable::parse($charges->first()->date), CarbonImmutable::parse($charges->last()->date), 'charges',
+                $charges->groupBy('currency')->map(fn ($list) => (int) $list->sum('amount'))->all());
+            PersonalAdCharge::whereKey($charges->pluck('id'))->update(['personal_ad_bill_id' => $bill->id]);
+
+            return [$bill];
+        }
+
         $from = self::unbilledFrom($c);
         if (! $from || $from->gt($to)) {
             return [];
         }
-        $bills = [];
-        foreach (self::money($c, $from, $to) as $cur => $m) {
-            if ($m['my_card'] > 0) {
-                $bills[] = $this->draftBill($c, $from, $to, $cur, $m['my_card']);
-            }
-        }
+        $amounts = collect(self::money($c, $from, $to))->map(fn ($m) => $m['my_card'])->filter()->all();
+        $bills = $amounts ? [$this->draftBill($c, $from, $to, 'spend', $amounts)] : [];
         $c->update(['ad_billed_until' => $to->toDateString()]);
 
         return $bills;
     }
 
-    private function draftBill(PersonalClient $c, CarbonImmutable $from, CarbonImmutable $to, string $currency, int $spend): PersonalAdBill
+    /**
+     * Taka for an amount in the ad account's currency: → dollars (BDT ÷ Meta's rate) → × the
+     * agency's dollar rate (KlokOne). Commission is added on top, separately.
+     *
+     * @param  array<string, int>  $amounts  currency => cents
+     * @return array{usd: int, bdt: int, fx: float, lines: array<int, string>}
+     */
+    public static function inTaka(PersonalClient $c, array $amounts, ?float $fx = null): array
     {
-        $period = self::period($from, $to);
-        $items = [['description' => "Meta ads — {$period}", 'qty' => 1, 'rate' => $spend]];
-        if ($c->ad_fee_percent > 0) {
-            $items[] = ['description' => 'Commission ('.rtrim(rtrim(number_format($c->ad_fee_percent, 2), '0'), '.').'%)', 'qty' => 1, 'rate' => (int) round($spend * $c->ad_fee_percent / 100)];
+        $fx ??= KlokOneRate::fx();
+        $usd = 0.0; // exact: rounded only at the end, so no poisha are lost on the way
+        $lines = [];
+        foreach ($amounts as $cur => $cents) {
+            $dollars = strtoupper($cur) === 'USD' ? (float) $cents : $cents / (float) $c->ad_meta_rate;
+            $usd += $dollars;
+            $lines[] = strtoupper($cur) === 'USD'
+                ? Notify::money($cents, 'USD')
+                : Notify::money($cents, $cur).' ÷ '.rtrim(rtrim(number_format((float) $c->ad_meta_rate, 2), '0'), '.').' = '.Notify::money((int) round($dollars), 'USD');
         }
-        $invoice = app(PersonalInvoicing::class)->create($c, $items, CarbonImmutable::today(), CarbonImmutable::today()->addDays(7), "Meta ads paid by my card, {$period}.", null, $currency);
+
+        return ['usd' => (int) round($usd), 'bdt' => (int) round($usd * $fx), 'fx' => $fx, 'lines' => $lines];
+    }
+
+    /** @param  array<string, int>  $amounts  currency => cents */
+    private function draftBill(PersonalClient $c, CarbonImmutable $from, CarbonImmutable $to, string $basis, array $amounts): PersonalAdBill
+    {
+        $taka = self::inTaka($c, $amounts);
+        if ($taka['fx'] <= 0) {
+            throw new \RuntimeException('The dollar rate from KlokOne is not known yet — open KlokOne once, or set it in Client ads.');
+        }
+        $period = self::period($from, $to);
+        $what = $basis === 'charges' ? 'Meta charges' : 'Meta ads';
+        $rate = rtrim(rtrim(number_format($taka['fx'], 2), '0'), '.');
+        $items = [['description' => "{$what} — {$period}: ".implode(' + ', $taka['lines'])." × {$rate}", 'qty' => 1, 'rate' => $taka['bdt']]];
+        if ($c->ad_fee_percent > 0) {
+            $items[] = ['description' => 'Commission ('.rtrim(rtrim(number_format($c->ad_fee_percent, 2), '0'), '.').'%)', 'qty' => 1, 'rate' => (int) round($taka['bdt'] * $c->ad_fee_percent / 100)];
+        }
+        $invoice = app(PersonalInvoicing::class)->create($c, $items, CarbonImmutable::today(), CarbonImmutable::today()->addDays(7),
+            "{$what} my card paid, {$period}. Dollar rate {$rate}.", null, 'BDT');
         $bill = PersonalAdBill::create(['personal_client_id' => $c->id, 'period_from' => $from->toDateString(), 'period_to' => $to->toDateString(),
-            'currency' => $currency, 'spend' => $spend, 'personal_invoice_id' => $invoice->id]);
-        $this->notify->send('invoice', "🧾 {$c->name}: ads bill ready — ".Notify::money($invoice->total, $currency),
-            "{$period}, drafted in My invoices from what your card paid. Check it, then send it.", route('personal.invoices.index'));
+            'currency' => 'BDT', 'spend' => (int) array_sum($amounts), 'basis' => $basis, 'usd' => $taka['usd'], 'fx_rate' => $taka['fx'], 'personal_invoice_id' => $invoice->id]);
+        $this->notify->send('invoice', "🧾 {$c->name}: ads bill ready — ".Notify::money($invoice->total, 'BDT'),
+            "{$period} · ".Notify::money($taka['usd'], 'USD')." × {$rate} + commission. Drafted in My invoices — check it, then send it.", route('personal.invoices.index'));
 
         return $bill;
     }
@@ -315,9 +356,19 @@ class PersonalAds
             'paid' => (int) $list->sum(fn ($r) => $r['invoice']['paid'] ?? 0),
             'due' => (int) $list->sum(fn ($r) => $r['invoice'] && $r['invoice']['status'] !== 'void' ? max(0, $r['invoice']['total'] - $r['invoice']['paid']) : 0),
         ])->all();
-        $from = self::unbilledFrom($c);
-        $unbilled = $from ? collect(self::money($c, $from, CarbonImmutable::today()))->map(fn ($m) => $m['my_card'])->filter()->all() : [];
+        if ($c->ad_bill_basis === 'charges') {
+            $open = PersonalAdCharge::where('personal_client_id', $c->id)->whereNull('personal_ad_bill_id')->get();
+            $from = $open->min('date') ? CarbonImmutable::parse($open->min('date')) : null;
+            $unbilled = $open->groupBy('currency')->map(fn ($list) => (int) $list->sum('amount'))->all();
+        } else {
+            $from = self::unbilledFrom($c);
+            $unbilled = $from ? collect(self::money($c, $from, CarbonImmutable::yesterday()))->map(fn ($m) => $m['my_card'])->filter()->all() : [];
+        }
+        $now = $unbilled ? self::inTaka($c, $unbilled) : null;
 
-        return ['bills' => $rows->reverse()->values()->all(), 'totals' => $totals, 'unbilled' => $unbilled, 'unbilled_from' => $from?->toDateString()];
+        return ['bills' => $rows->reverse()->values()->all(), 'totals' => $totals, 'unbilled' => $unbilled, 'unbilled_from' => $from?->toDateString(),
+            'unbilled_taka' => $now ? ['usd' => $now['usd'], 'bdt' => $now['bdt'], 'with_fee' => (int) round($now['bdt'] * (1 + $c->ad_fee_percent / 100)), 'fx' => $now['fx']] : null,
+            'charges' => PersonalAdCharge::where('personal_client_id', $c->id)->orderByDesc('date')->orderByDesc('id')->limit(30)->get()
+                ->map(fn ($ch) => ['id' => $ch->id, 'date' => $ch->date->toDateString(), 'currency' => $ch->currency, 'amount' => $ch->amount, 'note' => $ch->note, 'billed' => (bool) $ch->personal_ad_bill_id])->all()];
     }
 }

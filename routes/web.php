@@ -123,6 +123,8 @@ Route::middleware('auth')->group(function () {
         Route::delete('/{client}/assign/{assignment}', [AdClientController::class, 'unassign'])->name('unassign');
         Route::put('/{client}/settings', [AdClientController::class, 'settings'])->name('settings');
         Route::post('/{client}/bill', [AdClientController::class, 'bill'])->name('bill');
+        Route::post('/{client}/charges', [AdClientController::class, 'charge'])->name('charges.store');
+        Route::delete('/{client}/charges/{charge}', [AdClientController::class, 'removeCharge'])->name('charges.destroy');
         Route::post('/{client}/campaigns/{campaign}', [AdClientController::class, 'control'])->name('control');
     });
     Route::post('/personal/investments', [InvestmentController::class, 'store'])->middleware('personal')->name('personal.investments.store');

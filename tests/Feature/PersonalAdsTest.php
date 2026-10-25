@@ -34,6 +34,7 @@ class PersonalAdsTest extends TestCase
         Setting::put('personal_timezone', 'Asia/Dhaka');
         Setting::put('pilot_url', 'https://pilot.test');
         Setting::put('pilot_bridge_key', 'bridge-key');
+        Setting::put('klokone_fx_rate', '129.83'); // KlokOne's dollar rate (last known)
         CarbonImmutable::setTestNow('2026-11-01 10:00');
         $this->travelTo(CarbonImmutable::parse('2026-11-01 10:00'));
         $this->edge = PersonalClient::create(['name' => 'Edge Education']);
@@ -112,11 +113,14 @@ class PersonalAdsTest extends TestCase
         $this->assertSame(2, app(PersonalAds::class)->bills(CarbonImmutable::parse('2026-11-02 10:00', 'Asia/Dhaka')));
         $bill = PersonalAdBill::where('personal_client_id', $this->edge->id)->sole();
         $this->assertSame(['2026-10-16', '2026-10-31'], [$bill->period_from->toDateString(), $bill->period_to->toDateString()]);
-        $this->assertSame(80000 + 16000, $bill->invoice->total, 'the ads + 20% commission');
-        $this->assertSame('Commission (20%)', $bill->invoice->items[1]['description']);
+        // BDT 800 ÷ 119 = $6.72 → × 129.83 = BDT 872.81 → + 20%.
+        $taka = (int) round(80000 / 119 * 129.83);
+        $this->assertSame($taka + (int) round($taka * 0.2), $bill->invoice->total, 'in dollars at the agency rate, + 20% commission');
         $this->assertSame('BDT', $bill->invoice->currency);
+        $this->assertSame('Commission (20%)', $bill->invoice->items[1]['description']);
         $this->assertNull($bill->invoice->sent_at, 'drafted, not sent');
-        $this->assertSame('USD', PersonalAdBill::where('personal_client_id', $this->marine->id)->sole()->currency);
+        // Marine's account is in dollars: $15 × 129.83 + 20%, billed in taka too.
+        $this->assertSame((int) round(1500 * 129.83 * 1.2), PersonalAdBill::where('personal_client_id', $this->marine->id)->sole()->invoice->total);
 
         // Again, or "Bill now" up to today: nothing new — those days are billed.
         $this->assertSame(0, app(PersonalAds::class)->bills(CarbonImmutable::parse('2026-11-03 10:00', 'Asia/Dhaka')));
@@ -124,7 +128,7 @@ class PersonalAdsTest extends TestCase
         $this->assertSame(2, PersonalInvoice::count());
 
         $ledger = PersonalAds::ledger($this->edge->fresh());
-        $this->assertSame(96000, $ledger['totals']['BDT']['due']);
+        $this->assertSame($bill->invoice->total, $ledger['totals']['BDT']['due']);
         $this->assertSame('2026-11-01', $ledger['unbilled_from']);
     }
 
@@ -164,5 +168,30 @@ class PersonalAdsTest extends TestCase
         app(PersonalAds::class)->sync(force: true);
 
         $this->assertSame(1, AppNotification::where('title', 'Edge Education: “Edge Leads” ▶️ running again')->count());
+    }
+
+    public function test_billed_by_each_card_charge_i_enter_in_taka_or_dollars(): void
+    {
+        $this->fakePilot();
+        $this->assignBoth();
+        $this->edge->update(['ad_bill_basis' => 'charges', 'ad_meta_rate' => 119]);
+
+        // Edge's last charge: BDT 2,501.94 → ÷ 119 = $21.02 → × 129.83 = BDT 2,729.65 → + 20% = BDT 3,275.58.
+        $this->post("/personal/client-ads/{$this->edge->id}/charges", ['date' => '2026-10-24', 'amount' => '2501.94', 'currency' => 'BDT'])->assertSessionHas('success');
+        $ledger = PersonalAds::ledger($this->edge->fresh());
+        $taka = (int) round(250194 / 119 * 129.83);
+        $this->assertSame($taka + (int) round($taka * 0.2), $ledger['unbilled_taka']['with_fee']);
+
+        $this->post("/personal/client-ads/{$this->edge->id}/bill")->assertSessionHas('success');
+        $invoice = PersonalAdBill::where('personal_client_id', $this->edge->id)->sole()->invoice;
+        $this->assertSame($taka + (int) round($taka * 0.2), $invoice->total);
+        $this->assertStringContainsString('÷ 119', $invoice->items[0]['description']);
+
+        // A charge entered in dollars (what the card was cut): straight × rate + 20%. The first is not billed again.
+        $this->post("/personal/client-ads/{$this->edge->id}/charges", ['date' => '2026-10-31', 'amount' => '10', 'currency' => 'USD']);
+        $this->post("/personal/client-ads/{$this->edge->id}/bill");
+        $second = PersonalAdBill::where('personal_client_id', $this->edge->id)->latest('id')->first()->invoice;
+        $this->assertSame((int) round(1000 * 129.83 * 1.2), $second->total);
+        $this->assertSame(2, PersonalAdBill::where('personal_client_id', $this->edge->id)->count());
     }
 }

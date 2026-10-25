@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\PersonalAdAssignment;
+use App\Models\PersonalAdCharge;
 use App\Models\PersonalAdDay;
 use App\Models\PersonalClient;
+use App\Services\KlokOneRate;
 use App\Services\MetaAds;
 use App\Services\PersonalAds;
 use Carbon\CarbonImmutable;
@@ -47,7 +49,8 @@ class AdClientController extends Controller
         [$start, $end, $period] = $this->period($request);
 
         return Inertia::render('Personal/AdClients/Show', [
-            'client' => $client->only('id', 'name', 'ad_bill', 'ad_fee_percent') + ['billed_until' => $client->ad_billed_until?->toDateString()],
+            'client' => $client->only('id', 'name', 'ad_bill', 'ad_fee_percent', 'ad_bill_basis', 'ad_meta_rate') + ['billed_until' => $client->ad_billed_until?->toDateString()],
+            'rate' => KlokOneRate::current(),
             'range' => ['period' => $period, 'from' => $start->toDateString(), 'to' => $end->toDateString(), 'label' => PersonalAds::period($start, $end)],
             'campaigns' => PersonalAds::table($client, $start, $end, $request->boolean('all')),
             'showAll' => $request->boolean('all'),
@@ -136,17 +139,47 @@ class AdClientController extends Controller
             'ad_bill' => ['required', 'boolean'],
             'ad_fee_percent' => ['required', 'numeric', 'between:0,100'],
             'billed_until' => ['nullable', 'date', 'before_or_equal:today'],
+            'ad_bill_basis' => ['required', Rule::in(['spend', 'charges'])],
+            'ad_meta_rate' => ['required', 'numeric', 'between:50,500'],
         ]);
-        $client->update(['ad_bill' => $data['ad_bill'], 'ad_fee_percent' => $data['ad_fee_percent'], 'ad_billed_until' => $data['billed_until'] ?? null]);
+        $client->update(['ad_bill' => $data['ad_bill'], 'ad_fee_percent' => $data['ad_fee_percent'], 'ad_billed_until' => $data['billed_until'] ?? null,
+            'ad_bill_basis' => $data['ad_bill_basis'], 'ad_meta_rate' => $data['ad_meta_rate']]);
 
         return back()->with('success', 'Saved.');
+    }
+
+    /** What Meta took from my card for this client (from the card's history), to bill once. */
+    public function charge(Request $request, PersonalClient $client): RedirectResponse
+    {
+        $data = $request->validate([
+            'date' => ['required', 'date', 'before_or_equal:today'],
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:100000000'],
+            'currency' => ['required', 'string', 'size:3'],
+            'note' => ['nullable', 'string', 'max:200'],
+        ]);
+        PersonalAdCharge::create(['personal_client_id' => $client->id, 'date' => $data['date'], 'currency' => strtoupper($data['currency']),
+            'amount' => $this->toCents($data['amount']), 'note' => $data['note'] ?? null]);
+
+        return back()->with('success', 'Charge added — it goes on the next bill.');
+    }
+
+    public function removeCharge(PersonalClient $client, PersonalAdCharge $charge): RedirectResponse
+    {
+        abort_unless($charge->personal_client_id === $client->id && ! $charge->personal_ad_bill_id, 404);
+        $charge->delete();
+
+        return back()->with('success', 'Removed.');
     }
 
     /** Bill now: every unbilled day up to the date given (today by default). */
     public function bill(Request $request, PersonalClient $client): RedirectResponse
     {
         $data = $request->validate(['to' => ['nullable', 'date', 'before_or_equal:today']]);
-        $bills = $this->ads->billUpTo($client, CarbonImmutable::parse($data['to'] ?? 'today')->startOfDay());
+        try {
+            $bills = $this->ads->billUpTo($client, CarbonImmutable::parse($data['to'] ?? 'today')->startOfDay());
+        } catch (Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return back()->with($bills ? 'success' : 'error', $bills ? count($bills).' bill'.(count($bills) > 1 ? 's' : '').' drafted in My invoices — check and send.' : 'Nothing to bill in those days.');
     }

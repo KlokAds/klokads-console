@@ -24,6 +24,7 @@ const props = defineProps({
     reportUrl: String,
     accounts: { type: Array, default: null },
     showAll: Boolean,
+    rate: Object,
 });
 
 const m = (cents, cur) => money(cents, cur);
@@ -98,7 +99,23 @@ async function billNow() {
 }
 const INVOICE = { unpaid: ['Unpaid', 'text-amber-600'], partial: ['Part paid', 'text-amber-600'], paid: ['Paid', 'text-emerald-600'], void: ['Void', 'text-ink-400'] };
 
-const settings = useForm({ ad_bill: props.client.ad_bill, ad_fee_percent: props.client.ad_fee_percent, billed_until: props.client.billed_until ?? '' });
+const settings = useForm({
+    ad_bill: props.client.ad_bill,
+    ad_fee_percent: props.client.ad_fee_percent,
+    billed_until: props.client.billed_until ?? '',
+    ad_bill_basis: props.client.ad_bill_basis,
+    ad_meta_rate: props.client.ad_meta_rate,
+});
+const byCharges = computed(() => props.client.ad_bill_basis === 'charges');
+
+// What Meta took from my card (from the card's history) — each goes on one bill.
+const charge = useForm({ date: yesterday, amount: '', currency: props.assignments[0]?.currency ?? 'BDT', note: '' });
+const addCharge = () => charge.post(route('ad-clients.charges.store', props.client.id), { preserveScroll: true, onSuccess: () => charge.reset('amount', 'note') });
+async function removeCharge(ch) {
+    if (await confirmDialog({ title: 'Remove this charge?', confirmLabel: 'Remove', tone: 'danger' })) {
+        router.delete(route('ad-clients.charges.destroy', [props.client.id, ch.id]), { preserveScroll: true });
+    }
+}
 const saveSettings = () => settings.put(route('ad-clients.settings', props.client.id), { preserveScroll: true });
 
 // ---------------------------------------------------------------- whose accounts / campaigns
@@ -209,8 +226,38 @@ const accountOptions = computed(() => props.accounts ?? []);
                 <div class="rounded-2xl bg-teal-50 p-3 dark:bg-teal-500/10">
                     <div class="text-xs text-teal-700">Not billed yet<template v-if="ledger.unbilled_from"> · since {{ date(ledger.unbilled_from) }}</template></div>
                     <div class="font-bold tabular-nums text-teal-800 dark:text-teal-300">{{ sum(ledger.unbilled) }}</div>
+                    <div v-if="ledger.unbilled_taka" class="mt-0.5 text-xs text-teal-700">
+                        = {{ m(ledger.unbilled_taka.usd, 'USD') }} × {{ ledger.unbilled_taka.fx }} + {{ client.ad_fee_percent }}% ≈ <b>{{ m(ledger.unbilled_taka.with_fee, 'BDT') }}</b> due
+                    </div>
                 </div>
             </div>
+            <p class="mt-2 text-xs text-ink-500">
+                Bill = {{ byCharges ? 'each card charge' : 'the ads spent' }} → dollars (taka ÷ {{ client.ad_meta_rate }}) → × KlokOne's dollar rate
+                <b>{{ rate.fx || '—' }}</b><template v-if="rate.source === 'saved'"> (last known)</template> → + {{ client.ad_fee_percent }}% commission, in taka.
+            </p>
+
+            <!-- Card charges (for a client billed by what Meta charged) -->
+            <div v-if="byCharges" class="mt-4 rounded-2xl border border-line p-3">
+                <div class="text-sm font-semibold text-ink-900">What Meta charged your card</div>
+                <form class="mt-2 flex flex-wrap items-end gap-2" @submit.prevent="addCharge">
+                    <DatePicker v-model="charge.date" :max="today" size="sm" class="w-36" />
+                    <div class="w-32"><Segmented v-model="charge.currency" :options="[{ value: 'USD', label: '$ USD' }, { value: 'BDT', label: '৳ BDT' }]" block size="sm" /></div>
+                    <input v-model="charge.amount" type="number" step="0.01" min="0.01" class="input input-sm w-32" :placeholder="charge.currency === 'USD' ? 'Dollars cut' : 'Taka charged'" required />
+                    <input v-model="charge.note" class="input input-sm min-w-[8rem] flex-1" placeholder="Note (optional)" />
+                    <button class="btn-secondary btn-sm" :disabled="charge.processing || !charge.amount">Add</button>
+                </form>
+                <div class="mt-2 divide-y divide-line/70">
+                    <div v-for="ch in ledger.charges" :key="ch.id" class="flex items-center gap-3 py-2 text-sm">
+                        <span class="w-24 text-ink-500">{{ date(ch.date) }}</span>
+                        <span class="min-w-0 flex-1 truncate text-ink-600">{{ ch.note }}</span>
+                        <span class="tabular-nums font-semibold">{{ m(ch.amount, ch.currency) }}</span>
+                        <span class="w-16 text-right text-xs font-bold" :class="ch.billed ? 'text-emerald-600' : 'text-amber-600'">{{ ch.billed ? 'Billed' : 'To bill' }}</span>
+                        <button v-if="!ch.billed" class="icon-btn" aria-label="Remove" @click="removeCharge(ch)"><Icon name="trash" :size="14" /></button>
+                    </div>
+                    <p v-if="!ledger.charges.length" class="py-2 text-xs text-ink-500">No charges yet — add each one from your card's history.</p>
+                </div>
+            </div>
+
             <div class="mt-3 flex flex-wrap items-center gap-2">
                 <DatePicker v-model="billTo" :min="ledger.unbilled_from || null" :max="yesterday" size="sm" class="w-40" placeholder="Up to yesterday" />
                 <button class="btn-primary btn-sm" :disabled="!Object.keys(ledger.unbilled).length" @click="billNow"><Icon name="invoice" :size="14" /> Bill now</button>
@@ -229,8 +276,16 @@ const accountOptions = computed(() => props.accounts ?? []);
                     <span class="text-sm text-ink-700">Draft the bill on the 1st for last month</span>
                     <Toggle v-model="settings.ad_bill" label="Monthly bill" />
                 </div>
+                <div class="sm:col-span-3">
+                    <label class="label">Bill by</label>
+                    <Segmented v-model="settings.ad_bill_basis" :options="[{ value: 'charges', label: 'What Meta charged my card' }, { value: 'spend', label: 'What the ads spent' }]" block size="sm" />
+                </div>
                 <div>
-                    <label class="label">Your fee on the bill (%)</label>
+                    <label class="label">Meta's taka per dollar</label>
+                    <input v-model="settings.ad_meta_rate" type="number" step="0.01" min="50" class="input" />
+                </div>
+                <div>
+                    <label class="label">Your commission (%)</label>
                     <input v-model="settings.ad_fee_percent" type="number" step="0.5" min="0" max="100" class="input" />
                 </div>
                 <div>
