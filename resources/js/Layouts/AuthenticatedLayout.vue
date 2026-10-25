@@ -63,6 +63,26 @@ const businessBar = [
 ];
 const onBar = (item) => item.match.some((m) => route().current(m));
 
+// Inside the phone app, business is an app: no side menu — a tab bar, ＋ in the middle, and More as a sheet.
+// (A phone's browser keeps the side menu.)
+const inApp = typeof navigator !== 'undefined' && navigator.userAgent.includes('KlokApp');
+const appShell = computed(() => inApp && mode.value === 'business');
+const appTabs = [businessBar[2], businessBar[0], null, businessBar[3]];
+const sheet = ref(null); // 'create' | 'more'
+const moreTiles = [
+    { name: 'Ad money', route: 'ad-money.index', match: 'ad-money.*', icon: 'chart', tint: 'from-violet-500 to-fuchsia-500' },
+    { name: 'Cashflow', route: 'cashflow.index', match: 'cashflow.*', icon: 'flow', tint: 'from-sky-500 to-cyan-500' },
+    { name: 'Payouts', route: 'payouts.index', match: 'payouts.*', icon: 'bank', tint: 'from-emerald-500 to-teal-500' },
+    { name: 'Bank & money', route: 'money.index', params: { scope: 'business' }, match: 'money.*', icon: 'wallet', tint: 'from-amber-500 to-orange-500' },
+    { name: 'Invoices', route: 'invoices.index', match: 'invoices.*', icon: 'invoice', tint: 'from-brand-500 to-indigo-500' },
+    { name: 'Recurring', route: 'recurring.index', match: 'recurring.*', icon: 'repeat', tint: 'from-pink-500 to-rose-500' },
+    { name: 'Payment links', route: 'payment-links.index', match: 'payment-links.*', icon: 'link', tint: 'from-teal-500 to-emerald-500' },
+    { name: 'Expenses', route: 'expenses.index', match: 'expenses.*', icon: 'card', tint: 'from-rose-500 to-red-500' },
+    { name: 'Settings', route: 'settings.edit', match: 'settings.*', icon: 'cog', tint: 'from-slate-500 to-slate-700' },
+];
+const moreActive = computed(() => moreTiles.some((t) => route().current(t.match)));
+const appSettings = () => window.flutter_inappwebview?.callHandler('appSettings');
+
 const personalSections = [
     {
         label: 'Personal',
@@ -158,6 +178,7 @@ function clearOffline() {
 onUnmounted(() => document.removeEventListener('click', closeMenus));
 router.on('navigate', () => {
     sidebarOpen.value = false;
+    sheet.value = null;
     createOpen.value = false;
     userOpen.value = false;
 });
@@ -167,6 +188,7 @@ router.on('navigate', () => {
     <div class="min-h-screen bg-canvas">
         <!-- Sidebar -->
         <aside
+            v-if="!appShell"
             class="keep-dark fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-ink-950 text-ink-300 transition-transform duration-200 lg:translate-x-0"
             :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
         >
@@ -258,8 +280,20 @@ router.on('navigate', () => {
         </transition>
 
         <!-- Main -->
-        <div class="lg:pl-[260px]">
-            <header class="sticky top-0 z-20 border-b border-line bg-white/85 backdrop-blur-md">
+        <div :class="{ 'lg:pl-[260px]': !appShell }">
+            <!-- In the app: a slim app bar (logo, title, search) -->
+            <header v-if="appShell" class="sticky top-0 z-20 border-b border-line/60 bg-canvas/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+                <div class="flex h-[60px] items-center gap-2.5 px-4">
+                    <Link :href="route('dashboard')" class="shrink-0"><ApplicationLogo :size="30" /></Link>
+                    <div class="min-w-0 flex-1">
+                        <h1 class="truncate text-[17px] font-extrabold tracking-tight text-ink-900">{{ title }}</h1>
+                        <p v-if="subtitle" class="truncate text-[11px] text-ink-500">{{ subtitle }}</p>
+                    </div>
+                    <slot name="actions" />
+                    <CommandPalette :mode="mode" />
+                </div>
+            </header>
+            <header v-else class="sticky top-0 z-20 border-b border-line bg-white/85 backdrop-blur-md">
                 <div class="mx-auto flex h-[68px] max-w-[1400px] items-center gap-3 px-4 sm:px-8">
                     <button class="icon-btn lg:hidden" @click="sidebarOpen = true"><Icon name="menu" /></button>
                     <div class="min-w-0 flex-1">
@@ -318,12 +352,84 @@ router.on('navigate', () => {
                 </div>
             </div>
 
-            <main class="mx-auto max-w-[1400px] px-4 py-6 sm:px-8 sm:py-8 pb-28 lg:pb-8">
+            <main class="mx-auto max-w-[1400px] px-4 sm:px-8 lg:pb-8" :class="appShell ? 'pb-32 pt-4' : 'py-6 pb-28 sm:py-8'">
                 <slot />
             </main>
 
-            <!-- Business app: bottom bar on phones -->
-            <nav v-if="mode === 'business'" class="fixed inset-x-0 bottom-0 z-30 border-t border-line/70 bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+            <!-- In the app: tab bar with ＋ in the middle -->
+            <nav v-if="appShell" class="fixed inset-x-0 bottom-0 z-30 border-t border-line/70 bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
+                <div class="mx-auto grid max-w-md grid-cols-5 items-end">
+                    <template v-for="(item, k) in appTabs" :key="k">
+                        <button v-if="!item" class="-mt-6 flex flex-col items-center pb-2" aria-label="Create" @click="sheet = 'create'">
+                            <span class="flex h-[58px] w-[58px] items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-violet-600 text-white shadow-xl shadow-brand-600/30 ring-4 ring-canvas transition active:scale-95"><Icon name="plus" :size="28" /></span>
+                        </button>
+                        <Link v-else :href="route(item.route)" class="flex flex-col items-center gap-0.5 py-2.5 text-[10.5px] font-semibold transition" :class="onBar(item) ? 'text-brand-600' : 'text-ink-500'">
+                            <span class="flex h-8 w-12 items-center justify-center rounded-full transition" :class="onBar(item) ? 'bg-brand-50 dark:bg-brand-500/15' : ''"><Icon :name="item.icon" :size="21" /></span>
+                            {{ item.name }}
+                        </Link>
+                    </template>
+                    <button class="flex flex-col items-center gap-0.5 py-2.5 text-[10.5px] font-semibold transition" :class="moreActive || sheet === 'more' ? 'text-brand-600' : 'text-ink-500'" @click="sheet = 'more'">
+                        <span class="flex h-8 w-12 items-center justify-center rounded-full" :class="moreActive ? 'bg-brand-50 dark:bg-brand-500/15' : ''"><Icon name="menu" :size="21" /></span> More
+                    </button>
+                </div>
+            </nav>
+
+            <!-- In the app: ＋ and More as sheets from the bottom -->
+            <transition enter-from-class="opacity-0" leave-to-class="opacity-0" enter-active-class="transition duration-200" leave-active-class="transition duration-150">
+                <div v-if="appShell && sheet" class="fixed inset-0 z-40 bg-ink-950/50 backdrop-blur-sm" @click.self="sheet = null">
+                    <div class="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-[28px] bg-surface p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl">
+                        <div class="mx-auto mb-4 h-1.5 w-10 rounded-full bg-ink-200"></div>
+
+                        <template v-if="sheet === 'create'">
+                            <div class="mb-3 px-1 text-[15px] font-extrabold text-ink-900">Create</div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <Link v-for="q in businessCreate" :key="q.label" :href="q.href()" class="flex items-start gap-3 rounded-2xl bg-ink-50 p-3 transition active:scale-[0.98] dark:bg-white/[0.04]">
+                                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white"><Icon :name="q.icon" :size="17" /></span>
+                                    <span class="min-w-0"><span class="block text-sm font-bold text-ink-900">{{ q.label }}</span><span class="block text-[11px] leading-snug text-ink-500">{{ q.hint }}</span></span>
+                                </Link>
+                            </div>
+                        </template>
+
+                        <template v-else>
+                            <!-- Stripe, at a glance -->
+                            <div class="mb-3 flex items-center gap-3 rounded-2xl bg-gradient-to-br from-[#0b1020] to-[#2a1f5c] p-3.5 text-white">
+                                <span class="relative flex h-2.5 w-2.5">
+                                    <span v-if="stripe.mode" class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" :class="stripe.mode === 'live' ? 'bg-emerald-400' : 'bg-amber-400'"></span>
+                                    <span class="relative inline-flex h-2.5 w-2.5 rounded-full" :class="stripe.mode === 'live' ? 'bg-emerald-400' : stripe.mode === 'test' ? 'bg-amber-400' : 'bg-rose-400'"></span>
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="text-sm font-bold">Stripe · {{ stripe.mode === 'live' ? 'Live' : stripe.mode === 'test' ? 'Test mode' : 'Not connected' }}</div>
+                                    <div class="text-[11px] text-white/60">{{ stripe.lastSyncAt ? `Synced ${date(stripe.lastSyncAt, true)}` : 'Not synced yet' }}</div>
+                                </div>
+                                <button v-if="stripe.mode" class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10" :disabled="syncing" title="Sync now" @click="sync"><Icon name="sync" :size="16" :class="{ 'animate-spin': syncing }" /></button>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-2">
+                                <Link v-for="t in moreTiles" :key="t.name" :href="route(t.route, t.params)" class="flex flex-col items-center gap-2 rounded-2xl p-3 text-center text-xs font-semibold transition active:scale-95"
+                                    :class="route().current(t.match) ? 'bg-brand-50 text-brand-800 ring-1 ring-brand-200 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/30' : 'bg-ink-50 text-ink-700 dark:bg-white/[0.04]'">
+                                    <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-sm" :class="t.tint"><Icon :name="t.icon" :size="19" /></span>
+                                    {{ t.name }}
+                                </Link>
+                            </div>
+
+                            <div class="mt-3 grid grid-cols-3 gap-2 text-xs font-semibold">
+                                <Link v-if="isOwner" :href="route('personal.dashboard')" class="flex flex-col items-center gap-1.5 rounded-2xl bg-ink-50 p-3 text-ink-700 dark:bg-white/[0.04]"><Icon name="user" :size="19" /> Personal</Link>
+                                <button class="flex flex-col items-center gap-1.5 rounded-2xl bg-ink-50 p-3 text-ink-700 dark:bg-white/[0.04]" @click="cycleTheme"><Icon :name="THEME_ICON[theme]" :size="19" /> {{ THEME_LABEL[theme] }}</button>
+                                <button class="flex flex-col items-center gap-1.5 rounded-2xl bg-ink-50 p-3 text-ink-700 dark:bg-white/[0.04]" @click="appSettings"><Icon name="cog" :size="19" /> Phone app</button>
+                            </div>
+                            <div class="mt-3 flex items-center gap-3 rounded-2xl border border-line/70 p-3">
+                                <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-700 text-xs font-bold text-white">{{ initials }}</span>
+                                <span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold text-ink-900">{{ user.name }}</span><span class="block truncate text-[11px] text-ink-500">{{ user.email }}</span></span>
+                                <Link :href="route('profile.edit')" class="icon-btn" title="Profile"><Icon name="user" :size="17" /></Link>
+                                <Link :href="route('logout')" method="post" as="button" class="icon-btn text-rose-600" title="Log out" @click="clearOffline"><Icon name="logout" :size="17" /></Link>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </transition>
+
+            <!-- Business in a phone's browser: bottom bar, the rest in the side menu -->
+            <nav v-if="mode === 'business' && !appShell" class="fixed inset-x-0 bottom-0 z-30 border-t border-line/70 bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
                 <div class="mx-auto grid max-w-md grid-cols-5">
                     <Link v-for="item in businessBar" :key="item.name" :href="route(item.route)" class="flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold transition"
                         :class="onBar(item) ? 'text-brand-600' : 'text-ink-500'">
