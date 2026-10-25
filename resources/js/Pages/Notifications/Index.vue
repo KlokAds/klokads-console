@@ -215,7 +215,7 @@ const wokeHealthy = computed(() => props.cron.woke_at && Date.now() - new Date(p
                         <div class="card-title">🔒 App lock</div>
                         <span class="badge" :class="hasPin ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">{{ hasPin ? 'PIN on' : 'No PIN' }}</span>
                     </div>
-                    <p class="mt-2 text-sm text-ink-600">Asks for a 4–6 digit PIN when you open the personal side, and again after 15 idle minutes.</p>
+                    <p class="mt-2 text-sm text-ink-600">Asks for a 6-digit PIN when you open the personal side, and again after 15 idle minutes.</p>
                     <div class="mt-3 grid grid-cols-2 gap-2">
                         <input v-model="pinForm.pin" type="password" inputmode="numeric" maxlength="6" class="input" :placeholder="hasPin ? 'New PIN' : 'PIN'" autocomplete="new-password" />
                         <input v-model="pinForm.pin_confirmation" type="password" inputmode="numeric" maxlength="6" class="input" placeholder="Repeat PIN" autocomplete="new-password" />
@@ -224,7 +224,7 @@ const wokeHealthy = computed(() => props.cron.woke_at && Date.now() - new Date(p
                     <div v-for="e in [pinForm.errors.pin, pinForm.errors.password]" :key="e" class="error">{{ e }}</div>
                     <div class="mt-3 flex justify-between gap-2">
                         <button v-if="hasPin" type="button" class="btn-ghost btn-sm text-rose-600" :disabled="!pinForm.password" @click="savePin(true)">Remove PIN</button>
-                        <button class="btn-primary btn-sm ml-auto" :disabled="pinForm.processing || pinForm.pin.length < 4">{{ hasPin ? 'Change PIN' : 'Set PIN' }}</button>
+                        <button class="btn-primary btn-sm ml-auto" :disabled="pinForm.processing || pinForm.pin.length !== 6 || pinForm.pin !== pinForm.pin_confirmation">{{ hasPin ? 'Change PIN' : 'Set PIN' }}</button>
                     </div>
                 </form>
 

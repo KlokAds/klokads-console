@@ -21,7 +21,7 @@ class PersonalLockController extends Controller
             return redirect()->route('personal.dashboard');
         }
 
-        return Inertia::render('Personal/Unlock', ['name' => $request->user()->name]);
+        return Inertia::render('Personal/Unlock', ['name' => $request->user()->name, 'length' => $request->user()->pin_length ?: 4]);
     }
 
     public function unlock(Request $request): RedirectResponse
@@ -61,10 +61,11 @@ class PersonalLockController extends Controller
         abort_unless($request->user()?->is_owner, 403);
         $data = $request->validate([
             'password' => ['required', 'current_password'],
-            'pin' => ['nullable', 'digits_between:4,6', 'confirmed'],
+            'pin' => ['nullable', 'digits:6', 'confirmed'],
         ], ['password.current_password' => 'That is not your account password.']);
 
-        $request->user()->forceFill(['pin_hash' => filled($data['pin'] ?? null) ? Hash::make($data['pin']) : null])->save();
+        $pin = $data['pin'] ?? null;
+        $request->user()->forceFill(['pin_hash' => filled($pin) ? Hash::make($pin) : null, 'pin_length' => filled($pin) ? strlen($pin) : null])->save();
         $request->session()->put('personal_unlocked_until', now()->addMinutes(PersonalAccess::IDLE_MINUTES)->timestamp);
 
         return back()->with('success', filled($data['pin'] ?? null) ? 'PIN set — the personal side now locks after 15 idle minutes.' : 'PIN removed.');

@@ -261,7 +261,7 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
               child: Text('পরে Phone › Settings › Security থেকে বদলাতে পারবেন।', style: TextStyle(color: Colors.grey)),
             ),
             ListTile(leading: const Icon(Icons.fingerprint), title: const Text('আঙুলের ছাপ'), subtitle: const Text('Phone-এর lock পিছনে থাকে'), onTap: () => Navigator.pop(context, 'bio')),
-            ListTile(leading: const Icon(Icons.pin_outlined), title: const Text('App-এর নিজের PIN'), subtitle: const Text('৪-৬ সংখ্যা'), onTap: () => Navigator.pop(context, 'pin')),
+            ListTile(leading: const Icon(Icons.pin_outlined), title: const Text('App-এর নিজের PIN'), subtitle: const Text('৬ সংখ্যা'), onTap: () => Navigator.pop(context, 'pin')),
             ListTile(leading: const Icon(Icons.lock_open), title: const Text('এখন না'), subtitle: const Text('Lock বন্ধ থাকবে'), onTap: () => Navigator.pop(context, 'off')),
             const SizedBox(height: 8),
           ],

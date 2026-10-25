@@ -31,7 +31,11 @@ class Lock {
     final salt = base64Url.encode(List<int>.generate(16, (_) => Random.secure().nextInt(256)));
     await p.setString('lock.salt', salt);
     await p.setString('lock.pin', _hash(salt, pin));
+    await p.setInt('lock.len', pin.length);
   }
+
+  /// How many digits my PIN has (PINs set before this was kept were 4).
+  static Future<int> pinLength() async => (await _p).getInt('lock.len') ?? 4;
 
   static Future<bool> checkPin(String pin) async {
     final p = await _p;
@@ -185,13 +189,16 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
   }
 }
 
-/// Four to six digits. Five wrong tries in a row wait thirty seconds.
+/// Checks itself the moment the last digit is in — no OK to press. Five wrong tries in a row wait thirty seconds.
 class PinPad extends StatefulWidget {
-  const PinPad({super.key, required this.title, required this.onDone, this.subtitle});
+  const PinPad({super.key, required this.title, required this.onDone, this.subtitle, this.length});
 
   final String title;
   final String? subtitle;
   final Future<bool> Function(String pin) onDone;
+
+  /// Digits to expect; my saved PIN's length when not given.
+  final int? length;
 
   @override
   State<PinPad> createState() => _PinPadState();
@@ -202,46 +209,62 @@ class _PinPadState extends State<PinPad> {
   String? error;
   int wrong = 0;
   DateTime? waitUntil;
+  int length = 6;
+  bool checking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.length != null) {
+      length = widget.length!;
+    } else {
+      Lock.pinLength().then((n) {
+        if (mounted) setState(() => length = n);
+      });
+    }
+  }
+
+  Future<void> check() async {
+    checking = true;
+    final ok = await widget.onDone(pin);
+    checking = false;
+    if (!mounted) return;
+    if (ok) {
+      wrong = 0;
+      setState(() => pin = '');
+    } else {
+      wrong++;
+      HapticFeedback.heavyImpact();
+      if (wrong >= 5) {
+        wrong = 0;
+        waitUntil = DateTime.now().add(const Duration(seconds: 30));
+      }
+      setState(() {
+        pin = '';
+        error = 'PIN মেলেনি';
+      });
+    }
+  }
 
   Future<void> press(String key) async {
     if (waitUntil != null && DateTime.now().isBefore(waitUntil!)) {
       setState(() => error = '${waitUntil!.difference(DateTime.now()).inSeconds + 1} সেকেন্ড অপেক্ষা করুন');
       return;
     }
+    if (checking) return;
     HapticFeedback.selectionClick();
     if (key == '<') {
       setState(() => pin = pin.isEmpty ? '' : pin.substring(0, pin.length - 1));
       return;
     }
-    if (key == 'ok') {
-      if (pin.length < 4) {
-        setState(() => error = 'কমপক্ষে ৪ সংখ্যা');
-        return;
-      }
-      final ok = await widget.onDone(pin);
-      if (!mounted) return;
-      if (ok) {
-        wrong = 0;
-        setState(() => pin = '');
-      } else {
-        wrong++;
-        HapticFeedback.heavyImpact();
-        if (wrong >= 5) {
-          wrong = 0;
-          waitUntil = DateTime.now().add(const Duration(seconds: 30));
-        }
-        setState(() {
-          pin = '';
-          error = 'PIN মেলেনি';
-        });
-      }
-      return;
-    }
-    if (pin.length < 6) {
+    if (pin.length < length) {
       setState(() {
         pin += key;
         error = null;
       });
+      if (pin.length == length) {
+        await check();
+      }
     }
   }
 
@@ -274,7 +297,7 @@ class _PinPadState extends State<PinPad> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(
-                6,
+                length,
                 (i) => Container(
                   margin: const EdgeInsets.symmetric(horizontal: 7),
                   width: 13,
@@ -282,7 +305,7 @@ class _PinPadState extends State<PinPad> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: i < pin.length ? const Color(0xFF5EEAD4) : Colors.transparent,
-                    border: Border.all(color: i < 4 || i < pin.length ? Colors.white54 : Colors.white24, width: 1.5),
+                    border: Border.all(color: Colors.white54, width: 1.5),
                   ),
                 ),
               ),
@@ -294,7 +317,7 @@ class _PinPadState extends State<PinPad> {
               ['7', '8', '9'],
             ])
               Row(mainAxisAlignment: MainAxisAlignment.center, children: row.map((k) => key(k)).toList()),
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [key('<', icon: Icons.backspace_outlined), key('0'), key('ok', icon: Icons.check_rounded)]),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [const SizedBox(width: 76, height: 76), key('0'), key('<', icon: Icons.backspace_outlined)]),
             const Spacer(),
           ],
         ),
@@ -344,7 +367,8 @@ class _NewPinPageState extends State<NewPinPage> {
       body: PinPad(
         key: ValueKey(first == null),
         title: first == null ? 'নতুন PIN দিন' : 'আবার একই PIN দিন',
-        subtitle: '৪ থেকে ৬ সংখ্যা',
+        subtitle: first == null ? '৬ সংখ্যা' : 'মিললে নিজেই সেভ হবে',
+        length: 6,
         onDone: (pin) async {
           if (first == null) {
             setState(() => first = pin);
