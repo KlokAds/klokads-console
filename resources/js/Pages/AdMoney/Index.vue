@@ -149,7 +149,7 @@ const dayLabel = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { 
                     </div>
                     <div class="flex flex-wrap gap-1.5">
                         <button v-for="f in FILTERS" :key="f.key" class="rounded-full px-3 py-1.5 text-xs font-semibold transition"
-                            :class="filter === f.key ? 'bg-ink-900 text-white dark:bg-white dark:text-ink-900' : 'bg-ink-50 text-ink-600 hover:bg-ink-100'" @click="filter = f.key">{{ f.label }}</button>
+                            :class="filter === f.key ? 'bg-brand-600 text-white shadow-sm' : 'bg-ink-50 text-ink-600 hover:bg-ink-100'" @click="filter = f.key">{{ f.label }}</button>
                     </div>
                 </div>
                 <div v-if="grouped.length" class="divide-y divide-line/70">
