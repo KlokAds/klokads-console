@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\MetaSpendDay;
+use App\Models\Setting;
 use App\Support\Business;
 use App\Support\Pricing;
 use Carbon\CarbonImmutable;
@@ -31,10 +32,15 @@ class SpendBilling
 
     public function __construct(private MetaAds $meta, private StripeService $stripe, private Notify $notify) {}
 
-    /** Every client with a Meta ad account: refresh spend, then bill if due. At most once an hour. */
+    /** Every client with a Meta ad account: spend fresh every few minutes; billing (charges, top-ups) at most once an hour. */
     public function runAll(bool $force = false): array
     {
-        if (! MetaAds::configured() || (! $force && ! Cache::add('spend-billing-run', 1, now()->addMinutes(55)))) {
+        if (! MetaAds::configured()) {
+            return ['skipped' => true];
+        }
+        $fresh = $force || Cache::add('spend-sync', 1, now()->addMinutes(PersonalAds::SYNC_MINUTES));
+        $bill = $force || Cache::add('spend-billing-run', 1, now()->addMinutes(55));
+        if (! $fresh && ! $bill) {
             return ['skipped' => true];
         }
 
@@ -42,6 +48,12 @@ class SpendBilling
         foreach (Client::whereNotNull('meta_ad_account_id')->get() as $client) {
             try {
                 $this->sync($client);
+                Setting::put('meta_spend_synced_at', now()->toIso8601String());
+                if (! $bill) {
+                    $done[$client->id] = 'fresh';
+
+                    continue;
+                }
                 $done[$client->id] = ($client->billing_mode === 'prepaid'
                     ? app(PrepaidBalance::class)->run($client->fresh())
                     : $this->chargeIfDue($client->fresh()))?->number ?? 'ok';

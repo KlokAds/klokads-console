@@ -8,6 +8,7 @@ use App\Models\PersonalAdAssignment;
 use App\Models\PersonalAdCharge;
 use App\Models\PersonalAdDay;
 use App\Models\PersonalClient;
+use App\Models\Setting;
 use App\Services\AdAdvice;
 use App\Services\AdPerformance;
 use App\Services\KlokOneRate;
@@ -63,16 +64,20 @@ class AdClientController extends Controller
         $request->session()->put('mode', 'personal');
         [$start, $end, $period] = $this->period($request);
 
+        $totals = PersonalAdDay::where('personal_client_id', $client->id)->selectRaw('campaign_id, sum(spend) as total')->groupBy('campaign_id')->pluck('total', 'campaign_id');
+
         return Inertia::render('Personal/AdClients/Show', [
             'client' => $client->only('id', 'name', 'ad_bill', 'ad_fee_percent', 'ad_bill_basis', 'ad_meta_rate', 'ad_card_account_id') + ['billed_until' => $client->ad_billed_until?->toDateString()],
             'rate' => KlokOneRate::current(),
+            'syncedAt' => Setting::get('personal_ads_synced_at'),
             'advice' => AdAdvice::forOwner($client->name),
             'tab' => in_array($request->query('tab'), ['overview', 'campaigns', 'money', 'setup'], true) ? $request->query('tab') : 'overview',
             'payAccounts' => Account::where('archived', false)->where('scope', 'personal')->where('currency', 'BDT')->orderBy('name')->get(['id', 'name']),
             'cardAccounts' => Account::where('archived', false)->where('scope', 'personal')->whereIn('currency', ['USD', 'BDT'])->orderBy('name')->get(['id', 'name', 'currency']),
             'range' => ['period' => $period, 'from' => $start->toDateString(), 'to' => $end->toDateString(), 'label' => PersonalAds::period($start, $end)],
             // Every campaign of theirs (the page groups them: running, then ended or paused).
-            'campaigns' => PersonalAds::table($client, $start, $end, true),
+            // Each campaign's spend in the period, and all it has spent since it was theirs.
+            'campaigns' => collect(PersonalAds::table($client, $start, $end, true))->map(fn ($c) => $c + ['total' => (int) ($totals[$c['id']] ?? 0)])->all(),
             'showAll' => $request->boolean('all'),
             'money' => PersonalAds::money($client, $start, $end),
             'ledger' => PersonalAds::ledger($client),
@@ -324,6 +329,7 @@ class AdClientController extends Controller
         $p = (string) $request->input('period', $default);
 
         return match (true) {
+            $p === 'today' => [$today, $today, $p],
             $p === 'last7' => [$today->subDays(6), $today, $p],
             $p === 'last30' => [$today->subDays(29), $today, $p],
             $p === 'lastmonth' => [$today->subMonthNoOverflow()->startOfMonth(), $today->subMonthNoOverflow()->endOfMonth()->startOfDay(), $p],

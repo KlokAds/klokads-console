@@ -15,6 +15,8 @@ use App\Support\InboxRules;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+use function Illuminate\Support\defer;
+
 /**
  * The MH-Bot Android app. It is paired once from inside the unlocked personal side, then
  * forwards bank / wallet SMS and app notifications, and shows the notification feed
@@ -156,6 +158,13 @@ class PhoneAppController extends Controller
         $after = (int) $request->integer('after');
         // A reminder whose time has come goes out now, not at the server's next run.
         app(Heartbeat::class)->reminders();
+        // And the phone keeps the clock going: after answering, run the jobs if due and restart the
+        // server's own wake-up chain if it ever stopped. Two clocks; neither depends on the other.
+        defer(function () {
+            $heartbeat = app(Heartbeat::class);
+            $heartbeat->maybeRun();
+            $heartbeat->scheduleNext();
+        });
 
         return response()->json([
             'items' => AppNotification::where('id', '>', $after)->orderBy('id')->limit(30)->get(['id', 'kind', 'title', 'body', 'url', 'created_at']),

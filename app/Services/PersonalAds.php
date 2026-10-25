@@ -11,6 +11,7 @@ use App\Models\PersonalAdCharge;
 use App\Models\PersonalAdDay;
 use App\Models\PersonalAdPayment;
 use App\Models\PersonalClient;
+use App\Models\Setting;
 use App\Support\Ledger;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -47,13 +48,17 @@ class PersonalAds
         return $client->ad_report_token;
     }
 
+    /** Fresh from Meta this often (the server's clock runs every 4–5 minutes). */
+    public const SYNC_MINUTES = 4;
+
     /** Pull recent days (or, the first time, everything since each assignment started) and the campaigns' state. */
     public function sync(bool $force = false): int
     {
         $assignments = PersonalAdAssignment::all();
-        if ($assignments->isEmpty() || ! MetaAds::configured() || (! $force && ! Cache::add('personal-ads-sync', 1, now()->addMinutes(55)))) {
+        if ($assignments->isEmpty() || ! MetaAds::configured() || (! $force && ! Cache::add('personal-ads-sync', 1, now()->addMinutes(self::SYNC_MINUTES)))) {
             return 0;
         }
+        $fetched = false;
         $today = CarbonImmutable::today();
         $rows = 0;
 
@@ -73,11 +78,15 @@ class PersonalAds
                     ]);
                     $rows++;
                 }
+                $fetched = true;
                 $this->watch($assignments, $account);
                 $this->watchBilling($assignments, $account);
             } catch (Throwable $e) {
                 report($e);
             }
+        }
+        if ($fetched) {
+            Setting::put('personal_ads_synced_at', now()->toIso8601String());
         }
 
         return $rows;

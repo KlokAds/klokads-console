@@ -11,8 +11,8 @@ import Toggle from '@/Components/Ui/Toggle.vue';
 import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { date, money } from '@/money';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { Head, Link, router, useForm, usePoll } from '@inertiajs/vue3';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 /**
  * One client's ads, in four places, each with one job:
@@ -33,6 +33,19 @@ const props = defineProps({
     payAccounts: { type: Array, default: () => [] },
     cardAccounts: { type: Array, default: () => [] },
     advice: { type: Array, default: () => [] },
+    syncedAt: { type: String, default: null },
+});
+
+// Meta's numbers come in every 5 minutes; an open page picks them up by itself.
+usePoll(60000, { only: ['money', 'campaigns', 'ledger', 'syncedAt', 'advice'] });
+const clock = ref(Date.now());
+let ticking;
+onMounted(() => (ticking = setInterval(() => (clock.value = Date.now()), 30000)));
+onUnmounted(() => clearInterval(ticking));
+const updated = computed(() => {
+    if (!props.syncedAt) return 'Not updated yet';
+    const min = Math.max(0, Math.round((clock.value - Date.parse(props.syncedAt)) / 60000));
+    return min < 1 ? 'Updated just now' : min < 60 ? `Updated ${min} min ago` : `Updated ${Math.round(min / 60)} h ago`;
 });
 
 const m = (cents, cur) => money(cents, cur);
@@ -68,12 +81,23 @@ const period = ref(props.range.period);
 const from = ref(props.range.from);
 const to = ref(props.range.to);
 const PERIODS = [
+    { value: 'today', label: 'Today' },
+    { value: 'last7', label: '7 days' },
+    { value: 'last30', label: '30 days' },
     { value: 'month', label: 'This month' },
-    { value: 'lastmonth', label: 'Last month' },
-    { value: 'last7', label: 'Last 7 days' },
-    { value: 'last30', label: 'Last 30 days' },
-    { value: 'custom', label: 'Custom dates…' },
 ];
+// Custom: the dates open under the chips and stay until Custom is tapped again.
+const showCustom = ref(props.range.period === 'custom');
+const pick = (value) => {
+    showCustom.value = false;
+    period.value = value;
+    go();
+};
+const toggleCustom = () => {
+    showCustom.value = !showCustom.value;
+    if (showCustom.value) period.value = 'custom';
+    else if (props.range.period !== 'custom') period.value = props.range.period;
+};
 const query = (extra = {}) => ({ period: period.value, ...(period.value === 'custom' ? { from: from.value, to: to.value } : {}), ...(props.showAll ? { all: 1 } : {}), tab: tab.value, ...extra });
 const go = () => {
     if (period.value === 'custom' && !(from.value && to.value)) return;
@@ -205,15 +229,22 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
 
             <!-- Period -->
             <div class="relative -mx-4 mt-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:px-0">
-                <button v-for="p in PERIODS" :key="p.value" class="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition"
-                    :class="period === p.value ? 'bg-white text-ink-900' : 'bg-white/[0.07] text-white/70 ring-1 ring-white/10 hover:text-white'" @click="period = p.value; go()">{{ p.label.replace('…', '') }}</button>
+                <button v-for="p in PERIODS" :key="p.value" class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition"
+                    :class="period === p.value && !showCustom ? 'bg-white text-ink-900' : 'bg-white/[0.07] text-white/70 ring-1 ring-white/10 hover:text-white'" @click="pick(p.value)">{{ p.label }}</button>
+                <button class="inline-flex shrink-0 items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-semibold transition"
+                    :class="showCustom || period === 'custom' ? 'bg-white text-ink-900' : 'bg-white/[0.07] text-white/70 ring-1 ring-white/10 hover:text-white'" @click="toggleCustom">
+                    Custom <Icon name="chevron" :size="12" class="transition" :class="{ 'rotate-180': showCustom }" />
+                </button>
             </div>
-            <div v-if="period === 'custom'" class="relative mt-3 flex flex-wrap items-center gap-2 text-ink-900">
-                <DatePicker v-model="from" :max="to || null" size="sm" class="w-36" />
-                <span class="text-sm text-white/60">to</span>
-                <DatePicker v-model="to" :min="from || null" size="sm" class="w-36" />
-                <button class="btn-primary btn-sm" :disabled="!from || !to" @click="go">Show</button>
-            </div>
+            <transition enter-from-class="opacity-0 -translate-y-1" leave-to-class="opacity-0 -translate-y-1" enter-active-class="transition duration-200" leave-active-class="transition duration-150">
+                <div v-if="showCustom" class="relative mt-3 rounded-2xl bg-white/[0.06] p-3 ring-1 ring-white/10">
+                    <div class="grid grid-cols-2 gap-2 text-ink-900">
+                        <div><div class="mb-1 text-[11px] font-semibold text-white/55">From</div><DatePicker v-model="from" :max="to || today" size="sm" /></div>
+                        <div><div class="mb-1 text-[11px] font-semibold text-white/55">To</div><DatePicker v-model="to" :min="from || null" :max="today" size="sm" /></div>
+                    </div>
+                    <button class="mt-2.5 w-full rounded-xl bg-white py-2 text-sm font-bold text-ink-900 transition hover:bg-white/90 disabled:opacity-40" :disabled="!from || !to" @click="period = 'custom'; go()">Show these dates</button>
+                </div>
+            </transition>
 
             <!-- How it's going -->
             <div class="relative mt-5 flex items-end justify-between gap-4">
@@ -226,6 +257,8 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                     <div class="mt-0.5 text-[28px] font-extrabold leading-tight tabular-nums sm:text-3xl">{{ results.toLocaleString() }}</div>
                 </div>
             </div>
+
+            <div class="relative mt-1.5 flex items-center gap-1.5 text-[11px] text-white/45"><span class="h-1.5 w-1.5 rounded-full bg-emerald-400/80"></span> {{ updated }} · from Meta every 5 min</div>
 
             <!-- Money at a glance -->
             <div class="relative mt-4 grid grid-cols-2 gap-2">
@@ -276,6 +309,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                         <div><div class="text-xl font-extrabold tabular-nums text-ink-900">{{ c.results.toLocaleString() }}</div><div class="text-xs text-ink-500">{{ c.result_label }}</div></div>
                         <div class="text-right"><div class="font-bold tabular-nums">{{ m(c.spend, c.currency) }}</div><div class="text-xs text-ink-500">{{ cost(c) }}</div></div>
                     </div>
+                    <div v-if="c.total > c.spend" class="mt-3 flex items-center justify-between border-t border-line/70 pt-2.5 text-xs"><span class="text-ink-500">All time</span><span class="font-bold tabular-nums text-ink-900">{{ m(c.total, c.currency) }}</span></div>
                 </Link>
             </div>
             <EmptyState v-if="!withSpend.length" compact icon="megaphone" title="No campaign spend in this period" text="Pick another period, or see Campaigns." />
@@ -316,7 +350,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                         </div>
                         <div class="mt-1 text-xs text-ink-500">{{ c.goal }}<template v-if="c.end"> · {{ c.end < today ? 'ended' : 'ends' }} {{ date(c.end) }}</template><template v-else-if="c.last_spend"> · last spent {{ date(c.last_spend) }}</template></div>
                         <div class="mt-3 grid grid-cols-4 gap-2 text-sm">
-                            <div><div class="text-[11px] text-ink-500">Spent</div><div class="font-bold tabular-nums">{{ m(c.spend, c.currency) }}</div></div>
+                            <div><div class="text-[11px] text-ink-500">Spent</div><div class="font-bold tabular-nums">{{ m(c.spend, c.currency) }}</div><div v-if="c.total > c.spend" class="text-[11px] text-ink-500">All time {{ m(c.total, c.currency) }}</div></div>
                             <div><div class="text-[11px] text-ink-500">Results</div><div class="font-bold tabular-nums">{{ c.results.toLocaleString() }}</div></div>
                             <div><div class="text-[11px] text-ink-500">Each</div><div class="font-bold tabular-nums">{{ c.cost_per_result === null ? '—' : c.cost_per_result === 0 ? '<' + m(1, c.currency) : m(c.cost_per_result, c.currency) }}</div></div>
                             <div><div class="text-[11px] text-ink-500">Clicks</div><div class="font-bold tabular-nums">{{ c.clicks.toLocaleString() }}</div></div>

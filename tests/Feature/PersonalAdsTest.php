@@ -320,4 +320,25 @@ class PersonalAdsTest extends TestCase
         $this->assertSame((int) round(1000 * 129.83 * 1.2), $second->total);
         $this->assertSame(2, PersonalAdBill::where('personal_client_id', $this->edge->id)->count());
     }
+
+    public function test_metas_numbers_refresh_every_few_minutes_and_the_page_shows_today_and_all_time(): void
+    {
+        $this->fakePilot();
+        $this->assignBoth();
+        $this->assertNotNull(Setting::get('personal_ads_synced_at'), 'when Meta last came in');
+
+        // Within the few minutes: no new call to Meta; after them: fresh again.
+        $calls = fn () => collect(Http::recorded())->filter(fn ($r) => str_contains($r[0]->url(), '/spend'))->count();
+        app(PersonalAds::class)->sync(); // the clock's run: fetches, and starts the few minutes
+        $before = $calls();
+        app(PersonalAds::class)->sync();
+        $this->assertSame($before, $calls());
+        $this->travel(PersonalAds::SYNC_MINUTES + 1)->minutes();
+        app(PersonalAds::class)->sync();
+        $this->assertGreaterThan($before, $calls());
+
+        $this->get("/personal/client-ads/{$this->edge->id}?period=today")->assertInertia(fn ($page) => $page
+            ->where('range.period', 'today')->where('range.from', now()->toDateString())->where('range.to', now()->toDateString())
+            ->where('campaigns.0.total', 200000)->where('campaigns.0.spend', 0)->has('syncedAt'));
+    }
 }
