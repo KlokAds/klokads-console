@@ -18,6 +18,8 @@ const props = defineProps({
     now: Object,
     totals: Object,
     days: { type: Array, default: () => [] },
+    campaigns: { type: Array, default: () => [] },
+    suggestions: { type: Array, default: () => [] },
     events: { type: Array, default: () => [] },
 });
 
@@ -79,6 +81,19 @@ const WHERE = {
     stripe: ['Stripe', 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'],
     approval: ['Approval', 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'],
 };
+// Meta's delivery status, in words.
+const STATUS = {
+    ACTIVE: ['Running', 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'],
+    PAUSED: ['Paused', 'bg-ink-50 text-ink-600'],
+    CAMPAIGN_PAUSED: ['Paused', 'bg-ink-50 text-ink-600'],
+    ADSET_PAUSED: ['Ad set paused', 'bg-ink-50 text-ink-600'],
+    DISAPPROVED: ['Rejected', 'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'],
+    WITH_ISSUES: ['Issues', 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'],
+    PENDING_REVIEW: ['In review', 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'],
+    ARCHIVED: ['Archived', 'bg-ink-50 text-ink-500'],
+    DELETED: ['Deleted', 'bg-ink-50 text-ink-500'],
+};
+const TIP = { good: '✅', warn: '💡', bad: '⚠️', neutral: 'ℹ️' };
 const dayLabel = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 </script>
 
@@ -147,6 +162,45 @@ const dayLabel = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { 
                     <div class="flex justify-between gap-2"><span class="text-ink-500">Spent, not yet charged by Meta</span><b class="tabular-nums text-ink-900">{{ m(Math.max(0, totals.spend - totals.meta_charged)) }}</b></div>
                 </div>
                 <p class="mt-3 text-xs text-ink-500">Meta charges the card in steps (at its billing threshold), so “charged” can lag behind “spent” by a few days.</p>
+            </div>
+
+            <!-- Campaigns: what each one costs and brings -->
+            <div class="card mt-5">
+                <div class="card-head">
+                    <div>
+                        <div class="card-title">Campaigns · {{ range.label }}</div>
+                        <div class="card-sub">Results as Meta counts them for each campaign's goal. Budget and status are as of now.</div>
+                    </div>
+                </div>
+                <div v-if="campaigns.length" class="overflow-x-auto">
+                    <table class="table">
+                        <thead><tr><th>Campaign</th><th class="num">Budget/day</th><th class="num">Spent</th><th class="num">Results</th><th class="num">Per result</th><th class="num">Clicks</th><th class="num">CTR</th></tr></thead>
+                        <tbody>
+                            <tr v-for="c in campaigns" :key="c.id">
+                                <td class="max-w-[16rem]">
+                                    <div class="truncate font-medium text-ink-900">{{ c.name }}</div>
+                                    <span v-if="c.status" class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold" :class="(STATUS[c.status] ?? [c.status, 'bg-ink-50 text-ink-600'])[1]">{{ (STATUS[c.status] ?? [c.status])[0] }}</span>
+                                </td>
+                                <td class="num text-ink-600">{{ c.daily_budget ? m(c.daily_budget) : '—' }}</td>
+                                <td class="num font-semibold text-ink-900">{{ m(c.spend) }}</td>
+                                <td class="num">{{ c.results }} <span class="text-xs text-ink-400">{{ c.result_label }}</span></td>
+                                <td class="num font-semibold">{{ c.cost_per_result !== null ? m(c.cost_per_result) : '—' }}</td>
+                                <td class="num text-ink-600">{{ c.clicks.toLocaleString() }}</td>
+                                <td class="num text-ink-600">{{ c.ctr !== null ? c.ctr + '%' : '—' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <EmptyState v-else compact icon="chart" title="No campaign spend in this period" text="Campaigns show here once they spend." />
+            </div>
+
+            <!-- Suggestions -->
+            <div v-if="suggestions.length" class="card mt-5 p-5 sm:p-6">
+                <div class="card-title">Suggestions · last 7 days</div>
+                <ul class="mt-3 space-y-2.5">
+                    <li v-for="(s, i) in suggestions" :key="i" class="flex gap-3 text-sm text-ink-700"><span class="shrink-0">{{ TIP[s.tone] }}</span><span>{{ s.text }}</span></li>
+                </ul>
+                <p class="mt-3 text-xs text-ink-500">Advice only — nothing is changed in Meta. Change budgets in Ads Manager or Klok Pilot.</p>
             </div>
 
             <!-- Daily spend -->

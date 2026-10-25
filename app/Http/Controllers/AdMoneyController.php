@@ -9,6 +9,7 @@ use App\Models\ClientBalanceEntry;
 use App\Models\MetaSpendDay;
 use App\Models\Payout;
 use App\Models\Setting;
+use App\Services\AdPerformance;
 use App\Services\Airwallex;
 use App\Services\PrepaidBalance;
 use Carbon\CarbonImmutable;
@@ -73,6 +74,8 @@ class AdMoneyController extends Controller
                 'payouts_in' => (int) AirwallexEntry::where('kind', 'deposit')->whereNotNull('payout_id')->whereBetween('occurred_at', [$start, $end])->sum('amount'),
             ],
             'days' => $this->buckets($start, $end, $days),
+            'campaigns' => AdPerformance::table($client, $start, $end),
+            'suggestions' => AdPerformance::suggestions($client),
             'events' => $this->events($client, $start, $end),
         ]);
     }

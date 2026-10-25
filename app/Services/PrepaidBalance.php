@@ -79,8 +79,16 @@ class PrepaidBalance
         $currency = $rows->first()->currency;
         $status = $this->status($client);
         $top = $rows->sortByDesc('spend')->first();
+        // What it bought: "12 leads at SGD 3.10 each" per kind of result.
+        $results = $rows->filter(fn ($r) => $r->results > 0)->groupBy(fn ($r) => AdPerformance::noun($r->result_type, 1))
+            ->map(function ($group) use ($currency) {
+                $n = (int) $group->sum('results');
+
+                return $n.' '.AdPerformance::noun($group->first()->result_type, $n).' at '.$this->billing->money((int) round($group->sum('spend') / $n), $currency).' each';
+            })->implode(', ');
         $this->billing->tell($client, '📊 '.$this->billing->name($client).' · '.CarbonImmutable::parse($date)->format('j M'),
             'Meta spent '.$this->billing->money($spend, $currency).' on '.$rows->count().' campaign'.($rows->count() === 1 ? '' : 's').' (most: '.$top->campaign_name.')'
+            .($results ? ' · '.$results : ' · no results yet')
             .' · '.$this->billing->money((int) round($spend * (1 + $rate / 100)), $currency).' from the balance'
             .' · left '.$this->billing->money($status['balance'], $currency).($status['days_left'] !== null ? " ≈ {$status['days_left']} days" : '').'.');
     }

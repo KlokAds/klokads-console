@@ -106,7 +106,7 @@ class MetaAds
                 $end = $start->addDays(self::BRIDGE_DAYS - 1)->min($to);
                 foreach ($this->pilot('ad-accounts/'.self::act($accountId).'/spend', ['from' => $start->toDateString(), 'to' => $end->toDateString()])['data'] ?? [] as $r) {
                     if (blank($filter) || str_contains(mb_strtolower($r['campaign_name']), mb_strtolower($filter))) {
-                        $rows[] = array_intersect_key($r, array_flip(['campaign_id', 'campaign_name', 'date', 'spend', 'impressions', 'clicks']));
+                        $rows[] = array_intersect_key($r, array_flip(['campaign_id', 'campaign_name', 'date', 'spend', 'impressions', 'clicks', 'reach', 'results', 'result_type']));
                     }
                 }
             }
@@ -145,6 +145,19 @@ class MetaAds
         }
 
         return $rows;
+    }
+
+    /**
+     * The account's campaigns with their delivery status and daily budget (through Klok Pilot only).
+     *
+     * @return array<string, array{name: string, status: ?string, objective: ?string, daily_budget: ?int}>
+     */
+    public function campaigns(string $accountId): array
+    {
+        return self::viaPilot()
+            ? collect($this->pilot('ad-accounts/'.self::act($accountId).'/campaigns')['data'] ?? [])
+                ->mapWithKeys(fn ($c) => [(string) $c['id'] => ['name' => $c['name'], 'status' => $c['status'] ?? null, 'objective' => $c['objective'] ?? null, 'daily_budget' => $c['daily_budget'] ?? null]])->all()
+            : [];
     }
 
     /**
