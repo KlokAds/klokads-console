@@ -44,7 +44,7 @@ class TransactionParser
     private const IN = ['you have received', 'received from', 'received tk', 'received bdt', 'received sgd', 'money received', 'cash in', 'has been credited', 'credited with', 'credited by', 'credited to',
         'deposit', 'deposited', 'incoming', 'you received', "you've received", 'payment received', 'refund', 'added to your', 'add money', 'remittance received', 'salary'];
 
-    private const OUT = ['send money', 'sent tk', 'has been debited', 'debited with', 'debited by', 'debited from', 'payment tk', 'payment of', 'paid tk', 'you paid', 'you have paid', 'cash out',
+    private const OUT = ['send money', 'money sent', 'sent $', 'sent usd', 'sent sgd', 'sent bdt', 'sent tk', 'has been debited', 'debited with', 'debited by', 'debited from', 'payment tk', 'payment of', 'paid tk', 'you paid', 'you have paid', 'cash out',
         'withdraw', 'purchase', 'card transaction', 'spent', 'transferred', 'transfer of', 'bill pay', 'recharge', 'merchant payment', 'you sent', "you've sent", 'debit'];
 
     /** Not a completed transaction: codes, promotions, failures (whole words only). */
