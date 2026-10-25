@@ -3,7 +3,7 @@ description: Klok - my own Android app (personal money and the business side, SM
 publish_to: none
 # Raise this only when several phone-side changes have piled up: the pages inside come from the
 # site and are always new. A raise (pushed to main) builds and ships a new APK.
-version: 1.0.7+8
+version: 1.0.8+9
 
 environment:
     sdk: '>=3.5.0 <4.0.0'
