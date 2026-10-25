@@ -38,7 +38,11 @@ class InboxController extends Controller
         }
 
         // The MH-Bot app also forwards notifications from wallet apps (nSave, Rizon, Elevate Pay…).
-        $source = in_array($request->input('source'), ['app', 'notification'], true) ? 'app' : 'sms';
+        $source = match ($request->input('source')) {
+            'app', 'notification' => 'app',
+            'email' => 'email',
+            default => 'sms',
+        };
         // Which copy of a wallet app (the phone's App Clone) the notification came from.
         $profile = $request->input('profile') === 'clone' ? 'clone' : 'main';
         $message = $this->entries->ingest($source, $pick(['from', 'sender', 'phone', 'address', 'number', 'app', 'data.from']), (string) $text, null, $profile);

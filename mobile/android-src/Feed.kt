@@ -3,6 +3,7 @@ package com.klokads.app
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -104,8 +105,21 @@ object Feed {
             .setCategory(if (money) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(tap)
-        // A follow-up reminder: done or later, right from the notification.
-        Regex("[?&]f=(\\d+)").find(url)?.groupValues?.get(1)?.let { followUp ->
+        // A follow-up reminder: done or later, right from the notification. Everything else: "Seen".
+        val followUpId = Regex("[?&]f=(\\d+)").find(url)?.groupValues?.get(1)
+        val taskId = Regex("[?&]t=(\\d+)").find(url)?.groupValues?.get(1)
+        taskId?.let { task ->
+            for ((action, label) in listOf("done" to "Done ✓", "later" to "1 hour later")) {
+                val intent = Intent(context, TaskActionReceiver::class.java)
+                    .putExtra("id", task).putExtra("action", action).putExtra("notification", id.toInt())
+                builder.addAction(0, label, PendingIntent.getBroadcast(context, (id * 10 + if (action == "done") 4 else 5).toInt(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            }
+        }
+        if (followUpId == null && taskId == null) {
+            val seen = Intent(context, SeenReceiver::class.java).putExtra("id", id).putExtra("notification", id.toInt())
+            builder.addAction(0, "✓ Seen", PendingIntent.getBroadcast(context, (id * 10 + 3).toInt(), seen, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+        }
+        followUpId?.let { followUp ->
             for ((action, label) in listOf("done" to "Done", "later" to "1 hour later")) {
                 val intent = Intent(context, FollowUpActionReceiver::class.java)
                     .putExtra("id", followUp).putExtra("action", action).putExtra("notification", id.toInt())
@@ -134,6 +148,55 @@ object Feed {
         } finally {
             connection.disconnect()
         }
+    }
+}
+
+/** Done / 1 hour later on a task's notification. */
+class TaskActionReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val id = intent.getStringExtra("id") ?: return
+        val action = intent.getStringExtra("action") ?: return
+        context.getSystemService(NotificationManager::class.java).cancel(intent.getIntExtra("notification", 0))
+        val feed = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE).getString("flutter.feed.url", null) ?: return
+        val pending = goAsync()
+        Thread {
+            try {
+                val connection = URL(feed.replace("/app/feed/", "/app/tasks/") + "/$id/$action").openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 8000
+                connection.readTimeout = 8000
+                connection.setRequestProperty("Accept", "application/json")
+                connection.responseCode
+                connection.disconnect()
+            } catch (_: Exception) {
+            } finally {
+                pending.finish()
+            }
+        }.start()
+    }
+}
+
+/** "✓ Seen" on a notification: it closes, and the bell on the site marks it read too. */
+class SeenReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val id = intent.getLongExtra("id", 0L)
+        context.getSystemService(NotificationManager::class.java).cancel(intent.getIntExtra("notification", 0))
+        val feed = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE).getString("flutter.feed.url", null) ?: return
+        val pending = goAsync()
+        Thread {
+            try {
+                val connection = URL("$feed/read?id=$id").openConnection() as HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 8000
+                connection.readTimeout = 8000
+                connection.setRequestProperty("Accept", "application/json")
+                connection.responseCode
+                connection.disconnect()
+            } catch (_: Exception) {
+            } finally {
+                pending.finish()
+            }
+        }.start()
     }
 }
 

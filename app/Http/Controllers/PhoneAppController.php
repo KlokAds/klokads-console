@@ -134,6 +134,15 @@ class PhoneAppController extends Controller
         return response()->json(['ok' => true, 'to' => $request->session()->pull('personal_intended', route('personal.dashboard'))]);
     }
 
+    /** "✓ Seen" tapped on the phone: read in the bell too. */
+    public function read(Request $request, string $token): JsonResponse
+    {
+        abort_unless(hash_equals(AutoEntries::token(), $token), 404);
+        AppNotification::whereKey($request->integer('id'))->whereNull('read_at')->update(['read_at' => now()]);
+
+        return response()->json(['ok' => true]);
+    }
+
     /** New notifications since the last one the phone showed. */
     public function feed(Request $request, string $token): JsonResponse
     {

@@ -33,6 +33,7 @@ use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SpendBillingController;
 use App\Http\Controllers\StripeWebhookController;
+use App\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
@@ -45,6 +46,8 @@ Route::get('/reminders/ping/{token}', [NotificationController::class, 'ping'])->
 // An Android SMS-forwarder app posts bank / wallet SMS here (secret token in the URL).
 Route::post('/inbox/sms/{token}', [InboxController::class, 'sms'])->middleware('throttle:120,1')->name('inbox.sms');
 Route::get('/app/feed/{token}', [PhoneAppController::class, 'feed'])->middleware('throttle:60,1')->name('app.feed');
+Route::post('/app/tasks/{token}/{task}/{action}', [TaskController::class, 'fromPhone'])->middleware('throttle:60,1')->name('app.tasks.action');
+Route::post('/app/feed/{token}/read', [PhoneAppController::class, 'read'])->middleware('throttle:60,1')->name('app.feed.read');
 Route::post('/app/followups/{token}', [PhoneAppController::class, 'followUps'])->middleware('throttle:120,1')->name('app.followups');
 Route::get('/app/followups/{token}', [PhoneAppController::class, 'followUpList'])->middleware('throttle:60,1')->name('app.followups.list');
 Route::post('/app/followups/{token}/{followUp}/{action}', [PhoneAppController::class, 'followUpAction'])->middleware('throttle:60,1')->name('app.followups.action');
@@ -99,6 +102,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/personal/envelopes/{envelope}/spends', [EnvelopeController::class, 'spend'])->middleware('personal')->name('personal.envelopes.spend');
     Route::delete('/personal/envelope-spends/{spend}', [EnvelopeController::class, 'destroySpend'])->middleware('personal')->name('personal.envelopes.spends.destroy');
     Route::put('/personal/guide', [GuideController::class, 'update'])->middleware('personal')->name('personal.guide.update');
+    Route::get('/personal/tasks', [TaskController::class, 'index'])->middleware('personal')->name('personal.tasks.index');
+    Route::post('/personal/tasks', [TaskController::class, 'store'])->middleware('personal')->name('personal.tasks.store');
+    Route::put('/personal/tasks/{task}', [TaskController::class, 'update'])->middleware('personal')->name('personal.tasks.update');
+    Route::post('/personal/tasks/{task}/done', [TaskController::class, 'done'])->middleware('personal')->name('personal.tasks.done');
+    Route::post('/personal/tasks/{task}/later', [TaskController::class, 'later'])->middleware('personal')->name('personal.tasks.later');
+    Route::delete('/personal/tasks/{task}', [TaskController::class, 'destroy'])->middleware('personal')->name('personal.tasks.destroy');
     Route::get('/personal/followups', [FollowUpController::class, 'index'])->middleware('personal')->name('personal.followups.index');
     Route::post('/personal/followups/{followUp}/done', [FollowUpController::class, 'done'])->middleware('personal')->name('personal.followups.done');
     Route::post('/personal/followups/{followUp}/later', [FollowUpController::class, 'later'])->middleware('personal')->name('personal.followups.later');

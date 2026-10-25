@@ -78,7 +78,7 @@ class FollowUps
     /** Heartbeat: remind what is still open after an hour (and again later). */
     public function run(?CarbonImmutable $now = null): int
     {
-        $now ??= CarbonImmutable::now();
+        $now = ($now ?? CarbonImmutable::now())->utc();
         $sent = 0;
 
         foreach (FollowUp::open()->whereNotNull('remind_at')->where('remind_at', '<=', $now)->where('reminded', '<', self::MAX_REMINDERS)->get() as $f) {

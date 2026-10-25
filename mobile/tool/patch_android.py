@@ -72,6 +72,8 @@ patch(manifest, r'(\n(\s*)<activity)', r'''
             </intent-filter>
         </receiver>
         <receiver android:exported="false" android:name=".UpdateReceiver" />
+        <receiver android:exported="false" android:name=".SeenReceiver" />
+        <receiver android:exported="false" android:name=".TaskActionReceiver" />
         <receiver android:exported="false" android:name=".FollowUpActionReceiver" />
         <service android:name=".WalletListener" android:exported="false" android:label="MH-Bot wallet alerts"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">

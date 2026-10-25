@@ -48,6 +48,7 @@ class Heartbeat
             'spending_checks' => fn () => app(PersonalReminders::class)->spendingCheck(),
             'envelopes' => fn () => app(Envelopes::class)->remindDue(),
             'follow_ups' => fn () => app(FollowUps::class)->run(),
+            'tasks' => fn () => app(Tasks::class)->run(),
         ] as $job => $task) {
             try {
                 $result[$job] = $task();

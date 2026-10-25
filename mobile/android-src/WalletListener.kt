@@ -25,8 +25,42 @@ class WalletListener : NotificationListenerService() {
             ?.split(',')?.map { Forwarder.normalise(it) }?.filter { it.isNotEmpty() })
             ?: DEFAULT_APPS
 
+    private fun fromGmail(sbn: StatusBarNotification) {
+        val n = sbn.notification
+        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0 || Forwarder.url(this) == null) {
+            return
+        }
+        val extras = n.extras
+        val sender = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: return
+        // Only from a bank / wallet switched on in Senders.
+        if (!Forwarder.senderAllowed(this, sender)) {
+            return
+        }
+        val text = listOfNotNull(
+            extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+            extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
+        ).distinct().joinToString(". ")
+        if (text.isBlank()) {
+            return
+        }
+        val seen = getSharedPreferences(SEEN, MODE_PRIVATE)
+        val hash = ("gmail" + sender + text).hashCode().toString()
+        if (seen.contains(hash)) {
+            return
+        }
+        seen.edit().putLong(hash, System.currentTimeMillis()).apply()
+        if (Forwarder.enqueue(this, "email", sender, text, sbn.postTime)) {
+            Forwarder.sendNow(this) {}
+        }
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (sbn.packageName == packageName) {
+            return
+        }
+        // A bank's email in Gmail (BRAC, Midland…): sent like its SMS — the server books it once.
+        if (sbn.packageName == "com.google.android.gm") {
+            fromGmail(sbn)
             return
         }
         // WhatsApp / Messenger / IMO: work follow-ups, not money.
