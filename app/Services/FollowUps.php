@@ -18,11 +18,13 @@ class FollowUps
 {
     public const SOURCES = ['whatsapp' => 'WhatsApp', 'whatsapp_business' => 'WhatsApp Business', 'messenger' => 'Messenger', 'imo' => 'IMO', 'call' => 'Phone'];
 
+    /** Once when it comes in, after an hour, then every 6 hours until I mark it done (or reply / call back). */
     public const FIRST_AFTER_MINUTES = 60;
 
-    public const AGAIN_AFTER_MINUTES = 180;
+    public const AGAIN_AFTER_MINUTES = 360;
 
-    public const MAX_REMINDERS = 3;
+    /** A week of 6-hourly reminders at most, so a forgotten one cannot ring forever. */
+    public const MAX_REMINDERS = 29;
 
     public function __construct(private Notify $notify) {}
 
@@ -58,12 +60,19 @@ class FollowUps
             return $open;
         }
 
-        return FollowUp::create([
+        $f = FollowUp::create([
             'source' => $e['source'], 'kind' => ($e['kind'] ?? 'message') === 'missed_call' ? 'missed_call' : 'message',
             'person' => mb_substr(trim((string) ($e['person'] ?: $e['phone'])), 0, 190), 'phone' => $e['phone'] ?? null,
             'key' => $key, 'preview' => $this->clip($e['text'] ?? null), 'first_at' => $at, 'last_at' => $at,
             'remind_at' => $at->addMinutes(self::FIRST_AFTER_MINUTES),
         ]);
+
+        // Once, right away: it is on my list now.
+        $what = $f->kind === 'missed_call' ? '📞 Missed call' : '💬 '.self::SOURCES[$f->source];
+        $this->notify->send('reminder', "{$what}: {$f->person}", trim(($f->kind === 'message' && $f->preview ? '“'.$f->preview.'” · ' : '').($this->context($f) ? $this->context($f).' · ' : '').'I\'ll remind you in an hour if it is still open.'),
+            route('personal.followups.index'), 'klok-followup');
+
+        return $f;
     }
 
     /** Heartbeat: remind what is still open after an hour (and again later). */

@@ -44,12 +44,15 @@ class FollowUpsTest extends TestCase
         $this->event(['action' => 'new', 'source' => 'whatsapp', 'kind' => 'message', 'person' => 'Zabed Vai', 'text' => 'Ar meeting kobe?']);
         $this->assertSame(2, FollowUp::sole()->count);
 
+        // Once right away (only for the first message), then after an hour, then every 6 hours.
+        $this->assertSame('💬 WhatsApp: Zabed Vai', AppNotification::sole()->title);
         $run = app(FollowUps::class);
         $this->assertSame(0, $run->run(CarbonImmutable::parse('2026-10-25 10:30')));
         $this->assertSame(1, $run->run(CarbonImmutable::parse('2026-10-25 11:01')));
-        $this->assertSame(0, $run->run(CarbonImmutable::parse('2026-10-25 11:30')), 'once, then again after 3 hours');
+        $this->assertSame(0, $run->run(CarbonImmutable::parse('2026-10-25 16:30')), 'not again before 6 hours');
+        $this->assertSame(1, $run->run(CarbonImmutable::parse('2026-10-25 17:02')));
 
-        $note = AppNotification::sole();
+        $note = AppNotification::latest('id')->first();
         $this->assertStringStartsWith('💬 Unseen on WhatsApp: Zabed Vai', $note->title);
         $this->assertStringContainsString('Ar meeting kobe?', $note->body);
         $this->assertStringContainsString('Job ৳5,000.00/month · pay day 5 Nov', $note->body);
