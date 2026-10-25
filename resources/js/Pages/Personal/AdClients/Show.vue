@@ -31,6 +31,7 @@ const props = defineProps({
     rate: Object,
     tab: String,
     payAccounts: { type: Array, default: () => [] },
+    cardAccounts: { type: Array, default: () => [] },
     advice: { type: Array, default: () => [] },
 });
 
@@ -150,7 +151,9 @@ const INVOICE = { unpaid: ['Unpaid', 'text-amber-600'], partial: ['Part paid', '
 const byCharges = computed(() => props.client.ad_bill_basis === 'charges');
 
 // ---------------------------------------------------------------- setup
-const settings = useForm({ ad_bill: props.client.ad_bill, ad_fee_percent: props.client.ad_fee_percent, billed_until: props.client.billed_until ?? '', ad_bill_basis: props.client.ad_bill_basis, ad_meta_rate: props.client.ad_meta_rate });
+const settings = useForm({ ad_bill: props.client.ad_bill, ad_fee_percent: props.client.ad_fee_percent, billed_until: props.client.billed_until ?? '', ad_bill_basis: props.client.ad_bill_basis, ad_meta_rate: props.client.ad_meta_rate, ad_card_account_id: props.client.ad_card_account_id ?? null });
+const cardAccountOptions = computed(() => [{ value: null, label: 'Not in my books' }, ...props.cardAccounts.map((a) => ({ value: a.id, label: `${a.name} · ${a.currency}` }))]);
+const notCharged = computed(() => props.ledger.meta.filter((x) => x.unbilled > 0));
 const saveSettings = () => settings.put(route('ad-clients.settings', props.client.id), { preserveScroll: true });
 const adding = ref(false);
 const add = useForm({ account_id: null, whole: true, campaigns: [], paid_by: 'client', from: today });
@@ -298,11 +301,17 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
 
         <!-- ============ Money (only when my card pays) -->
         <div v-if="tab === 'money'" class="mt-3 space-y-3">
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 <div class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm"><div class="text-xs text-ink-500">Billed</div><div class="mt-1 text-lg font-extrabold tabular-nums">{{ m(Object.values(ledger.totals).reduce((a, t) => a + t.billed, 0), 'BDT') }}</div></div>
                 <div class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm"><div class="text-xs text-ink-500">Paid</div><div class="mt-1 text-lg font-extrabold tabular-nums text-emerald-600">{{ m(Object.values(ledger.totals).reduce((a, t) => a + t.paid, 0), 'BDT') }}</div></div>
                 <div class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm"><div class="text-xs text-ink-500">Due</div><div class="mt-1 text-lg font-extrabold tabular-nums" :class="totalDue ? 'text-amber-600' : ''">{{ m(totalDue, 'BDT') }}</div></div>
                 <div class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm"><div class="text-xs text-ink-500">Their credit</div><div class="mt-1 text-lg font-extrabold tabular-nums text-teal-700">{{ m(ledger.credit, 'BDT') }}</div></div>
+                <!-- Spent, Meta hasn't taken it from my card yet: it will -->
+                <div class="col-span-2 rounded-3xl border border-dashed border-sky-300 bg-sky-50/60 p-4 shadow-sm sm:col-span-1 dark:border-sky-500/40 dark:bg-sky-500/10">
+                    <div class="text-xs text-ink-500">Not charged yet</div>
+                    <div class="mt-1 text-lg font-extrabold tabular-nums text-sky-700 dark:text-sky-300">{{ notCharged.length ? notCharged.map((x) => m(x.unbilled, x.currency)).join(' + ') : m(0, 'BDT') }}</div>
+                    <div v-if="notCharged.length" class="mt-0.5 text-[11px] text-ink-500">≈ {{ m(notCharged.reduce((a, x) => a + x.bill, 0), 'BDT') }} on their bill</div>
+                </div>
             </div>
 
             <!-- The three things to do here -->
@@ -402,6 +411,8 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                         <label class="label">Bill by</label>
                         <Segmented v-model="settings.ad_bill_basis" :options="[{ value: 'charges', label: 'What Meta charged my card' }, { value: 'spend', label: 'What the ads spent' }]" block size="sm" />
                     </div>
+                    <div class="sm:col-span-2"><label class="label">Meta charges my card in</label><Select v-model="settings.ad_card_account_id" :options="cardAccountOptions" :searchable="false" />
+                        <p class="mt-1 text-xs text-ink-500">Each Meta charge is added there as spending. Choosing it now adds the charges so far too — the balance stays as it is.</p></div>
                     <div><label class="label">Meta's taka per dollar</label><input v-model="settings.ad_meta_rate" type="number" step="0.01" min="50" class="input" /></div>
                     <div><label class="label">My commission (%)</label><input v-model="settings.ad_fee_percent" type="number" step="0.5" min="0" max="100" class="input" /></div>
                     <div><label class="label">Settled up to (from my sheet)</label><DatePicker v-model="settings.billed_until" :max="today" clearable placeholder="Nothing settled" /></div>

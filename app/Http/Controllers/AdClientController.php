@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\MoneyTransaction;
 use App\Models\PersonalAdAssignment;
 use App\Models\PersonalAdCharge;
 use App\Models\PersonalAdDay;
@@ -12,6 +13,7 @@ use App\Services\AdPerformance;
 use App\Services\KlokOneRate;
 use App\Services\MetaAds;
 use App\Services\PersonalAds;
+use App\Support\Ledger;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -62,11 +64,12 @@ class AdClientController extends Controller
         [$start, $end, $period] = $this->period($request);
 
         return Inertia::render('Personal/AdClients/Show', [
-            'client' => $client->only('id', 'name', 'ad_bill', 'ad_fee_percent', 'ad_bill_basis', 'ad_meta_rate') + ['billed_until' => $client->ad_billed_until?->toDateString()],
+            'client' => $client->only('id', 'name', 'ad_bill', 'ad_fee_percent', 'ad_bill_basis', 'ad_meta_rate', 'ad_card_account_id') + ['billed_until' => $client->ad_billed_until?->toDateString()],
             'rate' => KlokOneRate::current(),
             'advice' => AdAdvice::forOwner($client->name),
             'tab' => in_array($request->query('tab'), ['overview', 'campaigns', 'money', 'setup'], true) ? $request->query('tab') : 'overview',
             'payAccounts' => Account::where('archived', false)->where('scope', 'personal')->where('currency', 'BDT')->orderBy('name')->get(['id', 'name']),
+            'cardAccounts' => Account::where('archived', false)->where('scope', 'personal')->whereIn('currency', ['USD', 'BDT'])->orderBy('name')->get(['id', 'name', 'currency']),
             'range' => ['period' => $period, 'from' => $start->toDateString(), 'to' => $end->toDateString(), 'label' => PersonalAds::period($start, $end)],
             // Every campaign of theirs (the page groups them: running, then ended or paused).
             'campaigns' => PersonalAds::table($client, $start, $end, true),
@@ -159,11 +162,21 @@ class AdClientController extends Controller
             'billed_until' => ['nullable', 'date', 'before_or_equal:today'],
             'ad_bill_basis' => ['required', Rule::in(['spend', 'charges'])],
             'ad_meta_rate' => ['required', 'numeric', 'between:50,500'],
+            'ad_card_account_id' => ['nullable', Rule::exists('accounts', 'id')->where('scope', 'personal')],
         ]);
+        $chosen = ($data['ad_card_account_id'] ?? null) && (int) $data['ad_card_account_id'] !== (int) $client->ad_card_account_id;
         $client->update(['ad_bill' => $data['ad_bill'], 'ad_fee_percent' => $data['ad_fee_percent'], 'ad_billed_until' => $data['billed_until'] ?? null,
-            'ad_bill_basis' => $data['ad_bill_basis'], 'ad_meta_rate' => $data['ad_meta_rate']]);
+            'ad_bill_basis' => $data['ad_bill_basis'], 'ad_meta_rate' => $data['ad_meta_rate'], 'ad_card_account_id' => $data['ad_card_account_id'] ?? null]);
 
-        return back()->with('success', 'Saved.');
+        // The card's account just chosen: Meta's charges so far count as spending there; its balance already has them.
+        $booked = 0;
+        if ($chosen) {
+            foreach (PersonalAdCharge::where('personal_client_id', $client->id)->whereNull('money_transaction_id')->get() as $charge) {
+                $booked += app(PersonalAds::class)->bookCharge($charge, balanceAsIs: true) ? 1 : 0;
+            }
+        }
+
+        return back()->with('success', $booked ? "Saved. {$booked} Meta charge(s) added as spending — the balance stays as it is." : 'Saved.');
     }
 
     /** What Meta took from my card for this client (from the card's history), to bill once. */
@@ -199,6 +212,9 @@ class AdClientController extends Controller
     public function removeCharge(PersonalClient $client, PersonalAdCharge $charge): RedirectResponse
     {
         abort_unless($charge->personal_client_id === $client->id && ! $charge->personal_ad_bill_id, 404);
+        if ($charge->money_transaction_id && $tx = MoneyTransaction::find($charge->money_transaction_id)) {
+            Ledger::delete($tx);
+        }
         $charge->delete();
 
         return back()->with('success', 'Removed.');

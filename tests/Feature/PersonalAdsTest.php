@@ -14,6 +14,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Services\AdPerformance;
 use App\Services\PersonalAds;
+use App\Support\Ledger;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -246,6 +247,48 @@ class PersonalAdsTest extends TestCase
         $this->assertSame('charges', $this->edge->fresh()->ad_bill_basis, 'my card: billed by charges, like Edge');
         $this->assertSame(1, AppNotification::where('title', 'like', '💳 Meta charged your card for Edge Education%')->count());
         $this->assertSame(0, PersonalAdCharge::where('personal_client_id', $this->marine->id)->count());
+    }
+
+    public function test_metas_charges_are_spending_on_my_card_account_and_what_is_not_charged_yet_shows(): void
+    {
+        $later = false;
+        $this->fakePilot(billing: false);
+        Http::fake([
+            'pilot.test/internal/console/ad-accounts/*/billing' => Http::response(['data' => ['currency' => 'BDT', 'amount_spent' => 1000000, 'unbilled' => 67510, 'card' => 'VISA *5372']]),
+            // Meta's log: the 21 Oct charge; later a new one too.
+            'pilot.test/internal/console/ad-accounts/act_1/charges*' => function () use (&$later) {
+                return Http::response(['data' => array_values(array_filter([
+                    ['id' => 'tx-new', 'time' => '2026-10-21T00:13:05+0000', 'amount' => 250194, 'currency' => 'BDT'],
+                    $later ? ['id' => 'tx-next', 'time' => '2026-10-31T09:00:00+0000', 'amount' => 119000, 'currency' => 'BDT'] : null,
+                ]))]);
+            },
+            'pilot.test/internal/console/ad-accounts/*/charges*' => Http::response(['data' => []]),
+        ]);
+        $nsave = Account::create(['name' => 'nSave Main', 'scope' => 'personal', 'kind' => 'wallet', 'currency' => 'USD', 'opening_balance' => 10064]);
+        $this->edge->update(['ad_billed_until' => '2026-10-20', 'ad_meta_rate' => 119]);
+        $this->assignBoth();
+        app(PersonalAds::class)->sync(force: true);
+
+        // Spent but not charged yet: Meta's ৳675.10, and roughly what it comes to on their bill.
+        $this->get("/personal/client-ads/{$this->edge->id}?tab=money")->assertInertia(fn ($page) => $page
+            ->where('ledger.meta.0.unbilled', 67510)->where('ledger.meta.0.bill', 88385)); // ৳675.10 ÷ 119 × 129.83 + 20%
+
+        // nSave is the card: the charge so far is spending there; the balance I keep stays $100.64.
+        $edge = $this->edge->fresh();
+        $this->put("/personal/client-ads/{$edge->id}/settings", ['ad_bill' => false, 'ad_fee_percent' => 20, 'billed_until' => '2026-10-20',
+            'ad_bill_basis' => 'charges', 'ad_meta_rate' => 119, 'ad_card_account_id' => $nsave->id])->assertSessionHas('success');
+        $tx = MoneyTransaction::where('account_id', $nsave->id)->sole();
+        $this->assertSame(['expense', 2102, 'client_ads', '2026-10-21'], [$tx->kind, $tx->amount, $tx->category, $tx->occurred_on->toDateString()]);
+        $this->assertSame(10064, Ledger::balance($nsave->fresh()));
+        $this->assertSame($tx->id, PersonalAdCharge::where('meta_id', 'tx-new')->value('money_transaction_id'));
+
+        // Saving again adds nothing twice; a new charge from Meta comes off the balance.
+        $this->put("/personal/client-ads/{$edge->id}/settings", ['ad_bill' => false, 'ad_fee_percent' => 20, 'billed_until' => '2026-10-20',
+            'ad_bill_basis' => 'charges', 'ad_meta_rate' => 119, 'ad_card_account_id' => $nsave->id]);
+        $later = true;
+        app(PersonalAds::class)->sync(force: true);
+        $this->assertSame(2, MoneyTransaction::where('account_id', $nsave->id)->count());
+        $this->assertSame(10064 - 1000, Ledger::balance($nsave->fresh()));
     }
 
     public function test_billed_by_each_card_charge_i_enter_in_taka_or_dollars(): void

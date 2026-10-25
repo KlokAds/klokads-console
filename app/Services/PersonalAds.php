@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\Account;
 use App\Models\AdAccountState;
+use App\Models\MoneyTransaction;
 use App\Models\PersonalAdAssignment;
 use App\Models\PersonalAdBill;
 use App\Models\PersonalAdCharge;
@@ -110,12 +112,49 @@ class PersonalAds
             if ($day->toDateString() < $since->toDateString() || $c['amount'] <= 0 || PersonalAdCharge::where('meta_id', $c['id'])->exists()) {
                 continue;
             }
-            PersonalAdCharge::create(['personal_client_id' => $client->id, 'date' => $day->toDateString(), 'currency' => $c['currency'], 'amount' => $c['amount'],
+            $charge = PersonalAdCharge::create(['personal_client_id' => $client->id, 'date' => $day->toDateString(), 'currency' => $c['currency'], 'amount' => $c['amount'],
                 'note' => 'Meta charged '.($now['card'] ?: 'the card'), 'source' => 'meta', 'meta_id' => $c['id']]);
+            $this->bookCharge($charge);
             $this->notify->send('billing', "💳 Meta charged your card for {$client->name}: ".Notify::money($c['amount'], $c['currency']),
                 $day->format('j M').($now['card'] ? " · {$now['card']}" : '').' · from Meta. It goes on their next ads bill.',
                 route('ad-clients.show', ['client' => $client, 'tab' => 'money']), 'klok-adcharge-'.$client->id);
         }
+    }
+
+    /**
+     * Meta's charge as my spending, once, in the account its card belongs to (in that account's money:
+     * a taka charge on a dollar card at Meta's taka per dollar). $balanceAsIs: the charge was before the
+     * balance I keep, so it is spending but the balance stays where it is.
+     */
+    public function bookCharge(PersonalAdCharge $charge, bool $balanceAsIs = false): ?MoneyTransaction
+    {
+        $client = PersonalClient::find($charge->personal_client_id);
+        $account = $client?->ad_card_account_id ? Account::find($client->ad_card_account_id) : null;
+        if (! $account || $charge->money_transaction_id || $charge->source !== 'meta') {
+            return null;
+        }
+        $from = strtoupper($charge->currency);
+        $to = strtoupper($account->currency);
+        $amount = match (true) {
+            $from === $to => $charge->amount,
+            $from === 'BDT' && $to === 'USD' => (int) round($charge->amount / (float) $client->ad_meta_rate),
+            $from === 'USD' && $to === 'BDT' => (int) round($charge->amount * (float) $client->ad_meta_rate),
+            default => null,
+        };
+        if (! $amount) {
+            return null;
+        }
+        $tx = Ledger::save([
+            'kind' => 'expense', 'account_id' => $account->id, 'amount' => $amount, 'category' => 'client_ads', 'counterparty' => 'Meta',
+            'description' => ($client->company ?: $client->name).' ads · Meta charged '.Notify::money($charge->amount, $charge->currency),
+            'occurred_on' => $charge->date->toDateString(),
+        ]);
+        if ($balanceAsIs) {
+            $account->increment('opening_balance', $amount);
+        }
+        $charge->update(['money_transaction_id' => $tx->id]);
+
+        return $tx;
     }
 
     /**
@@ -519,7 +558,9 @@ class PersonalAds
                 ->map(fn ($p) => ['id' => $p->id, 'date' => $p->date->toDateString(), 'amount' => $p->amount, 'applied' => $p->applied, 'account' => $p->account?->name, 'note' => $p->note,
                     'paid' => collect($p->allocations ?? [])->map(fn ($a) => ['amount' => $a['amount']] + ($billOf[$a['invoice_id']] ?? ['number' => '?', 'period' => '']))->all()])->all(),
             // Meta: spent but not charged yet, and the card it will charge.
-            'meta' => $state->map(fn ($s) => ['account' => $s->account_id, 'currency' => $s->currency, 'unbilled' => $s->unbilled, 'card' => $s->card, 'checked_at' => $s->checked_at->toIso8601String()])->values()->all(),
+            'meta' => $state->map(fn ($s) => ['account' => $s->account_id, 'currency' => $s->currency, 'unbilled' => $s->unbilled, 'card' => $s->card, 'checked_at' => $s->checked_at->toIso8601String(),
+                // when Meta charges it, roughly this on their bill
+                'bill' => $s->unbilled > 0 ? (int) round(self::inTaka($c, [$s->currency => $s->unbilled])['bdt'] * (1 + $c->ad_fee_percent / 100)) : 0])->values()->all(),
             'unbilled_taka' => $now ? ['usd' => $now['usd'], 'bdt' => $now['bdt'], 'with_fee' => (int) round($now['bdt'] * (1 + $c->ad_fee_percent / 100)), 'fx' => $now['fx']] : null,
             'charges' => PersonalAdCharge::where('personal_client_id', $c->id)->orderByDesc('date')->orderByDesc('id')->limit(30)->get()
                 ->map(fn ($ch) => ['id' => $ch->id, 'date' => $ch->date->toDateString(), 'currency' => $ch->currency, 'amount' => $ch->amount, 'note' => $ch->note,
