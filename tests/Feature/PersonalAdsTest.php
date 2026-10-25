@@ -128,7 +128,9 @@ class PersonalAdsTest extends TestCase
         $taka = (int) round(80000 / 119 * 129.83);
         $this->assertSame($taka + (int) round($taka * 0.2), $bill->invoice->total, 'in dollars at the agency rate, + 20% commission');
         $this->assertSame('BDT', $bill->invoice->currency);
-        $this->assertSame('Commission (20%)', $bill->invoice->items[1]['description']);
+        $this->assertCount(1, $bill->invoice->items, 'the campaign that spent, no rate, no commission');
+        $this->assertSame('Edge Leads — 16 Oct – 31 Oct 2026', $bill->invoice->items[0]['description']);
+        $this->assertNull($bill->invoice->note);
         $this->assertNull($bill->invoice->sent_at, 'drafted, not sent');
         // Marine's account is in dollars: $15 × 129.83 + 20%, billed in taka too.
         $this->assertSame((int) round(1500 * 129.83 * 1.2), PersonalAdBill::where('personal_client_id', $this->marine->id)->sole()->invoice->total);
@@ -250,7 +252,9 @@ class PersonalAdsTest extends TestCase
         $this->post("/personal/client-ads/{$this->edge->id}/bill")->assertSessionHas('success');
         $invoice = PersonalAdBill::where('personal_client_id', $this->edge->id)->sole()->invoice;
         $this->assertSame($taka + (int) round($taka * 0.2), $invoice->total);
-        $this->assertStringContainsString('÷ 119', $invoice->items[0]['description']);
+        $this->assertStringNotContainsString('119', $invoice->items[0]['description'], 'my rate stays with me');
+        $this->assertStringNotContainsString('129', $invoice->items[0]['description']);
+        $this->assertSame('$21.02 × 129.83 + 20%', PersonalAds::ledger($this->edge->fresh())['bills'][0]['how']);
 
         // A charge entered in dollars (what the card was cut): straight × rate + 20%. The first is not billed again.
         $this->post("/personal/client-ads/{$this->edge->id}/charges", ['date' => '2026-10-31', 'amount' => '10', 'currency' => 'USD']);

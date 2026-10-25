@@ -350,8 +350,12 @@ class PersonalAds
             if ($charges->isEmpty()) {
                 return [];
             }
-            $bill = $this->draftBill($c, CarbonImmutable::parse($charges->first()->date), CarbonImmutable::parse($charges->last()->date), 'charges',
-                $charges->groupBy('currency')->map(fn ($list) => (int) $list->sum('amount'))->all());
+            // A charge pays for what the ads spent since the charge before it: those days decide the campaigns on the bill.
+            $first = CarbonImmutable::parse($charges->first()->date);
+            $previous = $this->chargeBefore($c, $first);
+            $spentFrom = $previous ? $previous->addDay() : $first->subDays(30);
+            $bill = $this->draftBill($c, $first, CarbonImmutable::parse($charges->last()->date), 'charges',
+                $charges->groupBy('currency')->map(fn ($list) => (int) $list->sum('amount'))->all(), $spentFrom);
             PersonalAdCharge::whereKey($charges->pluck('id'))->update(['personal_ad_bill_id' => $bill->id]);
 
             return [$bill];
@@ -391,22 +395,62 @@ class PersonalAds
         return ['usd' => (int) round($usd), 'bdt' => (int) round($usd * $fx), 'fx' => $fx, 'lines' => $lines];
     }
 
+    /** The day of Meta's charge before this one — on record, or on Meta (an older, settled one isn't kept here). */
+    private function chargeBefore(PersonalClient $c, CarbonImmutable $first): ?CarbonImmutable
+    {
+        $days = collect([PersonalAdCharge::where('personal_client_id', $c->id)->whereDate('date', '<', $first->toDateString())->max('date')]);
+        foreach ($c->adAssignments()->where('paid_by', 'me')->pluck('account_id')->unique() as $account) {
+            try {
+                $tz = PersonalReminders::timezone();
+                foreach ($this->meta->charges($account, $first->subDays(60)) as $ch) {
+                    $day = CarbonImmutable::parse($ch['time'])->setTimezone($tz)->toDateString();
+                    if ($day < $first->toDateString()) {
+                        $days->push($day);
+                    }
+                }
+            } catch (Throwable) {
+                // Meta away: what is on record
+            }
+        }
+        $last = $days->filter()->map(fn ($d) => CarbonImmutable::parse($d)->toDateString())->max();
+
+        return $last ? CarbonImmutable::parse($last) : null;
+    }
+
+    /**
+     * The bill's lines: each campaign that spent in those days, with its share of the total — what
+     * the client sees. Never my rate, the dollars or my commission.
+     *
+     * @return array<int, array{description: string, qty: int, rate: int}>
+     */
+    private static function campaignLines(PersonalClient $c, CarbonImmutable $from, CarbonImmutable $to, int $total, string $period): array
+    {
+        $spent = PersonalAdDay::where('personal_client_id', $c->id)->where('paid_by', 'me')->whereDate('date', '>=', $from->toDateString())->whereDate('date', '<=', $to->toDateString())
+            ->get()->groupBy('campaign_name')->map(fn ($days) => (int) $days->sum('spend'))->filter()->sortDesc();
+        if ($spent->isEmpty()) {
+            return [['description' => "Meta (Facebook) ads — {$period}", 'qty' => 1, 'rate' => $total]];
+        }
+        $all = $spent->sum();
+        $lines = $spent->map(fn ($s, $name) => ['description' => "{$name} — {$period}", 'qty' => 1, 'rate' => (int) floor($total * $s / $all)])->values()->all();
+        $lines[0]['rate'] += $total - array_sum(array_column($lines, 'rate')); // the poisha left by rounding, so the total is exact
+
+        return $lines;
+    }
+
     /** @param  array<string, int>  $amounts  currency => cents */
-    private function draftBill(PersonalClient $c, CarbonImmutable $from, CarbonImmutable $to, string $basis, array $amounts): PersonalAdBill
+    private function draftBill(PersonalClient $c, CarbonImmutable $from, CarbonImmutable $to, string $basis, array $amounts, ?CarbonImmutable $spentFrom = null): PersonalAdBill
     {
         $taka = self::inTaka($c, $amounts);
         if ($taka['fx'] <= 0) {
             throw new \RuntimeException('The dollar rate from KlokOne is not known yet — open KlokOne once, or set it in Client ads.');
         }
         $period = self::period($from, $to);
-        $what = $basis === 'charges' ? 'Meta charges' : 'Meta ads';
         $rate = rtrim(rtrim(number_format($taka['fx'], 2), '0'), '.');
-        $items = [['description' => "{$what} — {$period}: ".implode(' + ', $taka['lines'])." × {$rate}", 'qty' => 1, 'rate' => $taka['bdt']]];
-        if ($c->ad_fee_percent > 0) {
-            $items[] = ['description' => 'Commission ('.rtrim(rtrim(number_format($c->ad_fee_percent, 2), '0'), '.').'%)', 'qty' => 1, 'rate' => (int) round($taka['bdt'] * $c->ad_fee_percent / 100)];
-        }
-        $invoice = app(PersonalInvoicing::class)->create($c, $items, CarbonImmutable::today(), CarbonImmutable::today()->addDays(7),
-            "{$what} my card paid, {$period}. Dollar rate {$rate}.", null, 'BDT');
+        $fee = $c->ad_fee_percent > 0 ? (int) round($taka['bdt'] * $c->ad_fee_percent / 100) : 0;
+        // The client sees the campaigns and the total — never my rate, the dollars or my commission.
+        $items = self::campaignLines($c, $spentFrom ?? $from, $to, $taka['bdt'] + $fee, $period);
+        $invoice = app(PersonalInvoicing::class)->create($c, $items, CarbonImmutable::today(), CarbonImmutable::today()->addDays(7), null, null, 'BDT');
+        // How it was worked out stays with me (the Money tab), not on the invoice.
         $bill = PersonalAdBill::create(['personal_client_id' => $c->id, 'period_from' => $from->toDateString(), 'period_to' => $to->toDateString(),
             'currency' => 'BDT', 'spend' => (int) array_sum($amounts), 'basis' => $basis, 'usd' => $taka['usd'], 'fx_rate' => $taka['fx'], 'personal_invoice_id' => $invoice->id]);
         $this->applyCredit($c); // money they paid ahead goes on it at once
@@ -441,6 +485,8 @@ class PersonalAds
             'period' => self::period(CarbonImmutable::parse($b->period_from), CarbonImmutable::parse($b->period_to)),
             'from' => $b->period_from->toDateString(), 'to' => $b->period_to->toDateString(),
             'currency' => $b->currency, 'spend' => $b->spend,
+            // For me only (never on the invoice): how the total was worked out.
+            'how' => $b->usd ? Notify::money((int) $b->usd, 'USD').' × '.rtrim(rtrim(number_format((float) $b->fx_rate, 2), '0'), '.').' + '.rtrim(rtrim(number_format($c->ad_fee_percent, 2), '0'), '.').'%' : null,
             'invoice' => $b->invoice ? ['id' => $b->invoice->id, 'number' => $b->invoice->number, 'total' => $b->invoice->total, 'paid' => $b->invoice->paid,
                 'status' => $b->invoice->status, 'sent' => (bool) $b->invoice->sent_at, 'url' => $b->invoice->publicUrl()] : null,
         ]);

@@ -315,7 +315,8 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                 <h3 class="text-sm font-bold text-ink-900">Bills</h3>
                 <div class="mt-2 divide-y divide-line/70">
                     <div v-for="b in ledger.bills" :key="b.id" class="flex flex-wrap items-center gap-3 py-2.5 text-sm">
-                        <span class="min-w-0 flex-1"><b class="text-ink-900">{{ b.period }}</b><span v-if="b.invoice" class="ml-2 text-xs text-ink-500">{{ b.invoice.number }}{{ b.invoice.sent ? '' : ' · not sent' }}</span></span>
+                        <span class="min-w-0 flex-1"><b class="text-ink-900">{{ b.period }}</b><span v-if="b.invoice" class="ml-2 text-xs text-ink-500">{{ b.invoice.number }}{{ b.invoice.sent ? '' : ' · not sent' }}</span>
+                            <span v-if="b.how" class="block text-[11px] text-ink-400">🔒 {{ b.how }} — only you see this</span></span>
                         <span class="tabular-nums font-semibold">{{ m(b.invoice?.total ?? b.spend, 'BDT') }}</span>
                         <span v-if="b.invoice" class="w-20 text-right text-xs font-bold" :class="INVOICE[b.invoice.status]?.[1]">{{ INVOICE[b.invoice.status]?.[0] }}</span>
                         <a v-if="b.invoice" :href="b.invoice.url" target="_blank" class="text-xs font-semibold text-ink-500 hover:text-teal-700">Open</a>
