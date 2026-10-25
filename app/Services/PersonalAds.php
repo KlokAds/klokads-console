@@ -48,8 +48,8 @@ class PersonalAds
         return $client->ad_report_token;
     }
 
-    /** Fresh from Meta this often (the server's clock runs every 4–5 minutes). */
-    public const SYNC_MINUTES = 4;
+    /** Fresh from Meta on every run of the clock (every 4–5 minutes): a little shorter, so no run is skipped. */
+    public const SYNC_MINUTES = 3;
 
     /** Pull recent days (or, the first time, everything since each assignment started) and the campaigns' state. */
     public function sync(bool $force = false): int
