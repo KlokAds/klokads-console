@@ -86,11 +86,12 @@ class Airwallex
         return $items;
     }
 
-    /** Available money per currency, in cents: ['SGD' => 123400, …]. */
+    /** Available money per currency, in cents — only currencies that hold something: ['SGD' => 20352, …]. */
     public function balances(): array
     {
         return collect($this->get('balances/current'))->filter(fn ($b) => is_array($b) && isset($b['currency']))
-            ->mapWithKeys(fn ($b) => [strtoupper($b['currency']) => self::cents($b['available_amount'] ?? 0)])->all();
+            ->mapWithKeys(fn ($b) => [strtoupper($b['currency']) => self::cents($b['available_amount'] ?? 0)])
+            ->filter(fn (int $cents) => $cents !== 0)->all();
     }
 
     /** Hourly from the heartbeat (every 15 min at most). */
@@ -203,6 +204,7 @@ class Airwallex
             'card' => ['💳 Airwallex card: '.$money, ($entry->description ?: 'Card payment').$this->balanceLine($entry->currency)],
             'payout' => ['↗️ Sent from Airwallex: '.$money, ($entry->description ?: 'Transfer').$this->balanceLine($entry->currency)],
             'fee' => ['Airwallex fee '.$money, $entry->description],
+            'conversion' => [($entry->amount >= 0 ? '💱 Converted into ' : '💱 Converted out of ').$entry->currency.': '.$money, 'Currency conversion in Airwallex.'.$this->balanceLine($entry->currency)],
             default => [($entry->amount >= 0 ? '⬇️ Airwallex +' : '⬆️ Airwallex −').$money, $entry->description],
         };
         $this->notify->send('billing', $title, $body, route('payouts.index'), 'klok-airwallex');
@@ -272,6 +274,7 @@ class Airwallex
 
         return match (true) {
             str_contains($type, 'DEPOSIT') => 'deposit',
+            str_contains($type, 'CONVERSION') => 'conversion',
             str_contains($type, 'ISSUING') || str_contains($type, 'CARD') => 'card',
             str_contains($type, 'FEE') => 'fee',
             str_contains($type, 'PAYOUT') || str_contains($type, 'TRANSFER') => 'payout',

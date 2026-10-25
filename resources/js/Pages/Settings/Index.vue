@@ -520,8 +520,11 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                             <div v-if="flow.airwallex" class="rounded-xl px-4 py-3 text-sm" :class="flow.airwallex_error ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-800'">
                                 <template v-if="flow.airwallex_error">{{ flow.airwallex_error }}</template>
                                 <template v-else>
-                                    Connected<template v-if="flow.airwallex_synced_at"> · read {{ date(flow.airwallex_synced_at) }}</template>
-                                    <span v-for="(cents, cur) in flow.airwallex_balances" :key="cur" class="ml-2 font-semibold tabular-nums">{{ money(cents, cur) }}</span>
+                                    <div>Connected<template v-if="flow.airwallex_synced_at"> · read {{ date(flow.airwallex_synced_at) }}</template></div>
+                                    <div class="mt-1.5 flex flex-wrap gap-1.5">
+                                        <span v-for="(cents, cur) in flow.airwallex_balances" :key="cur" class="rounded-full bg-white/60 px-2.5 py-0.5 font-semibold tabular-nums dark:bg-white/10">{{ money(cents, cur) }}</span>
+                                        <span v-if="!Object.keys(flow.airwallex_balances).length" class="text-xs">No money in Airwallex right now</span>
+                                    </div>
                                 </template>
                             </div>
                             <div>

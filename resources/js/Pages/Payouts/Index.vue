@@ -24,7 +24,7 @@ const props = defineProps({
     airwallex: Object,
 });
 
-const KIND = { deposit: '🏦 Deposit', meta: '💳 Meta', card: '💳 Card', payout: '↗️ Sent', fee: 'Fee', other: 'Other' };
+const KIND = { deposit: '🏦 Deposit', meta: '💳 Meta', card: '💳 Card', payout: '↗️ Sent', fee: 'Fee', conversion: '💱 Conversion', other: 'Other' };
 
 const m = (v) => money(v, props.currency);
 
@@ -241,7 +241,7 @@ function payOut() {
                         <div class="card-sub">Payouts land here; Meta charges the card for the client's ads.</div>
                     </div>
                     <Link v-if="!airwallex.connected" :href="route('settings.edit', { tab: 'money' })" class="btn-secondary btn-sm">Connect Airwallex</Link>
-                    <div v-else class="flex flex-wrap items-center gap-2 text-sm">
+                    <div v-else class="flex min-w-0 flex-wrap items-center gap-2 text-sm">
                         <span v-for="(cents, cur) in airwallex.balances" :key="cur" class="rounded-full bg-ink-50 px-3 py-1 font-semibold tabular-nums text-ink-900">{{ money(cents, cur) }}</span>
                     </div>
                 </div>
