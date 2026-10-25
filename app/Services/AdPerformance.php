@@ -121,6 +121,8 @@ class AdPerformance
                     'name' => $known[$id]['name'] ?? $days->last()->campaign_name,
                     'status' => $known[$id]['status'] ?? null,
                     'daily_budget' => $known[$id]['daily_budget'] ?? null,
+                    'end' => $known[$id]['end'] ?? null,
+                    'currency' => $days->first()->currency,
                     'spend' => $spend,
                     ...self::present($known[$id]['objective'] ?? null, $type, $spend, $results, (int) $days->sum('reach')),
                     'impressions' => $impressions,

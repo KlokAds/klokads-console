@@ -1,4 +1,5 @@
 <script setup>
+import CampaignCard from '@/Components/Ads/CampaignCard.vue';
 import Avatar from '@/Components/Avatar.vue';
 import DeltaChip from '@/Components/DeltaChip.vue';
 import EmptyState from '@/Components/EmptyState.vue';
@@ -13,6 +14,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps({
+    adDesk: { type: Object, default: null },
     filters: Object,
     connected: Boolean,
     lastSyncAt: String,
@@ -68,6 +70,38 @@ const marginPct = (s) => (s.revenue ? Math.round((s.margin / s.revenue) * 100) :
     <Head title="Dashboard" />
 
     <AuthenticatedLayout title="Dashboard" :subtitle="`Cashflow overview · ${periodLabel}`">
+        <!-- The big client's ad desk: money now and the campaigns, run from here -->
+        <section v-if="adDesk" class="mb-6">
+            <div class="overflow-hidden rounded-3xl bg-gradient-to-br from-[#0b1020] via-[#141a3a] to-[#2a1f5c] p-5 text-white shadow-lg sm:p-6">
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="min-w-0 flex-1">
+                        <div class="text-[11px] font-bold uppercase tracking-[0.14em] text-[#aaa2ff]">Ad desk</div>
+                        <div class="text-xl font-extrabold">{{ adDesk.client.company || adDesk.client.name }}</div>
+                    </div>
+                    <Link v-if="adDesk.waiting" :href="route('charges.show', adDesk.waiting.id)" class="rounded-xl bg-amber-400 px-3.5 py-2 text-sm font-bold text-amber-950 hover:bg-amber-300">🧾 Approve top-up {{ money(adDesk.waiting.amount, adDesk.currency) }}</Link>
+                    <Link :href="route('ad-money.index')" class="rounded-xl bg-white/10 px-3.5 py-2 text-sm font-semibold ring-1 ring-white/15 hover:bg-white/20">Ad money →</Link>
+                </div>
+                <div class="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <div><div class="text-[11px] font-semibold text-white/60">Their balance</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ money(adDesk.balance, adDesk.currency) }}</div><div class="text-[11px] text-white/60">{{ adDesk.days_left !== null ? `≈ ${adDesk.days_left} days` : 'no spend lately' }}</div></div>
+                    <div><div class="text-[11px] font-semibold text-white/60">Spent today</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ money(adDesk.today, adDesk.currency) }}</div><div class="text-[11px] text-white/60">≈ {{ money(adDesk.daily, adDesk.currency) }}/day with fee</div></div>
+                    <div><div class="text-[11px] font-semibold text-white/60">In Airwallex</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ adDesk.airwallex !== null ? money(adDesk.airwallex, adDesk.currency) : '—' }}</div></div>
+                    <div><div class="text-[11px] font-semibold text-white/60">Meta charged this month</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ money(adDesk.meta_month, adDesk.currency) }}</div></div>
+                </div>
+            </div>
+            <div class="mt-4 flex items-baseline justify-between">
+                <h3 class="text-sm font-bold text-ink-900">Campaigns · last 7 days</h3>
+                <span class="text-xs text-ink-500">Pause, budget and end date change on Meta right away</span>
+            </div>
+            <div class="mt-2 grid gap-3 lg:grid-cols-2">
+                <CampaignCard v-for="c in adDesk.campaigns" :key="c.id" :campaign="c" :currency="adDesk.currency" :control-url="route('clients.campaigns.control', [adDesk.client.id, c.id])" />
+            </div>
+            <EmptyState v-if="!adDesk.campaigns.length" compact icon="megaphone" title="No campaign spend in the last 7 days" text="Campaigns show here as soon as they spend." />
+            <div v-if="adDesk.suggestions.length" class="mt-3 rounded-3xl border border-line/70 bg-surface p-4 shadow-sm">
+                <div class="text-sm font-bold text-ink-900">Suggestions</div>
+                <ul class="mt-2 space-y-1.5 text-sm text-ink-700"><li v-for="(s, i) in adDesk.suggestions" :key="i">💡 {{ s.text }}</li></ul>
+            </div>
+        </section>
+
         <!-- Connect banner -->
         <div v-if="!connected" class="relative mb-6 overflow-hidden rounded-2xl border border-brand-200 bg-gradient-to-r from-brand-50 via-white to-white p-5 sm:p-6">
             <div class="flex flex-wrap items-center justify-between gap-4">

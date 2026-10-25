@@ -5,6 +5,7 @@ use App\Http\Controllers\AdMoneyController;
 use App\Http\Controllers\AppReleaseController;
 use App\Http\Controllers\CashflowController;
 use App\Http\Controllers\ChargeRequestController;
+use App\Http\Controllers\ClientCampaignController;
 use App\Http\Controllers\ClientCardController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
@@ -253,6 +254,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/payouts', [PayoutController::class, 'index'])->name('payouts.index');
     Route::get('/ad-money', [AdMoneyController::class, 'index'])->name('ad-money.index');
+    Route::post('/clients/{client}/campaigns/{campaign}', [ClientCampaignController::class, 'control'])->name('clients.campaigns.control');
     Route::post('/statements', [StatementController::class, 'store'])->name('statements.store');
     Route::get('/statements/{statement}', [StatementController::class, 'show'])->name('statements.show');
     Route::put('/statements/{statement}', [StatementController::class, 'update'])->name('statements.update');
