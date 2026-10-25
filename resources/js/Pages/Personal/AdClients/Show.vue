@@ -120,7 +120,9 @@ const saveSettings = () => settings.put(route('ad-clients.settings', props.clien
 
 // ---------------------------------------------------------------- whose accounts / campaigns
 const adding = ref(false);
-const add = useForm({ account_id: null, whole: true, campaigns: [], paid_by: 'me', from: props.ledger.unbilled_from ?? today });
+// Most clients pay Meta with their own card; only some (like Edge) run on mine and get a bill.
+const add = useForm({ account_id: null, whole: true, campaigns: [], paid_by: 'client', from: props.ledger.unbilled_from ?? today });
+const myCard = computed(() => props.assignments.some((a) => a.paid_by === 'me') || props.ledger.bills.length > 0);
 const picker = ref({ loading: false, campaigns: [], whole: null, error: null });
 watch(() => add.account_id, async (id) => {
     add.campaigns = [];
@@ -213,8 +215,13 @@ const accountOptions = computed(() => props.accounts ?? []);
             </div>
         </section>
 
-        <!-- Ads bill ledger -->
-        <section class="mt-6 rounded-3xl border border-line/70 bg-surface p-4 shadow-sm sm:p-5">
+        <!-- Their own card: no bills from me -->
+        <section v-if="!myCard" class="mt-6 rounded-3xl border border-line/70 bg-surface p-4 text-sm text-ink-600 shadow-sm sm:p-5">
+            <b class="text-ink-900">They pay Meta with their own card</b> — no ads bill from you. Here you watch and run their campaigns, and share their report link.
+        </section>
+
+        <!-- Ads bill ledger (only when my card pays their ads) -->
+        <section v-else class="mt-6 rounded-3xl border border-line/70 bg-surface p-4 shadow-sm sm:p-5">
             <h3 class="text-sm font-bold text-ink-900">Ads bills</h3>
             <p class="mt-0.5 text-xs text-ink-500">Each bill covers finished days right after the last one — no day billed twice, none missed. On the 2nd, last month is drafted by itself. Bills land in My invoices unsent; you send them.</p>
             <div class="mt-3 grid gap-3 sm:grid-cols-4">
@@ -367,7 +374,7 @@ const accountOptions = computed(() => props.accounts ?? []);
                         <div class="grid gap-3 sm:grid-cols-2">
                             <div>
                                 <label class="label">Who pays Meta</label>
-                                <Segmented v-model="add.paid_by" :options="[{ value: 'me', label: 'My card' }, { value: 'client', label: 'Their card' }]" block size="sm" />
+                                <Segmented v-model="add.paid_by" :options="[{ value: 'client', label: 'Their card' }, { value: 'me', label: 'My card (bill them)' }]" block size="sm" />
                             </div>
                             <div>
                                 <label class="label">Count from</label>

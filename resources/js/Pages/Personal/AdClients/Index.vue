@@ -29,6 +29,7 @@ const amounts = (byCurrency, key) => Object.entries(byCurrency).map(([cur, m]) =
                     <span class="block text-sm text-ink-500">
                         This month {{ Object.keys(c.month).length ? amounts(c.month, 'spend') : '—' }}
                         · {{ c.running }} running
+                        · {{ c.my_card ? 'my card — billed' : 'their own card' }}
                     </span>
                 </span>
                 <span v-if="Object.keys(c.due).length" class="shrink-0 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">Due {{ amounts(c.due) }}</span>

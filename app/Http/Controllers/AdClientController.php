@@ -36,6 +36,7 @@ class AdClientController extends Controller
                 'id' => $c->id, 'name' => $c->name,
                 'month' => PersonalAds::money($c, $month, CarbonImmutable::today()),
                 'running' => collect($c->ad_campaigns ?? [])->where('status', 'ACTIVE')->count(),
+                'my_card' => $c->adAssignments()->where('paid_by', 'me')->exists(),
                 'due' => collect(PersonalAds::ledger($c)['totals'])->map(fn ($t) => $t['due'])->filter()->all(),
             ]),
             'others' => PersonalClient::whereDoesntHave('adAssignments')->orderBy('name')->get(['id', 'name']),
@@ -103,7 +104,7 @@ class AdClientController extends Controller
             return back()->with('error', $e->getMessage());
         }
         // A new ad client is billed the ads + my 20% commission, unless I set something else.
-        if (! $client->adAssignments()->exists() && (float) $client->ad_fee_percent === 0.0) {
+        if (($data['paid_by'] ?? null) === 'me' && ! $client->adAssignments()->where('paid_by', 'me')->exists() && (float) $client->ad_fee_percent === 0.0) {
             $client->update(['ad_fee_percent' => 20]);
         }
         $base = ['personal_client_id' => $client->id, 'account_name' => $info['name'], 'currency' => $info['currency'], 'paid_by' => $data['paid_by'], 'from_date' => $data['from']];
