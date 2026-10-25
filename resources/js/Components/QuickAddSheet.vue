@@ -23,18 +23,25 @@ let loadedAt = 0;
 
 const today = () => new Date().toISOString().slice(0, 10);
 const blank = () => ({ kind: 'expense', account_id: '', to_account_id: '', amount: '', to_amount: '', fee: '', category: '', counterparty: '', for_whom: '', description: '', occurred_on: today() });
-// The first category of a kind is the default (the list comes from the server).
-const firstCategory = (kind) => data.value?.categories?.[kind === 'income' ? 'income' : 'expense']?.[0]?.value ?? '';
+// Categories come from the server: personal ones, or business ones for a business account.
+const categoryList = (kind, business) => data.value?.categories?.[(business ? 'business_' : '') + (kind === 'income' ? 'income' : 'expense')] ?? [];
+const firstCategory = (kind, business = false) => categoryList(kind, business)[0]?.value ?? '';
 const f = reactive(blank());
 
 const accounts = computed(() => data.value?.accounts ?? []);
-// A move can also be to or from a business account; spending and income stay personal.
+// Every account can be used by hand: personal ones first, then the business ones (💼).
 const allAccounts = computed(() => [...accounts.value, ...(data.value?.business ?? [])]);
-const fromList = computed(() => (f.kind === 'transfer' ? allAccounts.value : accounts.value));
+const fromList = allAccounts;
 const from = computed(() => allAccounts.value.find((a) => a.id === Number(f.account_id)));
 const to = computed(() => allAccounts.value.find((a) => a.id === Number(f.to_account_id)));
 const converting = computed(() => f.kind === 'transfer' && from.value && to.value && from.value.currency !== to.value.currency);
-const categories = computed(() => data.value?.categories?.[f.kind === 'income' ? 'income' : 'expense'] ?? []);
+const categories = computed(() => categoryList(f.kind, !!from.value?.business));
+// Switching between a personal and a business account switches the category list too.
+watch(() => !!from.value?.business, (business, was) => {
+    if (business !== was && f.kind !== 'transfer' && !categoryList(f.kind, business).some((c) => c.value === f.category)) {
+        f.category = firstCategory(f.kind, business);
+    }
+});
 // For whom (Ma, Bou, Shoshur…): my own list, added to right here.
 const people = computed(() => data.value?.people ?? []);
 const addingPerson = ref(false);
@@ -97,7 +104,45 @@ const close = () => (open.value = false);
 
 function setKind(k) {
     f.kind = k;
-    f.category = k === 'transfer' ? '' : firstCategory(k);
+    f.category = k === 'transfer' ? '' : firstCategory(k, !!from.value?.business);
+}
+
+// ---------------------------------------------------------------- paste an SMS
+// A bank SMS that reached another phone: paste it, it is read and booked like a forwarded one.
+const pasting = ref(false);
+const pasted = ref('');
+const pasteSending = ref(false);
+const pasteError = ref('');
+async function sendPaste() {
+    if (!pasted.value.trim()) return;
+    pasteSending.value = true;
+    pasteError.value = '';
+    try {
+        const xsrf = decodeURIComponent(document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/)?.[1] ?? '');
+        const res = await fetch(route('personal.inbox.paste'), {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-XSRF-TOKEN': xsrf },
+            body: JSON.stringify({ text: pasted.value }),
+        });
+        const r = await res.json();
+        if (!res.ok) throw new Error(r.message || 'Could not read it');
+        const outcome = {
+            added: `✓ Added to ${r.account}`, matched: `✓ ${r.note}`, ignored: `Already in the books${r.account ? ` (${r.account})` : ''}`,
+            review: `👀 Needs a look: ${r.note} — see Auto entries`, skipped: 'Not a transaction — nothing added',
+        }[r.status] ?? r.status;
+        say(outcome, r.status === 'skipped' || r.status === 'review' ? 'error' : 'success');
+        if (['added', 'matched', 'ignored'].includes(r.status)) {
+            pasted.value = '';
+            pasting.value = false;
+            loadedAt = 0;
+            close();
+            router.reload({ preserveScroll: true });
+        }
+    } catch (e) {
+        pasteError.value = e.message;
+    } finally {
+        pasteSending.value = false;
+    }
 }
 // Picking a known payee fills in the category used last time.
 watch(() => f.counterparty, (name) => {
@@ -206,6 +251,21 @@ onUnmounted(() => {
                         </div>
 
                         <div class="overflow-y-auto px-5 pb-4">
+                            <!-- Paste an SMS (from another phone) -->
+                            <div v-if="!editing" class="mt-3">
+                                <button v-if="!pasting" type="button" class="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-ink-200 py-2 text-xs font-semibold text-ink-500 transition hover:border-teal-400 hover:text-teal-700" @click="pasting = true">
+                                    📋 Paste a bank / bKash SMS instead
+                                </button>
+                                <div v-else class="rounded-2xl bg-ink-50 p-3">
+                                    <textarea v-model="pasted" rows="4" class="input text-sm" placeholder="Paste the SMS here — account, amount and last 4 are read from it" autofocus></textarea>
+                                    <div v-if="pasteError" class="error">{{ pasteError }}</div>
+                                    <div class="mt-2 flex justify-end gap-2">
+                                        <button type="button" class="btn-ghost btn-sm" @click="pasting = false">Cancel</button>
+                                        <button type="button" class="btn-primary btn-sm" :disabled="pasteSending || !pasted.trim()" @click="sendPaste">{{ pasteSending ? 'Reading…' : 'Read & add' }}</button>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Amount -->
                             <div class="mt-4 flex items-center justify-center gap-2">
                                 <span class="font-display text-3xl font-bold text-ink-400">{{ symbol }}</span>
@@ -267,7 +327,7 @@ onUnmounted(() => {
                             </template>
 
                             <!-- For whom -->
-                            <template v-if="f.kind === 'expense' && f.category !== 'sadaqah'">
+                            <template v-if="f.kind === 'expense' && f.category !== 'sadaqah' && !from?.business">
                                 <div class="mt-5 mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">For whom <span class="font-normal normal-case tracking-normal">(optional)</span></div>
                                 <div class="flex flex-wrap gap-1.5">
                                     <button type="button" class="rounded-full px-3 py-1.5 text-sm font-semibold transition" :class="!f.for_whom ? 'bg-ink-900 text-white' : 'bg-ink-50 text-ink-700 hover:bg-ink-100'" @click="f.for_whom = ''">🙋 Me</button>

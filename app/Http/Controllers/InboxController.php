@@ -63,6 +63,20 @@ class InboxController extends Controller
         return back()->with('success', 'Saved — the phone picks it up next time it opens.');
     }
 
+    /** A bank / wallet SMS pasted by hand (e.g. from a second phone). */
+    public function paste(Request $request): JsonResponse
+    {
+        $data = $request->validate(['text' => ['required', 'string', 'max:2000'], 'sender' => ['nullable', 'string', 'max:60']]);
+        $message = $this->entries->ingest('sms', $data['sender'] ?? null, $data['text']);
+
+        return response()->json([
+            'status' => $message->status,
+            'note' => $message->note,
+            'account' => $message->account?->name,
+            'parsed' => $message->parsed,
+        ]);
+    }
+
     public function index(Request $request): Response
     {
         $request->session()->put('mode', 'personal');

@@ -45,6 +45,8 @@ class PersonalQuickController extends Controller
             'categories' => [
                 'expense' => Catalog::options(collect(Catalog::PERSONAL_CATEGORIES)->except(Catalog::AUTO_CATEGORIES)->all()),
                 'income' => Catalog::options(Catalog::INCOME_CATEGORIES['personal']),
+                'business_expense' => Catalog::options(Catalog::EXPENSE_CATEGORIES),
+                'business_income' => Catalog::options(Catalog::INCOME_CATEGORIES['business']),
             ],
             // Most-used payees first, with the category last used for each.
             'payees' => $recent->whereNotNull('counterparty')->groupBy('counterparty')

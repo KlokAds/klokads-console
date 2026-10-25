@@ -188,6 +188,39 @@ class PersonalAutomationTest extends TestCase
         $this->getJson('/personal/quick')->assertJsonPath('people.1.name', 'Nana');
     }
 
+    public function test_bank_interest_is_booked_as_interest_income(): void
+    {
+        $ucb = Account::create(['name' => 'UCB', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'ucb', 'last4' => '6318', 'currency' => 'BDT']);
+
+        $m = app(AutoEntries::class)->ingest('sms', 'UCB', 'A/C ***6318 Int: BDT 125.50 on 25-10-2026. Avl Bal: BDT 1,00,457.50');
+
+        $this->assertSame('added', $m->status);
+        $tx = MoneyTransaction::find($m->money_transaction_id);
+        $this->assertSame(['income', 'interest', 12550], [$tx->kind, $tx->category, $tx->amount]);
+        $this->assertSame(12550, Ledger::balance($ucb));
+    }
+
+    public function test_an_sms_from_another_phone_can_be_pasted_and_is_booked(): void
+    {
+        $brac = Account::create(['name' => 'BRAC Bank', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'brac', 'last4' => '0001', 'currency' => 'BDT']);
+
+        $this->postJson('/personal/inbox-paste', ['text' => 'Your A/C ...0001 has been credited by BDT 3,000.00 on 25-Oct-2026. Avl Bal: BDT 3,000.49'])
+            ->assertOk()->assertJsonPath('status', 'added')->assertJsonPath('account', 'BRAC Bank');
+        $this->assertSame(300000, Ledger::balance($brac));
+
+        $this->postJson('/personal/inbox-paste', ['text' => 'Hello, how are you?'])->assertOk()->assertJsonPath('status', 'skipped');
+    }
+
+    public function test_sadaqah_shows_only_as_a_total(): void
+    {
+        foreach ([1000, 500] as $amount) {
+            $this->post('/money', ['kind' => 'expense', 'account_id' => $this->bkash->id, 'amount' => $amount, 'category' => 'sadaqah', 'counterparty' => 'x', 'occurred_on' => now()->toDateString()]);
+        }
+
+        $this->get('/personal')->assertInertia(fn ($page) => $page->where('stats.BDT.sadaqah', 150000)->has('recent', 0));
+        $this->get('/personal/activity')->assertInertia(fn ($page) => $page->where('sadaqah.BDT', 150000)->has('entries', 0));
+    }
+
     public function test_sadaqah_only_lowers_the_balance_and_leaves_no_record(): void
     {
         // Sent by bKash: the SMS came in as an entry; I mark it sadaqah.

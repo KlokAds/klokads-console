@@ -88,6 +88,9 @@ class PersonalActivityController extends Controller
                 ->map(fn ($list, $key) => ['currency' => explode('|', $key)[0], 'person' => explode('|', $key, 2)[1], 'amount' => (int) $list->sum(fn ($t) => $t->amount + $t->fee), 'count' => $list->count()])
                 ->sortByDesc('amount')->values(),
             'people' => People::all(),
+            'sadaqah' => MoneyTransaction::with('account:id,currency')->whereIn('account_id', $ids)->where('category', Catalog::SADAQAH)
+                ->whereBetween('occurred_on', [$start->toDateString(), $end->toDateString().' 23:59:59'])->get()
+                ->groupBy(fn ($t) => strtoupper($t->account->currency))->map(fn ($list) => (int) $list->sum(fn ($t) => $t->amount + $t->fee)),
             'categories' => Catalog::PERSONAL_CATEGORIES + Catalog::INCOME_CATEGORIES['personal'] + Catalog::LOAN_CATEGORIES,
             'providers' => Catalog::PROVIDERS,
             'kinds' => Catalog::options(Catalog::ACCOUNT_KINDS),

@@ -36,6 +36,7 @@ class Catalog
             'stripe_payout' => 'Stripe payout',
             'client_payment' => 'Client paid directly',
             'owner_capital' => 'Owner put money in',
+            'interest' => 'Bank interest / profit',
             'other_income' => 'Other income',
         ],
         'personal' => [
@@ -44,6 +45,7 @@ class Catalog
             'family' => 'From family',
             'gift' => 'Gift',
             'investment' => 'Investment return',
+            'interest' => 'Bank interest / profit',
             'other_income' => 'Other income',
         ],
     ];

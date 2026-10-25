@@ -26,6 +26,7 @@ const props = defineProps({
     familyGuide: Object,
     business: { type: Array, default: () => [] },
     byPerson: { type: Array, default: () => [] },
+    sadaqah: { type: Object, default: () => ({}) },
     people: { type: Array, default: () => [] },
 });
 
@@ -231,6 +232,7 @@ onMounted(() => {
                         <div><div class="text-[11px] text-ink-500">Spent</div><div class="font-bold tabular-nums text-ink-900">{{ cash(s.spent, c) }}</div></div>
                         <div><div class="text-[11px] text-ink-500">Saved</div><div class="font-bold tabular-nums text-teal-700">{{ cash(s.saved, c) }}</div></div>
                     </div>
+                    <div v-if="sadaqah[c]" class="mt-2 border-t border-line/70 pt-2 text-xs text-ink-500">🤲 Sadaqah · <b class="tabular-nums text-emerald-700">{{ cash(sadaqah[c], c) }}</b></div>
                 </div>
             </div>
 

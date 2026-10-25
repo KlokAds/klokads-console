@@ -116,7 +116,7 @@ class AutoEntries
                 'fee' => $p['fee'] ?? 0,
                 // What I chose for this payee before; otherwise business "other" or a guessed personal category.
                 'category' => $category ?? PayeeMemory::category($account->scope, $p['counterparty'])
-                    ?? ($p['direction'] === 'in' ? 'other_income' : ($account->scope === 'business' ? 'other' : $this->guess($p['counterparty'].' '.$message->body))),
+                    ?? ($p['direction'] === 'in' ? (self::isInterest($message->body) ? 'interest' : 'other_income') : ($account->scope === 'business' ? 'other' : $this->guess($p['counterparty'].' '.$message->body))),
                 'counterparty' => $p['counterparty'],
                 'description' => 'Auto · '.ucfirst($p['provider'] ?? $message->source).' '.$message->source.($p['reference'] ? " · {$p['reference']}" : ''),
                 'occurred_on' => $date,
@@ -248,6 +248,12 @@ class AutoEntries
             'Moved between your own accounts — not spending, not income.', route('personal.activity'), 'klok-money');
 
         return $transfer;
+    }
+
+    /** "Int: BDT 125.50", "Interest credited", Islamic banks' "profit": the bank's interest. */
+    public static function isInterest(string $body): bool
+    {
+        return (bool) preg_match('/\bint\s*:|\binterest\b|\bprofit (?:credited|paid)\b/i', $body);
     }
 
     /** Keep what the bank says the balance is, to compare with ours. */

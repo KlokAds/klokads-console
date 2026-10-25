@@ -83,6 +83,9 @@ class PersonalDashboardController extends Controller
                 'current' => $current,
                 'previous' => $months->get(4),
                 'year' => $this->summary($yearTx, $ids, $savingsIds, $currency),
+                // Sadaqah: just this month's total.
+                'sadaqah' => (int) MoneyTransaction::whereIn('account_id', $mine->pluck('id'))->where('category', Catalog::SADAQAH)
+                    ->where('occurred_on', '>=', now()->startOfMonth()->toDateString())->get()->sum(fn ($t) => $t->amount + $t->fee),
                 'total' => (int) $mine->sum(fn ($a) => $balances[$a->id]),
                 'savings' => (int) $mine->where('purpose', 'savings')->sum(fn ($a) => $balances[$a->id]),
                 'spending' => (int) $mine->where('purpose', '!=', 'savings')->sum(fn ($a) => $balances[$a->id]),

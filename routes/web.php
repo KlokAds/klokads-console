@@ -144,6 +144,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/personal/inbox/{message}/undo', [InboxController::class, 'undo'])->middleware('personal')->name('personal.inbox.undo');
     Route::post('/personal/inbox-imap', [InboxController::class, 'saveImap'])->middleware('personal')->name('personal.inbox.imap');
     Route::post('/personal/inbox-check', [InboxController::class, 'checkNow'])->middleware('personal')->name('personal.inbox.check');
+    Route::post('/personal/inbox-paste', [InboxController::class, 'paste'])->middleware(['personal', 'throttle:30,1'])->name('personal.inbox.paste');
     Route::put('/personal/inbox-rules', [InboxController::class, 'saveRules'])->middleware('personal')->name('personal.inbox.rules');
     Route::post('/personal/inbox-test', [InboxController::class, 'test'])->middleware('personal')->name('personal.inbox.test');
     Route::get('/personal/loans', [LoanController::class, 'index'])->middleware('personal')->name('personal.loans.index');

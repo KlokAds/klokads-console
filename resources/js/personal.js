@@ -33,6 +33,19 @@ export const CATEGORY = {
     loan_repaid_to_me: ['🤝', 'bg-emerald-100 text-emerald-700'],
     loan_repaid_by_me: ['🤝', 'bg-rose-100 text-rose-700'],
     transfer: ['🔁', 'bg-brand-100 text-brand-700'],
+    interest: ['🏦', 'bg-teal-100 text-teal-700'],
+    // business
+    agro: ['🌾', 'bg-lime-100 text-lime-700'],
+    meta_ads: ['📣', 'bg-sky-100 text-sky-700'],
+    google_ads: ['🔎', 'bg-amber-100 text-amber-700'],
+    tiktok_ads: ['🎵', 'bg-fuchsia-100 text-fuchsia-700'],
+    seo: ['🔗', 'bg-indigo-100 text-indigo-700'],
+    software: ['💻', 'bg-slate-100 text-slate-700'],
+    office: ['🏢', 'bg-slate-100 text-slate-700'],
+    tax: ['🧾', 'bg-rose-100 text-rose-700'],
+    client_payment: ['🤝', 'bg-emerald-100 text-emerald-700'],
+    stripe_payout: ['💳', 'bg-indigo-100 text-indigo-700'],
+    owner_capital: ['🏦', 'bg-teal-100 text-teal-700'],
 };
 
 export const cat = (key) => CATEGORY[key] ?? CATEGORY.other;

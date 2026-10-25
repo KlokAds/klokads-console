@@ -186,6 +186,7 @@ function dismissReminders() {
                         <span class="text-ink-500">Spent <b class="tabular-nums text-ink-900">{{ C(s.year?.spent ?? 0) }}</b></span>
                         <span class="text-ink-500">Saved <b class="tabular-nums text-teal-700">{{ C(s.year?.saved ?? 0) }}</b></span>
                     </Link>
+                    <div v-if="s.sadaqah" class="mt-2 px-1 text-xs text-ink-500">🤲 Sadaqah this month · <b class="tabular-nums text-emerald-700">{{ C(s.sadaqah) }}</b></div>
 
                     <div v-if="where.length" class="mt-5 space-y-3">
                         <div v-for="c in where" :key="c.key" class="flex items-center gap-3">
