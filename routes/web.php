@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdClientController;
+use App\Http\Controllers\AdDeskController;
 use App\Http\Controllers\AdMoneyController;
 use App\Http\Controllers\AppReleaseController;
 use App\Http\Controllers\CashflowController;
@@ -256,7 +257,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/payouts', [PayoutController::class, 'index'])->name('payouts.index');
     Route::get('/ad-money', [AdMoneyController::class, 'index'])->name('ad-money.index');
+    Route::get('/ad-desk', [AdDeskController::class, 'index'])->name('ad-desk');
     Route::post('/clients/{client}/campaigns/{campaign}', [ClientCampaignController::class, 'control'])->name('clients.campaigns.control');
+    Route::get('/clients/{client}/campaigns/{campaign}', [ClientCampaignController::class, 'show'])->name('clients.campaigns.show');
     Route::post('/statements', [StatementController::class, 'store'])->name('statements.store');
     Route::get('/statements/{statement}', [StatementController::class, 'show'])->name('statements.show');
     Route::put('/statements/{statement}', [StatementController::class, 'update'])->name('statements.update');

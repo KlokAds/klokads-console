@@ -41,7 +41,7 @@ const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
 const myCard = computed(() => props.assignments.some((a) => a.paid_by === 'me') || props.ledger.bills.length > 0);
 const totalDue = computed(() => Object.values(props.ledger.totals).reduce((a, t) => a + t.due, 0));
 const results = computed(() => Object.values(props.money).reduce((a, v) => a + v.results, 0));
-const running = computed(() => props.campaigns.filter((c) => c.status === 'ACTIVE' && c.spend > 0).length);
+const running = computed(() => props.campaigns.filter((c) => isLive(c)).length);
 
 // ---------------------------------------------------------------- tabs (kept in the address, so a link opens the right one)
 const TABS = computed(() => [
@@ -112,7 +112,11 @@ const saveEdit = () => router.post(route('ad-clients.control', [props.client.id,
 // Campaigns: running (on, not past its end) first; then ended or paused, newest first. Old quiet ones on request.
 const withSpend = computed(() => props.campaigns.filter((c) => c.spend > 0));
 const cost = (c) => (c.cost_per_result === null ? '' : (c.cost_per_result === 0 ? '< ' + m(1, c.currency) : m(c.cost_per_result, c.currency)) + ' ' + c.per);
-const isLive = (c) => c.status === 'ACTIVE' && (!c.end || c.end >= today);
+const isLive = (c) => {
+    // Really running: on, not past its end, and spent in the last 3 days (or just started).
+    const recent = new Date(Date.now() - 3 * 864e5).toISOString().slice(0, 10);
+    return c.status === 'ACTIVE' && (!c.end || c.end >= today) && ((c.last_spend && c.last_spend >= recent) || (c.start && c.start >= recent));
+};
 const lastDay = (c) => c.end || c.last_spend || c.start || '';
 const showOlder = ref(false);
 const sixtyDaysAgo = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);

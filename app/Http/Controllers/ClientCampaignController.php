@@ -3,16 +3,38 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Models\MetaSpendDay;
+use App\Services\AdPerformance;
 use App\Services\MetaAds;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
+use Inertia\Response;
 use Throwable;
 
 /** A business client's campaign (Tasfia's), run from the dashboard: on / pause, budget a day, end date — on Meta. */
 class ClientCampaignController extends Controller
 {
+    /** The campaign in full — the same page as my own clients' campaigns. */
+    public function show(Request $request, Client $client, string $campaign): Response
+    {
+        $known = $client->meta_campaigns[$campaign] ?? null;
+        $days = MetaSpendDay::where('client_id', $client->id)->where('campaign_id', $campaign);
+        abort_unless($known || (clone $days)->exists(), 404);
+
+        return Inertia::render('Personal/AdClients/Campaign', AdPerformance::campaignDetail($days, $campaign, $known, (string) $request->input('period', 'last7'), strtoupper($client->currency ?: 'SGD')) + [
+            'owner' => ['name' => $client->company ?: $client->name],
+            'business' => true,
+            'urls' => [
+                'back' => route('ad-desk', ['tab' => 'campaigns']),
+                'self' => route('clients.campaigns.show', [$client, $campaign]),
+                'control' => route('clients.campaigns.control', [$client, $campaign]),
+            ],
+        ]);
+    }
+
     public function control(Request $request, Client $client, string $campaign, MetaAds $meta): RedirectResponse
     {
         $data = $request->validate([

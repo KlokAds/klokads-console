@@ -2,6 +2,7 @@
 import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
 import DatePicker from '@/Components/Ui/DatePicker.vue';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { date, money } from '@/money';
@@ -9,7 +10,8 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 /** One campaign in full: where it stands and its controls, the numbers for a period, a chart, and every day. */
-const props = defineProps({ client: Object, campaign: Object, period: String, totals: Object, days: Array });
+const props = defineProps({ owner: Object, campaign: Object, period: String, totals: Object, days: Array, urls: Object, business: Boolean });
+const Layout = props.business ? AuthenticatedLayout : PersonalLayout;
 
 const c = computed(() => props.campaign);
 const m = (cents) => money(cents, c.value.currency);
@@ -23,11 +25,11 @@ const PERIODS = [
     { key: 'today', label: 'Today' }, { key: 'yesterday', label: 'Yesterday' }, { key: 'last7', label: '7 days' },
     { key: 'last15', label: '15 days' }, { key: 'last30', label: '30 days' }, { key: 'month', label: 'This month' }, { key: 'all', label: 'All' },
 ];
-const pick = (key) => router.get(route('ad-clients.campaign', [props.client.id, c.value.id]), { period: key }, { preserveScroll: true, preserveState: true });
+const pick = (key) => router.get(props.urls.self, { period: key }, { preserveScroll: true, preserveState: true });
 
 // Controls, straight on Meta
 const busy = ref(false);
-const post = (payload, after) => router.post(route('ad-clients.control', [props.client.id, c.value.id]), payload, { preserveScroll: true, onStart: () => (busy.value = true), onFinish: () => (busy.value = false), onSuccess: after });
+const post = (payload, after) => router.post(props.urls.control, payload, { preserveScroll: true, onStart: () => (busy.value = true), onFinish: () => (busy.value = false), onSuccess: after });
 async function toggle() {
     const pause = c.value.status === 'ACTIVE';
     if (await confirmDialog({ title: pause ? 'Pause this campaign?' : 'Turn this campaign on?', message: pause ? 'Its ads stop on Meta now — no more spend.' : 'Its ads start delivering again on Meta.', confirmLabel: pause ? 'Pause' : 'Turn on', tone: pause ? 'danger' : undefined })) {
@@ -48,10 +50,10 @@ const each = (row) => (row.cost_per_result === null ? '—' : row.cost_per_resul
 </script>
 
 <template>
-    <Head :title="`${campaign.name} · ${client.name}`" />
+    <Head :title="`${campaign.name} · ${owner.name}`" />
 
-    <PersonalLayout :title="client.name" subtitle="Campaign">
-        <Link :href="route('ad-clients.show', { client: client.id, tab: 'campaigns' })" class="inline-flex items-center gap-1 text-sm font-semibold text-teal-700 hover:underline"><Icon name="chevron" :size="14" class="rotate-90" /> All campaigns</Link>
+    <component :is="Layout" :title="owner.name" subtitle="Campaign">
+        <Link :href="urls.back" class="inline-flex items-center gap-1 text-sm font-semibold text-teal-700 hover:underline"><Icon name="chevron" :size="14" class="rotate-90" /> All campaigns</Link>
         <h1 class="mt-2 text-xl font-extrabold leading-snug text-ink-900">{{ campaign.name }}</h1>
 
         <!-- Where it stands -->
@@ -138,5 +140,5 @@ const each = (row) => (row.cost_per_result === null ? '—' : row.cost_per_resul
                 </div>
             </form>
         </Modal>
-    </PersonalLayout>
+    </component>
 </template>

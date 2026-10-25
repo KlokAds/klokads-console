@@ -38,5 +38,11 @@ class AdDeskTest extends TestCase
         Http::assertSent(fn (Request $r) => $r->method() === 'POST' && $r['active'] === true);
         $this->assertSame('ACTIVE', $client->fresh()->meta_campaigns[12]['status']);
         $this->post("/clients/{$client->id}/campaigns/99", ['action' => 'pause'])->assertNotFound();
+
+        // The full ad desk, and each campaign in full (the same page as my own clients').
+        $this->get('/ad-desk?tab=campaigns')->assertInertia(fn ($page) => $page->component('AdDesk/Index')->where('tab', 'campaigns')
+            ->has('campaigns', 2)->where('spent.spend', 500));
+        $this->get("/clients/{$client->id}/campaigns/11?period=all")->assertInertia(fn ($page) => $page->component('Personal/AdClients/Campaign')
+            ->where('business', true)->where('campaign.name', 'Handyman Traffic')->where('totals.spend', 500)->where('totals.results', 40));
     }
 }

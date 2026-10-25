@@ -38,13 +38,22 @@ class AdClientController extends Controller
             'clients' => PersonalClient::whereHas('adAssignments')->orderBy('name')->get()->map(fn (PersonalClient $c) => [
                 'id' => $c->id, 'name' => $c->name,
                 'month' => PersonalAds::money($c, $month, CarbonImmutable::today()),
-                'running' => collect($c->ad_campaigns ?? [])->where('status', 'ACTIVE')->count(),
+                'running' => $this->running($c),
                 'my_card' => $c->adAssignments()->where('paid_by', 'me')->exists(),
                 'due' => collect(PersonalAds::ledger($c)['totals'])->map(fn ($t) => $t['due'])->filter()->all(),
             ]),
             'others' => PersonalClient::whereDoesntHave('adAssignments')->orderBy('name')->get(['id', 'name']),
             'synced' => (bool) PersonalAdDay::exists(),
         ]);
+    }
+
+    /** How many of their campaigns are really running (delivering now), not just "ACTIVE" at Meta. */
+    private function running(PersonalClient $c): int
+    {
+        $last = PersonalAdDay::where('personal_client_id', $c->id)->where('spend', '>', 0)->selectRaw('campaign_id, max(date) as last')->groupBy('campaign_id')->pluck('last', 'campaign_id');
+
+        return collect($c->ad_campaigns ?? [])->filter(fn ($k, $id) => AdPerformance::isRunning($k['status'] ?? null, $k['end'] ?? null,
+            isset($last[$id]) ? substr((string) $last[$id], 0, 10) : null, $k['start'] ?? null))->count();
     }
 
     public function show(Request $request, PersonalClient $client): Response
@@ -264,44 +273,16 @@ class AdClientController extends Controller
         $known = $client->ad_campaigns[$campaign] ?? null;
         $days = PersonalAdDay::where('personal_client_id', $client->id)->where('campaign_id', $campaign);
         abort_unless($known || (clone $days)->exists(), 404);
-        $today = CarbonImmutable::today();
-        $period = (string) $request->input('period', 'last7');
-        [$start, $end] = match ($period) {
-            'today' => [$today, $today],
-            'yesterday' => [$today->subDay(), $today->subDay()],
-            'last15' => [$today->subDays(14), $today],
-            'last30' => [$today->subDays(29), $today],
-            'month' => [$today->startOfMonth(), $today],
-            'all' => [CarbonImmutable::parse((clone $days)->min('date') ?? $today), $today],
-            default => [$today->subDays(6), $today],
-        };
-        $rows = (clone $days)->whereBetween('date', [$start->toDateString(), $end->toDateString()])->orderBy('date')->get();
-        $type = $rows->whereNotNull('result_type')->last()?->result_type ?? (clone $days)->whereNotNull('result_type')->latest('date')->value('result_type');
-        $spend = (int) $rows->sum('spend');
-        $byDay = $rows->groupBy(fn ($r) => $r->date->toDateString());
+        $currency = PersonalAdAssignment::where('account_id', $known['account'] ?? '')->value('currency') ?? 'BDT';
 
-        return Inertia::render('Personal/AdClients/Campaign', [
-            'client' => $client->only('id', 'name'),
-            'campaign' => [
-                'id' => $campaign, 'name' => $known['name'] ?? (clone $days)->value('campaign_name'),
-                'status' => $known['status'] ?? null, 'daily_budget' => $known['daily_budget'] ?? null,
-                'start' => $known['start'] ?? null, 'end' => $known['end'] ?? null,
-                'currency' => (clone $days)->value('currency') ?? PersonalAdAssignment::where('account_id', $known['account'] ?? '')->value('currency') ?? 'BDT',
-                'goal' => AdPerformance::goal($known['objective'] ?? null, $type),
+        return Inertia::render('Personal/AdClients/Campaign', AdPerformance::campaignDetail($days, $campaign, $known, (string) $request->input('period', 'last7'), $currency) + [
+            'owner' => ['name' => $client->name],
+            'business' => false,
+            'urls' => [
+                'back' => route('ad-clients.show', ['client' => $client, 'tab' => 'campaigns']),
+                'self' => route('ad-clients.campaign', [$client, $campaign]),
+                'control' => route('ad-clients.control', [$client, $campaign]),
             ],
-            'period' => $period,
-            'totals' => [
-                'spend' => $spend, 'impressions' => (int) $rows->sum('impressions'), 'clicks' => (int) $rows->sum('clicks'),
-                ...AdPerformance::present($known['objective'] ?? null, $type, $spend, (int) $rows->sum('results'), (int) $rows->sum('reach')),
-            ],
-            'days' => collect(range(0, $start->diffInDays($end)))->map(function ($d) use ($start, $byDay, $known, $type) {
-                $date = $start->addDays($d)->toDateString();
-                $list = $byDay[$date] ?? collect();
-                $spend = (int) $list->sum('spend');
-
-                return ['date' => $date, 'spend' => $spend, 'clicks' => (int) $list->sum('clicks'),
-                    ...AdPerformance::present($known['objective'] ?? null, $type, $spend, (int) $list->sum('results'), (int) $list->sum('reach'))];
-            })->values(),
         ]);
     }
 

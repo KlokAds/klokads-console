@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Client;
 use App\Models\MetaSpendDay;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
@@ -57,6 +59,57 @@ class AdPerformance
             'person reached' => 'people reached',
             default => $word.'s',
         };
+    }
+
+    /**
+     * One campaign in full for a period: its state, the totals by its goal, and every day.
+     * $days: the campaign's day rows (MetaSpendDay or PersonalAdDay), $known: its last state from Meta.
+     *
+     * @param  Builder<Model>  $days
+     * @return array{campaign: array<string, mixed>, period: string, totals: array<string, mixed>, days: array<int, array<string, mixed>>}
+     */
+    public static function campaignDetail($days, string $id, ?array $known, string $period, string $currency): array
+    {
+        $today = CarbonImmutable::today();
+        [$start, $end] = match ($period) {
+            'today' => [$today, $today],
+            'yesterday' => [$today->subDay(), $today->subDay()],
+            'last15' => [$today->subDays(14), $today],
+            'last30' => [$today->subDays(29), $today],
+            'month' => [$today->startOfMonth(), $today],
+            'all' => [CarbonImmutable::parse((clone $days)->min('date') ?? $today)->max($today->subYear()), $today],
+            default => [$today->subDays(6), $today],
+        };
+        $rows = (clone $days)->whereBetween('date', [$start->toDateString(), $end->toDateString()])->orderBy('date')->get();
+        $type = $rows->whereNotNull('result_type')->last()?->result_type ?? (clone $days)->whereNotNull('result_type')->latest('date')->value('result_type');
+        $objective = $known['objective'] ?? null;
+        $byDay = $rows->groupBy(fn ($r) => $r->date->toDateString());
+        $sum = fn ($list) => ['spend' => $s = (int) $list->sum('spend'), 'clicks' => (int) $list->sum('clicks'), 'impressions' => (int) $list->sum('impressions'),
+            ...self::present($objective, $type, $s, (int) $list->sum('results'), (int) $list->sum('reach'))];
+
+        return [
+            'campaign' => [
+                'id' => $id, 'name' => $known['name'] ?? (clone $days)->value('campaign_name'),
+                'status' => $known['status'] ?? null, 'daily_budget' => $known['daily_budget'] ?? null,
+                'start' => $known['start'] ?? null, 'end' => $known['end'] ?? null,
+                'currency' => (clone $days)->value('currency') ?? $currency, 'goal' => self::goal($objective, $type),
+            ],
+            'period' => in_array($period, ['today', 'yesterday', 'last15', 'last30', 'month', 'all'], true) ? $period : 'last7',
+            'totals' => $sum($rows),
+            'days' => collect(range(0, $start->diffInDays($end)))->map(fn ($d) => ['date' => $date = $start->addDays($d)->toDateString()] + $sum($byDay[$date] ?? collect()))->values()->all(),
+        ];
+    }
+
+    /**
+     * Really running: on, not past its end, and delivering (spent in the last 3 days, or just started).
+     * Meta keeps old campaigns "ACTIVE" for ever — those are not running.
+     */
+    public static function isRunning(?string $status, ?string $end, ?string $lastSpend, ?string $start = null): bool
+    {
+        $recent = CarbonImmutable::today()->subDays(3)->toDateString();
+        $today = CarbonImmutable::today()->toDateString();
+
+        return $status === 'ACTIVE' && (! $end || $end >= $today) && (($lastSpend && $lastSpend >= $recent) || ($start && $start >= $recent));
     }
 
     /** The campaign's goal in words, from Meta's objective (OUTCOME_* and the older names). */

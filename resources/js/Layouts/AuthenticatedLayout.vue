@@ -29,6 +29,7 @@ const businessSections = [
         label: 'Overview',
         items: [
             { name: 'Dashboard', route: 'dashboard', match: 'dashboard', icon: 'home' },
+            { name: 'Ad desk', route: 'ad-desk', match: 'ad-desk', icon: 'megaphone' },
             { name: 'Cashflow', route: 'cashflow.index', match: 'cashflow.*', icon: 'flow' },
             { name: 'Ad money', route: 'ad-money.index', match: 'ad-money.*', icon: 'chart' },
             { name: 'Payouts', route: 'payouts.index', match: 'payouts.*', icon: 'bank' },
@@ -52,6 +53,15 @@ const businessSections = [
         ],
     },
 ];
+
+// Business on phones: the app's own bottom bar (like the personal side), the rest under More.
+const businessBar = [
+    { name: 'Ad desk', route: 'ad-desk', match: ['ad-desk', 'clients.campaigns.*', 'charges.*'], icon: 'megaphone' },
+    { name: 'Ad money', route: 'ad-money.index', match: ['ad-money.*', 'statements.*'], icon: 'chart' },
+    { name: 'Home', route: 'dashboard', match: ['dashboard'], icon: 'home' },
+    { name: 'Clients', route: 'clients.index', match: ['clients.index', 'clients.show'], icon: 'users' },
+];
+const onBar = (item) => item.match.some((m) => route().current(m));
 
 const personalSections = [
     {
@@ -308,9 +318,23 @@ router.on('navigate', () => {
                 </div>
             </div>
 
-            <main class="mx-auto max-w-[1400px] px-4 py-6 sm:px-8 sm:py-8" :class="{ 'pb-28 lg:pb-8': mode === 'personal' }">
+            <main class="mx-auto max-w-[1400px] px-4 py-6 sm:px-8 sm:py-8 pb-28 lg:pb-8">
                 <slot />
             </main>
+
+            <!-- Business app: bottom bar on phones -->
+            <nav v-if="mode === 'business'" class="fixed inset-x-0 bottom-0 z-30 border-t border-line/70 bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+                <div class="mx-auto grid max-w-md grid-cols-5">
+                    <Link v-for="item in businessBar" :key="item.name" :href="route(item.route)" class="flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold transition"
+                        :class="onBar(item) ? 'text-brand-600' : 'text-ink-500'">
+                        <span class="flex h-8 w-12 items-center justify-center rounded-full transition" :class="onBar(item) ? 'bg-brand-50 dark:bg-brand-500/15' : ''"><Icon :name="item.icon" :size="20" /></span>
+                        {{ item.name }}
+                    </Link>
+                    <button class="flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold text-ink-500" @click="sidebarOpen = true">
+                        <span class="flex h-8 w-12 items-center justify-center"><Icon name="menu" :size="20" /></span> More
+                    </button>
+                </div>
+            </nav>
 
             <!-- Personal app: bottom bar on phones, with quick add in the middle -->
             <nav v-if="mode === 'personal'" class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
