@@ -85,8 +85,8 @@ const report = () => {
                 </section>
 
                 <!-- Parties & dates -->
-                <section class="grid gap-5 px-6 py-6 sm:grid-cols-3 sm:px-10">
-                    <div class="sm:col-span-1">
+                <section class="grid grid-cols-2 gap-5 px-6 py-6 sm:grid-cols-3 sm:px-10">
+                    <div class="col-span-2 sm:col-span-1">
                         <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">Billed to</div>
                         <div class="mt-1.5 font-semibold">{{ inv.client.company || inv.client.name }}</div>
                         <div v-if="inv.client.company && inv.client.name !== inv.client.company" class="text-sm text-[#6B6F82]">{{ inv.client.name }}</div>
