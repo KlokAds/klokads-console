@@ -12,7 +12,7 @@ import { applyTheme, cycleTheme, theme } from '@/theme';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
 
-/** The personal app: its own calm look, simple menu, bottom tabs and quick add on phones. */
+/** The personal side: its own calm look. In a browser (computer or phone) a side menu; inside the phone app, bottom tabs and quick add. */
 defineProps({
     title: { type: String, default: '' },
     subtitle: { type: String, default: '' },
@@ -23,6 +23,7 @@ const page = usePage();
 const user = computed(() => page.props.auth.user);
 const first = computed(() => (user.value?.name ?? '').split(' ')[0]);
 const more = ref(false);
+const drawer = ref(false); // the side menu on a phone's browser
 
 const NAV = [
     { name: 'Home', route: 'personal.dashboard', match: 'personal.dashboard', icon: 'home' },
@@ -54,13 +55,17 @@ onMounted(() => {
     applyTheme();
     syncEntries();
 });
-router.on('navigate', () => (more.value = false));
+router.on('navigate', () => {
+    more.value = false;
+    drawer.value = false;
+});
 </script>
 
 <template>
     <div class="personal-bg min-h-screen">
-        <!-- Desktop rail -->
-        <aside class="fixed inset-y-0 left-0 z-30 hidden w-[240px] flex-col border-r border-line/70 bg-surface/70 px-3 py-5 backdrop-blur-xl lg:flex">
+        <!-- Side menu: always on a computer; on a phone's browser it slides in from ☰ -->
+        <aside class="fixed inset-y-0 left-0 w-[240px] flex-col overflow-y-auto border-r border-line/70 px-3 py-5 backdrop-blur-xl lg:flex"
+            :class="drawer ? 'z-50 flex bg-surface shadow-2xl' : 'z-30 hidden bg-surface/70'">
             <Link :href="route('personal.dashboard')" class="mb-6 flex items-center gap-2.5 px-2">
                 <BotLogo :size="32" />
                 <span>
@@ -89,10 +94,15 @@ router.on('navigate', () => (more.value = false));
             </div>
         </aside>
 
+        <transition enter-from-class="opacity-0" leave-to-class="opacity-0" enter-active-class="transition" leave-active-class="transition">
+            <div v-if="drawer" class="fixed inset-0 z-40 bg-ink-950/50 backdrop-blur-sm lg:hidden" @click="drawer = false"></div>
+        </transition>
+
         <div class="lg:pl-[240px]">
             <!-- Top bar -->
             <header class="sticky top-0 z-20 border-b border-line/60 bg-canvas/80 backdrop-blur-xl">
                 <div class="mx-auto flex h-[64px] max-w-5xl items-center gap-2 px-4 sm:px-6">
+                    <button v-if="!inApp" class="icon-btn -ml-1 lg:hidden" title="Menu" @click="drawer = true"><Icon name="menu" /></button>
                     <Link v-if="back" :href="route(back)" class="icon-btn -ml-1 lg:hidden"><Icon name="chevron" :size="18" class="rotate-90" /></Link>
                     <Link v-else :href="route('personal.dashboard')" class="lg:hidden"><BotLogo :size="30" /></Link>
                     <div class="min-w-0 flex-1 pl-1">
@@ -102,9 +112,9 @@ router.on('navigate', () => (more.value = false));
                     <slot name="actions" />
                     <CommandPalette mode="personal" />
                     <NotificationBell />
-                    <button v-if="inApp" class="icon-btn" title="App settings: lock, theme, messages, senders" @click="appSettings"><Icon name="cog" :size="18" /></button>
+                    <button v-if="inApp" class="icon-btn" title="App settings: lock, notifications, SMS & wallet senders" @click="appSettings"><Icon name="cog" :size="18" /></button>
                     <button class="icon-btn lg:hidden" :title="`Theme: ${theme}`" @click="cycleTheme"><Icon :name="THEME_ICON[theme]" :size="18" /></button>
-                    <button class="btn hidden bg-gradient-to-r from-teal-500 to-brand-600 text-white shadow-md shadow-teal-500/20 hover:brightness-110 sm:inline-flex lg:hidden" @click="quickAdd()"><Icon name="plus" :size="16" /> Add</button>
+                    <button class="btn bg-gradient-to-r from-teal-500 to-brand-600 px-3 text-white shadow-md shadow-teal-500/20 hover:brightness-110 lg:hidden" :class="inApp ? 'hidden sm:inline-flex' : 'inline-flex'" @click="quickAdd()"><Icon name="plus" :size="16" /> Add</button>
                 </div>
             </header>
 
@@ -117,13 +127,13 @@ router.on('navigate', () => (more.value = false));
                 </div>
             </div>
 
-            <main class="mx-auto max-w-5xl px-4 pb-32 pt-5 sm:px-6 lg:pb-12 lg:pt-7">
+            <main class="mx-auto max-w-5xl px-4 pt-5 sm:px-6 lg:pb-12 lg:pt-7" :class="inApp ? 'pb-32' : 'pb-12'">
                 <slot />
             </main>
         </div>
 
-        <!-- Phone tab bar -->
-        <nav class="fixed inset-x-0 bottom-0 z-30 border-t border-line/70 bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+        <!-- Phone app: tab bar -->
+        <nav v-if="inApp" class="fixed inset-x-0 bottom-0 z-30 border-t border-line/70 bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
             <div class="mx-auto grid max-w-md grid-cols-5 items-end">
                 <template v-for="(item, k) in TABS" :key="k">
                     <button v-if="!item" class="-mt-6 flex flex-col items-center pb-2" aria-label="Add entry" @click="quickAdd()">
@@ -141,7 +151,7 @@ router.on('navigate', () => (more.value = false));
 
         <!-- More (phones) -->
         <transition enter-from-class="opacity-0" leave-to-class="opacity-0" enter-active-class="transition duration-200" leave-active-class="transition duration-150">
-            <div v-if="more" class="fixed inset-0 z-40 bg-ink-950/50 backdrop-blur-sm lg:hidden" @click.self="more = false">
+            <div v-if="inApp && more" class="fixed inset-0 z-40 bg-ink-950/50 backdrop-blur-sm lg:hidden" @click.self="more = false">
                 <div class="absolute inset-x-0 bottom-0 rounded-t-3xl bg-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl">
                     <div class="mx-auto mb-4 h-1.5 w-10 rounded-full bg-ink-200"></div>
                     <div class="grid grid-cols-3 gap-2">
@@ -151,7 +161,7 @@ router.on('navigate', () => (more.value = false));
                         </Link>
                         <Link :href="route('dashboard')" class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700"><Icon name="bank" :size="22" /> Business</Link>
                         <button v-if="!inApp" class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700" @click="lock"><span class="text-xl leading-none">🔒</span> Lock</button>
-                        <button v-if="inApp" class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700" @click="appSettings"><span class="text-xl leading-none">📱</span> Phone app</button>
+                        <button v-if="inApp" class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700" @click="appSettings"><Icon name="cog" :size="22" /> App settings</button>
                     </div>
                 </div>
             </div>

@@ -352,7 +352,7 @@ router.on('navigate', () => {
                 </div>
             </div>
 
-            <main class="mx-auto max-w-[1400px] px-4 sm:px-8 lg:pb-8" :class="appShell ? 'pb-32 pt-4' : mode === 'personal' ? 'py-6 pb-28 sm:py-8' : 'py-6 sm:py-8'">
+            <main class="mx-auto max-w-[1400px] px-4 sm:px-8 lg:pb-8" :class="appShell ? 'pb-32 pt-4' : mode === 'personal' && inApp ? 'py-6 pb-28 sm:py-8' : 'py-6 sm:py-8'">
                 <slot />
             </main>
 
@@ -415,7 +415,7 @@ router.on('navigate', () => {
                             <div class="mt-3 grid grid-cols-3 gap-2 text-xs font-semibold">
                                 <Link v-if="isOwner" :href="route('personal.dashboard')" class="flex flex-col items-center gap-1.5 rounded-2xl bg-ink-50 p-3 text-ink-700 dark:bg-white/[0.04]"><Icon name="user" :size="19" /> Personal</Link>
                                 <button class="flex flex-col items-center gap-1.5 rounded-2xl bg-ink-50 p-3 text-ink-700 dark:bg-white/[0.04]" @click="cycleTheme"><Icon :name="THEME_ICON[theme]" :size="19" /> {{ THEME_LABEL[theme] }}</button>
-                                <button class="flex flex-col items-center gap-1.5 rounded-2xl bg-ink-50 p-3 text-ink-700 dark:bg-white/[0.04]" @click="appSettings"><Icon name="cog" :size="19" /> Phone app</button>
+                                <button class="flex flex-col items-center gap-1.5 rounded-2xl bg-ink-50 p-3 text-ink-700 dark:bg-white/[0.04]" @click="appSettings"><Icon name="cog" :size="19" /> App settings</button>
                             </div>
                             <div class="mt-3 flex items-center gap-3 rounded-2xl border border-line/70 p-3">
                                 <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-700 text-xs font-bold text-white">{{ initials }}</span>
@@ -429,7 +429,7 @@ router.on('navigate', () => {
             </transition>
 
             <!-- Personal app: bottom bar on phones, with quick add in the middle -->
-            <nav v-if="mode === 'personal'" class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
+            <nav v-if="mode === 'personal' && inApp" class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
                 <div class="mx-auto grid max-w-md grid-cols-5 items-end">
                     <template v-for="(item, k) in bottomNav" :key="item.name">
                         <Link :href="route(item.route, item.params)" class="flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold"
