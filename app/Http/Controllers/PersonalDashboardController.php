@@ -43,9 +43,14 @@ class PersonalDashboardController extends Controller
     {
         $request->session()->put('mode', 'personal');
 
-        $accounts = Account::where('scope', 'personal')->where('archived', false)->orderBy('name')->get();
-        $ids = $accounts->pluck('id')->all();
-        $savingsIds = $accounts->where('purpose', 'savings')->pluck('id')->all();
+        $all = Account::where('scope', 'personal')->where('archived', false)->orderBy('name')->get();
+        // Moves into an investment stay "mine" (ids include them); balances and cards show money only.
+        $ids = $all->pluck('id')->all();
+        $investments = $all->where('kind', 'investment')->values();
+        $accounts = $all->where('kind', '!=', 'investment')->values();
+        // Putting money into an investment counts as saving it.
+        $savingsIds = $all->filter(fn ($a) => $a->purpose === 'savings' || $a->kind === 'investment')->pluck('id')->all();
+        $loans = $this->loanSummary();
         $from = now()->startOfMonth()->subMonths(5);
         $thisMonth = now()->format('Y-m');
 
@@ -69,7 +74,7 @@ class PersonalDashboardController extends Controller
             ->where(fn ($q) => $q->whereNull('category')->orWhere('category', '!=', Catalog::SADAQAH))
             ->get();
 
-        $stats = $currencies->mapWithKeys(function (string $currency) use ($transactions, $yearTx, $ids, $savingsIds, $monthKeys, $accounts, $balances, $budgets) {
+        $stats = $currencies->mapWithKeys(function (string $currency) use ($transactions, $yearTx, $ids, $savingsIds, $monthKeys, $accounts, $balances, $budgets, $investments, $loans) {
             $months = $monthKeys->map(fn ($m) => [
                 'month' => $m->format('Y-m'),
                 'label' => $m->format('M'),
@@ -89,6 +94,10 @@ class PersonalDashboardController extends Controller
                 'total' => (int) $mine->sum(fn ($a) => $balances[$a->id]),
                 'savings' => (int) $mine->where('purpose', 'savings')->sum(fn ($a) => $balances[$a->id]),
                 'spending' => (int) $mine->where('purpose', '!=', 'savings')->sum(fn ($a) => $balances[$a->id]),
+                // Investments at what they are worth now; net worth = money + investments + owed to me − I owe.
+                'investments' => $invested = (int) $investments->filter(fn ($a) => strtoupper($a->currency) === $currency)->sum(fn ($a) => $a->current_value ?? Ledger::balance($a)),
+                'net_worth' => (int) $mine->sum(fn ($a) => $balances[$a->id]) + $invested
+                    + ($loans['totals'][$currency]['to_receive'] ?? 0) - ($loans['totals'][$currency]['to_pay'] ?? 0),
                 'budgets' => $budgets->where('currency', $currency)->map(fn (Budget $b) => [
                     'category' => $b->category,
                     'label' => Catalog::PERSONAL_CATEGORIES[$b->category] ?? $b->category,
@@ -132,7 +141,7 @@ class PersonalDashboardController extends Controller
                 'direction' => Ledger::direction($t, $ids),
             ])->values(),
             'categories' => Catalog::PERSONAL_CATEGORIES + Catalog::INCOME_CATEGORIES['personal'] + Catalog::LOAN_CATEGORIES,
-            'loans' => $this->loanSummary(),
+            'loans' => $loans,
             'spendCategories' => Catalog::options(Catalog::PERSONAL_CATEGORIES),
             'providers' => collect(Catalog::PROVIDERS)->flatMap(fn ($list) => collect($list)->map(fn ($p) => $p[0])),
         ];

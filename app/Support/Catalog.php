@@ -23,7 +23,6 @@ class Catalog
         'seo' => 'SEO tools / backlinks',
         'software' => 'Software subscriptions',
         'salary' => 'Salary / freelancers',
-        'agro' => 'Agro business (Matir Khamar)',
         'office' => 'Office / admin',
         'tax' => 'Tax / GST',
         'bank_fees' => 'Bank & transfer fees',
@@ -175,7 +174,20 @@ class Catalog
     /** Mobile wallets: their "last 4" is my mobile number, not an account number. */
     public const MFS = ['bkash', 'nagad', 'rocket', 'upay'];
 
-    public const ACCOUNT_KINDS = ['bank' => 'Bank', 'wallet' => 'Wallet (Wise, bKash…)', 'card' => 'Card', 'cash' => 'Cash'];
+    public const ACCOUNT_KINDS = ['bank' => 'Bank', 'wallet' => 'Wallet (Wise, bKash…)', 'card' => 'Card', 'cash' => 'Cash', 'investment' => 'Investment'];
+
+    /** Kinds of investment: emoji and name. */
+    public const INVESTMENT_TYPES = [
+        'land' => ['🏞️', 'Land / property'],
+        'business' => ['🤝', 'Business share'],
+        'shares' => ['📈', 'Shares (DSE / CSE)'],
+        'fdr' => ['🏦', 'FDR'],
+        'dps' => ['🗓️', 'DPS'],
+        'sanchayapatra' => ['📜', 'Sanchayapatra'],
+        'gold' => ['🪙', 'Gold'],
+        'crypto' => ['🪙', 'Crypto'],
+        'other' => ['✨', 'Other'],
+    ];
 
     /** Invoice / receipt PDF designs. "Classic" layouts follow the familiar ad-platform format, with Klok Ads as issuer. */
     public const TEMPLATES = [

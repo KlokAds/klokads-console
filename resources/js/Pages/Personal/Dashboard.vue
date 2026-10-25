@@ -118,7 +118,10 @@ function dismissReminders() {
                 <div class="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-teal-400/25 blur-3xl"></div>
                 <div class="pointer-events-none absolute -bottom-24 left-0 h-56 w-56 rounded-full bg-brand-500/25 blur-3xl"></div>
                 <div class="relative">
-                    <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">All my {{ pick }}</div>
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">All my {{ pick }}</div>
+                        <div v-if="s.net_worth !== undefined && (s.investments || loans.totals[pick]?.to_receive || loans.totals[pick]?.to_pay)" class="text-right text-[11px] text-white/60">Net worth <b class="block text-sm tabular-nums text-white">{{ C(s.net_worth) }}</b></div>
+                    </div>
                     <div class="mt-1.5 font-display text-[40px] font-extrabold leading-none tabular-nums sm:text-5xl">{{ C(s.total) }}</div>
                     <div class="mt-5 flex h-2 overflow-hidden rounded-full bg-white/10">
                         <div class="h-full bg-emerald-400" :style="{ width: `${pct(s.savings, Math.max(s.total, 1))}%` }"></div>
@@ -127,6 +130,7 @@ function dismissReminders() {
                     <div class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
                         <span class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-emerald-400"></span><span class="text-white/60">Savings</span> <b class="tabular-nums">{{ C(s.savings) }}</b></span>
                         <span class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-sky-400"></span><span class="text-white/60">To spend</span> <b class="tabular-nums">{{ C(s.spending) }}</b></span>
+                        <Link v-if="s.investments" :href="route('personal.investments.index')" class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-indigo-300"></span><span class="text-white/60">Investments</span> <b class="tabular-nums">{{ C(s.investments) }}</b></Link>
                     </div>
                     <div class="mt-6 grid grid-cols-3 gap-2">
                         <button v-for="a in ACTIONS" :key="a.kind" class="flex flex-col items-center gap-1 rounded-2xl bg-white/10 py-3 text-xs font-semibold text-white/90 backdrop-blur transition hover:bg-white/15 active:scale-95"

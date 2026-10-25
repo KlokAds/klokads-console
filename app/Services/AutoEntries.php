@@ -150,7 +150,7 @@ class AutoEntries
      */
     private function account(array $p): ?Account
     {
-        $live = Account::where('archived', false)->whereRaw('upper(currency) = ?', [strtoupper($p['currency'])])->orderByRaw("scope = 'personal' desc")->get();
+        $live = Account::where('archived', false)->where('kind', '!=', 'investment')->whereRaw('upper(currency) = ?', [strtoupper($p['currency'])])->orderByRaw("scope = 'personal' desc")->get();
         $digits = $p['last4'] ?? null;
 
         if ($digits) {

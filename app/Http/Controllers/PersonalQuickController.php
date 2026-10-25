@@ -25,7 +25,7 @@ class PersonalQuickController extends Controller
 
     public function __invoke(): JsonResponse
     {
-        $accounts = Account::where('scope', 'personal')->where('archived', false)->orderBy('name')->get();
+        $accounts = Account::where('scope', 'personal')->where('archived', false)->where('kind', '!=', 'investment')->orderBy('name')->get();
         $ids = $accounts->pluck('id');
         $recent = MoneyTransaction::whereIn('account_id', $ids)->latest('id')->limit(200)->get(['account_id', 'counterparty', 'category', 'kind']);
 
@@ -36,7 +36,12 @@ class PersonalQuickController extends Controller
                 'balance' => Ledger::balance($a),
             ])->values(),
             // Moves can go to / come from a business account (capital in, owner draw out).
-            'business' => Account::where('scope', 'business')->where('archived', false)->orderBy('name')->get()->map(fn (Account $a) => [
+            // Investments: money moved into / out of them, and returns they pay.
+            'investments' => Account::where('kind', 'investment')->where('archived', false)->orderBy('name')->get()->map(fn (Account $a) => [
+                'id' => $a->id, 'name' => $a->name, 'currency' => strtoupper($a->currency), 'balance' => Ledger::balance($a),
+                'investment' => true, 'business' => $a->scope === 'business', 'inv_type' => $a->inv_type,
+            ])->values(),
+            'business' => Account::where('scope', 'business')->where('archived', false)->where('kind', '!=', 'investment')->orderBy('name')->get()->map(fn (Account $a) => [
                 ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'in_fee_pct', 'in_fee_fixed', 'out_fee_pct', 'out_fee_fixed'),
                 'currency' => strtoupper($a->currency),
                 'balance' => Ledger::balance($a),

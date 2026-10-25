@@ -22,7 +22,7 @@ const showMore = ref(false);
 let loadedAt = 0;
 
 const today = () => new Date().toISOString().slice(0, 10);
-const blank = () => ({ kind: 'expense', account_id: '', to_account_id: '', amount: '', to_amount: '', fee: '', category: '', counterparty: '', for_whom: '', description: '', occurred_on: today() });
+const blank = () => ({ kind: 'expense', account_id: '', to_account_id: '', amount: '', to_amount: '', fee: '', category: '', counterparty: '', for_whom: '', investment_id: '', description: '', occurred_on: today() });
 // Categories come from the server: personal ones, or business ones for a business account.
 const categoryList = (kind, business) => data.value?.categories?.[(business ? 'business_' : '') + (kind === 'income' ? 'income' : 'expense')] ?? [];
 const firstCategory = (kind, business = false) => categoryList(kind, business)[0]?.value ?? '';
@@ -31,9 +31,12 @@ const f = reactive(blank());
 const accounts = computed(() => data.value?.accounts ?? []);
 // Every account can be used by hand: personal ones first, then the business ones (💼).
 const allAccounts = computed(() => [...accounts.value, ...(data.value?.business ?? [])]);
-const fromList = allAccounts;
-const from = computed(() => allAccounts.value.find((a) => a.id === Number(f.account_id)));
-const to = computed(() => allAccounts.value.find((a) => a.id === Number(f.to_account_id)));
+// Investments (land, a business share, FDR…) only take part in moves.
+const investments = computed(() => data.value?.investments ?? []);
+const moveAccounts = computed(() => [...allAccounts.value, ...investments.value]);
+const fromList = computed(() => (f.kind === 'transfer' ? moveAccounts.value : allAccounts.value));
+const from = computed(() => moveAccounts.value.find((a) => a.id === Number(f.account_id)));
+const to = computed(() => moveAccounts.value.find((a) => a.id === Number(f.to_account_id)));
 // What the wallets keep on this move (their fee rules): taken out of what was sent.
 const ruleFee = computed(() => {
     const sent = Math.round((parseFloat(String(f.amount).replace(/,/g, '')) || 0) * 100);
@@ -167,6 +170,7 @@ function payload() {
         fee: ruleFee.value ? ((ruleFee.value + Math.round((parseFloat(f.fee) || 0) * 100)) / 100).toFixed(2) : f.fee || null,
         category: f.kind === 'transfer' ? null : f.category, counterparty: f.kind === 'transfer' ? null : f.counterparty || null,
         for_whom: f.kind === 'expense' ? f.for_whom || null : null,
+        investment_id: f.kind === 'income' && f.category === 'investment' ? f.investment_id || null : null,
         description: f.description || null, occurred_on: f.occurred_on,
     };
 }
@@ -304,7 +308,7 @@ onUnmounted(() => {
                             <template v-if="f.kind === 'transfer'">
                                 <div class="mt-4 mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">To</div>
                                 <div class="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5">
-                                    <button v-for="a in allAccounts.filter((x) => x.id !== Number(f.account_id))" :key="a.id" type="button" class="shrink-0 rounded-2xl border px-3.5 py-2.5 text-left transition"
+                                    <button v-for="a in moveAccounts.filter((x) => x.id !== Number(f.account_id))" :key="a.id" type="button" class="shrink-0 rounded-2xl border px-3.5 py-2.5 text-left transition"
                                         :class="Number(f.to_account_id) === a.id ? 'border-brand-400 bg-brand-50 ring-2 ring-brand-400/20' : 'border-line bg-surface'" @click="f.to_account_id = a.id">
                                         <span class="block text-sm font-bold text-ink-900">{{ a.name }}<span v-if="a.last4" class="font-normal text-ink-400"> ••{{ a.last4 }}</span><span v-if="a.purpose === 'savings'" class="ml-1">🐷</span><span v-if="a.business" class="ml-1">💼</span></span>
                                         <span class="block text-[11px] text-ink-500">{{ a.currency }}</span>
@@ -338,6 +342,15 @@ onUnmounted(() => {
                                         <span class="flex h-10 w-10 items-center justify-center rounded-xl text-xl" :class="cat(c.value)[1]">{{ cat(c.value)[0] }}</span>
                                         <span class="line-clamp-2 text-[11px] font-semibold leading-tight text-ink-700">{{ c.label }}</span>
                                     </button>
+                                </div>
+                            </template>
+
+                            <!-- A return paid by one of my investments -->
+                            <template v-if="f.kind === 'income' && f.category === 'investment' && investments.length">
+                                <div class="mt-5 mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">From which investment</div>
+                                <div class="flex flex-wrap gap-1.5">
+                                    <button v-for="i in investments.filter((x) => x.currency === from?.currency)" :key="i.id" type="button" class="rounded-full px-3 py-1.5 text-sm font-semibold transition"
+                                        :class="Number(f.investment_id) === i.id ? 'bg-indigo-600 text-white' : 'bg-ink-50 text-ink-700 hover:bg-ink-100'" @click="f.investment_id = Number(f.investment_id) === i.id ? '' : i.id">📈 {{ i.name }}</button>
                                 </div>
                             </template>
 

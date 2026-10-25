@@ -52,8 +52,8 @@ class PersonalActivityController extends Controller
         $all = Account::where('scope', 'personal')->orderBy('archived')->orderBy('name')->get();
         $ids = $all->pluck('id')->all();
         // Business accounts kept here too (their money is never in my personal totals).
-        $business = Account::where('scope', 'business')->where('archived', false)->orderBy('name')->get();
-        $savingsIds = $all->where('purpose', 'savings')->pluck('id')->all();
+        $business = Account::where('scope', 'business')->where('archived', false)->where('kind', '!=', 'investment')->orderBy('name')->get();
+        $savingsIds = $all->filter(fn ($a) => $a->purpose === 'savings' || $a->kind === 'investment')->pluck('id')->all();
 
         $transactions = MoneyTransaction::with('account:id,name,currency,scope,provider,purpose', 'toAccount:id,name,currency,scope,provider,purpose')
             ->where(fn ($q) => $q->whereIn('account_id', $ids)->orWhereIn('to_account_id', $ids))
@@ -67,7 +67,7 @@ class PersonalActivityController extends Controller
         return Inertia::render('Personal/Activity', [
             'month' => $month,
             'period' => ['key' => $period, 'from' => $start->toDateString(), 'to' => $end->toDateString()],
-            'accounts' => $all->map(fn (Account $a) => [
+            'accounts' => $all->where('kind', '!=', 'investment')->values()->map(fn (Account $a) => [
                 ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'app_profile', 'in_fee_pct', 'in_fee_fixed', 'out_fee_pct', 'out_fee_fixed', 'opening_balance', 'notes', 'guide', 'bank_balance', 'archived', 'scope'),
                 'currency' => strtoupper($a->currency),
                 'balance' => Ledger::balance($a),

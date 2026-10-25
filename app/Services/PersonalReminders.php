@@ -36,7 +36,29 @@ class PersonalReminders
     {
         $local = ($now ?? CarbonImmutable::now())->setTimezone(self::timezone());
 
-        return $this->loans($local) + $this->invoices($local);
+        return $this->loans($local) + $this->invoices($local) + $this->maturities($local);
+    }
+
+    /** An investment (FDR, DPS, Sanchayapatra…) maturing in a week, and on the day. */
+    private function maturities(CarbonImmutable $local): int
+    {
+        if ($local->format('H:i') < self::MORNING) {
+            return 0;
+        }
+        $sent = 0;
+        foreach (Account::where('kind', 'investment')->where('archived', false)->whereNotNull('maturity_on')->get() as $i) {
+            $days = (int) $local->startOfDay()->diffInDays(CarbonImmutable::parse($i->maturity_on->toDateString(), self::timezone()), false);
+            $when = match ($days) {
+                7 => ['w', "📈 {$i->name} matures in a week", 'On '.$i->maturity_on->format('l, j M').' — decide: renew or take it out.'],
+                0 => ['d', "📈 {$i->name} matures today", 'Renew it, or record the money coming out (Investments → Take out).'],
+                default => null,
+            };
+            if ($when) {
+                $sent += (int) $this->notify->once("inv:{$i->id}:{$i->maturity_on->toDateString()}:{$when[0]}", 'reminder', $when[1], $when[2], route('personal.investments.index'));
+            }
+        }
+
+        return $sent;
     }
 
     /** "Did you write down what you spent?" — its own job on the clock. */
