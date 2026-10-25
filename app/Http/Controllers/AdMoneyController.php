@@ -25,16 +25,18 @@ class AdMoneyController extends Controller
     public function index(Request $request, PrepaidBalance $prepaid): Response
     {
         $client = $request->filled('client') ? Client::findOrFail($request->integer('client')) : Airwallex::metaClient();
-        $months = collect(range(0, 5))->map(fn ($i) => CarbonImmutable::today()->startOfMonth()->subMonths($i));
-        $month = $months->first(fn ($m) => $m->format('Y-m') === $request->input('month')) ?? $months->first();
+        $months = collect(range(0, 11))->map(fn ($i) => CarbonImmutable::today()->startOfMonth()->subMonths($i));
+        [$start, $end, $period] = $this->period($request, $months);
+        $range = ['period' => $period, 'from' => $start->toDateString(), 'to' => $end->toDateString(), 'label' => self::label($start, $end),
+            'by_month' => $start->diffInDays($end->min(CarbonImmutable::today())) > 62];
 
         if (! $client) {
-            return Inertia::render('AdMoney/Index', ['client' => null, 'months' => $this->monthOptions($months), 'month' => $month->format('Y-m')]);
+            return Inertia::render('AdMoney/Index', ['client' => null, 'months' => $this->monthOptions($months), 'range' => $range]);
         }
 
         $currency = strtoupper($client->currency ?: 'SGD');
-        $from = $month->toDateString();
-        $to = $month->endOfMonth()->toDateString();
+        $from = $start->toDateString();
+        $to = $end->toDateString();
         $status = $prepaid->status($client);
         $balances = json_decode((string) Setting::get('airwallex_balances'), true) ?: [];
         $spendDaily = (int) round(MetaSpendDay::where('client_id', $client->id)
@@ -42,7 +44,7 @@ class AdMoneyController extends Controller
         $onTheWay = Payout::whereIn('status', ['pending', 'in_transit'])->orderBy('arrival_at')->get();
 
         $entries = ClientBalanceEntry::where('client_id', $client->id)->whereBetween('date', [$from, $to]);
-        $meta = AirwallexEntry::where('kind', 'meta')->where('client_id', $client->id)->whereBetween('occurred_at', [$month, $month->endOfMonth()]);
+        $meta = AirwallexEntry::where('kind', 'meta')->where('client_id', $client->id)->whereBetween('occurred_at', [$start, $end]);
         $days = MetaSpendDay::where('client_id', $client->id)->whereBetween('date', [$from, $to])
             ->selectRaw('date, sum(spend) as spend')->groupBy('date')->pluck('spend', 'date');
 
@@ -50,7 +52,7 @@ class AdMoneyController extends Controller
             'client' => $client->only('id', 'name', 'company') + ['currency' => $currency, 'approve_charges' => $client->approve_charges, 'spend_billing' => $client->spend_billing],
             'clients' => Client::whereNotNull('meta_ad_account_id')->where('billing_mode', 'prepaid')->orderBy('company')->get(['id', 'name', 'company']),
             'months' => $this->monthOptions($months),
-            'month' => $month->format('Y-m'),
+            'range' => $range,
             'now' => [
                 'balance' => $status['balance'],
                 'daily' => $status['daily'],
@@ -68,20 +70,71 @@ class AdMoneyController extends Controller
                 'topped_up' => (int) (clone $entries)->whereIn('kind', ['top_up', 'manual'])->where('amount', '>', 0)->sum('amount'),
                 'meta_charged' => -(int) (clone $meta)->sum('amount'),
                 'meta_charges' => (clone $meta)->count(),
-                'payouts_in' => (int) AirwallexEntry::where('kind', 'deposit')->whereNotNull('payout_id')->whereBetween('occurred_at', [$month, $month->endOfMonth()])->sum('amount'),
+                'payouts_in' => (int) AirwallexEntry::where('kind', 'deposit')->whereNotNull('payout_id')->whereBetween('occurred_at', [$start, $end])->sum('amount'),
             ],
-            'days' => collect(range(0, $month->daysInMonth - 1))->map(fn ($d) => [
-                'date' => $date = $month->addDays($d)->toDateString(),
-                'spend' => (int) ($days[$date] ?? 0),
-            ])->filter(fn ($d) => $d['date'] <= CarbonImmutable::today()->toDateString())->values(),
-            'events' => $this->events($client, $month),
+            'days' => $this->buckets($start, $end, $days),
+            'events' => $this->events($client, $start, $end),
         ]);
     }
 
-    /** Every movement of the month, newest first: balance, Airwallex, Stripe payouts, approvals. */
-    private function events(Client $client, CarbonImmutable $month): array
+    /**
+     * The chosen period: a month ("2026-10"), the last 7 / 30 days, this year, or my own dates.
+     *
+     * @return array{0: CarbonImmutable, 1: CarbonImmutable, 2: string}
+     */
+    private function period(Request $request, $months): array
     {
-        $end = $month->endOfMonth();
+        $today = CarbonImmutable::today();
+        $period = (string) $request->input('period', $request->input('month', $months->first()->format('Y-m')));
+
+        return match (true) {
+            $period === 'last7' => [$today->subDays(6), $today->endOfDay(), $period],
+            $period === 'last30' => [$today->subDays(29), $today->endOfDay(), $period],
+            $period === 'year' => [$today->startOfYear(), $today->endOfDay(), $period],
+            $period === 'custom' && $request->filled(['from', 'to']) => (function () use ($request, $period) {
+                $a = CarbonImmutable::parse($request->input('from'))->startOfDay();
+                $b = CarbonImmutable::parse($request->input('to'))->endOfDay();
+                [$a, $b] = $a->gt($b) ? [$b->startOfDay(), $a->endOfDay()] : [$a, $b];
+
+                return [$a->max($b->subYears(3)), $b, $period]; // at most three years at once
+            })(),
+            (bool) preg_match('/^\d{4}-\d{2}$/', $period) => [$m = CarbonImmutable::parse($period.'-01'), $m->endOfMonth(), $period],
+            default => [$months->first(), $months->first()->endOfMonth(), $months->first()->format('Y-m')],
+        };
+    }
+
+    private static function label(CarbonImmutable $start, CarbonImmutable $end): string
+    {
+        if ($start->isSameDay($start->startOfMonth()) && $end->isSameDay($start->endOfMonth())) {
+            return $start->format('F Y');
+        }
+
+        return $start->format($start->year === $end->year ? 'j M' : 'j M Y').' – '.$end->format('j M Y');
+    }
+
+    /**
+     * Spend per day — or per month when the period is longer than two months.
+     *
+     * @return array<int, array{date: string, label: string, spend: int}>
+     */
+    private function buckets(CarbonImmutable $start, CarbonImmutable $end, $days): array
+    {
+        $last = $end->min(CarbonImmutable::today());
+        $byMonth = $start->diffInDays($last) > 62;
+        $out = [];
+        for ($d = $byMonth ? $start->startOfMonth() : $start->startOfDay(); $d->lte($last); $d = $byMonth ? $d->addMonth() : $d->addDay()) {
+            $spend = $byMonth
+                ? (int) collect($days)->filter(fn ($v, $date) => str_starts_with((string) $date, $d->format('Y-m')))->sum()
+                : (int) ($days[$d->toDateString()] ?? 0);
+            $out[] = ['date' => $d->toDateString(), 'label' => $d->format($byMonth ? 'M Y' : 'D j M'), 'spend' => $spend];
+        }
+
+        return $out;
+    }
+
+    /** Every movement of the period, newest first: balance, Airwallex, Stripe payouts, approvals. */
+    private function events(Client $client, CarbonImmutable $month, CarbonImmutable $end): array
+    {
         $events = collect();
 
         foreach (ClientBalanceEntry::where('client_id', $client->id)->whereBetween('date', [$month->toDateString(), $end->toDateString()])->get() as $e) {
@@ -114,7 +167,7 @@ class AdMoneyController extends Controller
                 'text' => 'Top-up drafted · '.$c->status]);
         }
 
-        return $events->sortByDesc('sort')->take(80)->values()->all();
+        return $events->sortByDesc('sort')->take(300)->values()->all();
     }
 
     private function monthOptions($months): array

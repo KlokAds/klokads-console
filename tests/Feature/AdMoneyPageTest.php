@@ -52,6 +52,13 @@ class AdMoneyPageTest extends TestCase
             ->where('events', fn ($events) => collect($events)->pluck('where')->unique()->sort()->values()->all() === ['airwallex', 'approval', 'balance', 'stripe']
                 && collect($events)->contains(fn ($e) => str_contains($e['text'], 'Md Mujaid Hossain'))));
 
-        $this->get('/ad-money?month=2026-09')->assertInertia(fn ($page) => $page->where('month', '2026-09')->where('totals.spend', 9999));
+        $this->get('/ad-money?period=2026-09')->assertInertia(fn ($page) => $page->where('range.period', '2026-09')->where('range.label', 'September 2026')->where('totals.spend', 9999));
+
+        // My own dates: both months together, shown per day; a long range is shown per month.
+        $this->get('/ad-money?period=custom&from=2026-09-01&to=2026-10-25')->assertInertia(fn ($page) => $page
+            ->where('range.label', '1 Sep – 25 Oct 2026')->where('totals.spend', 14999)->where('range.by_month', false)->has('days', 55));
+        $this->get('/ad-money?period=year')->assertInertia(fn ($page) => $page
+            ->where('range.by_month', true)->has('days', 10)->where('days.8.spend', 9999)->where('days.8.label', 'Sep 2026'));
+        $this->get('/ad-money?period=last7')->assertInertia(fn ($page) => $page->has('days', 7)->where('totals.spend', 5000));
     }
 }

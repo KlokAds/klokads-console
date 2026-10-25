@@ -2,6 +2,7 @@
 import EmptyState from '@/Components/EmptyState.vue';
 import Icon from '@/Components/Icon.vue';
 import StatCard from '@/Components/StatCard.vue';
+import DatePicker from '@/Components/Ui/DatePicker.vue';
 import Select from '@/Components/Ui/Select.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { date, money } from '@/money';
@@ -13,7 +14,7 @@ const props = defineProps({
     client: Object,
     clients: { type: Array, default: () => [] },
     months: Array,
-    month: String,
+    range: Object,
     now: Object,
     totals: Object,
     days: { type: Array, default: () => [] },
@@ -23,15 +24,33 @@ const props = defineProps({
 const cur = computed(() => props.client?.currency ?? 'SGD');
 const m = (cents, currency = null) => money(cents, currency ?? cur.value);
 const name = computed(() => props.client?.company || props.client?.name);
-const monthValue = ref(props.month);
+// ---------------------------------------------------------------- period: a month, a quick range, or my own dates
+const periodValue = ref(props.range.period);
+const from = ref(props.range.from);
+const to = ref(props.range.to);
+const periodOptions = computed(() => [
+    { value: 'last7', label: 'Last 7 days', group: 'Quick' },
+    { value: 'last30', label: 'Last 30 days', group: 'Quick' },
+    { value: 'year', label: 'This year', group: 'Quick' },
+    { value: 'custom', label: 'Custom dates…', group: 'Quick' },
+    ...props.months.map((x) => ({ ...x, group: 'Month' })),
+]);
 const clientValue = ref(props.client?.id ?? null);
 const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: c.company || c.name })));
-const go = () => router.get(route('ad-money.index'), { month: monthValue.value, client: clientValue.value }, { preserveScroll: true, preserveState: true });
+const go = () => {
+    if (periodValue.value === 'custom' && !(from.value && to.value)) return;
+    router.get(route('ad-money.index'), {
+        period: periodValue.value,
+        ...(periodValue.value === 'custom' ? { from: from.value, to: to.value } : {}),
+        client: clientValue.value,
+    }, { preserveScroll: true, preserveState: true });
+};
 
 // ---------------------------------------------------------------- daily spend chart (one series)
 const maxDay = computed(() => Math.max(...props.days.map((d) => d.spend), 1));
 const hovered = ref(null);
 const activeDays = computed(() => props.days.filter((d) => d.spend > 0).length);
+const byMonth = computed(() => !!props.range.by_month);
 
 // ---------------------------------------------------------------- movements
 const FILTERS = [
@@ -71,7 +90,13 @@ const dayLabel = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { 
             <!-- Pickers -->
             <div class="flex flex-wrap items-center justify-end gap-2">
                 <div v-if="clients.length > 1" class="w-56"><Select v-model="clientValue" :options="clientOptions" @change="go" /></div>
-                <div class="w-44"><Select v-model="monthValue" :options="months" :searchable="false" @change="go" /></div>
+                <div class="w-48"><Select v-model="periodValue" :options="periodOptions" :searchable="false" @change="go" /></div>
+            </div>
+            <div v-if="periodValue === 'custom'" class="mt-3 flex flex-wrap items-center justify-end gap-2">
+                <DatePicker v-model="from" :max="to || null" size="sm" class="w-40" placeholder="From" />
+                <span class="text-sm text-ink-400">to</span>
+                <DatePicker v-model="to" :min="from || null" size="sm" class="w-40" placeholder="To" />
+                <button class="btn-primary btn-sm" :disabled="!from || !to" @click="go">Show</button>
             </div>
 
             <!-- Right now -->
@@ -93,7 +118,7 @@ const dayLabel = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { 
 
             <!-- The month's flow -->
             <div class="card mt-5 p-5 sm:p-6">
-                <div class="card-title">{{ months.find((x) => x.value === month)?.label }} — where the money went</div>
+                <div class="card-title">{{ range.label }} — where the money went</div>
                 <div class="mt-4 grid gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-stretch">
                     <div class="rounded-2xl bg-ink-50 p-4">
                         <div class="text-xs font-semibold text-ink-500">① Client paid (top-ups)</div>
@@ -104,7 +129,7 @@ const dayLabel = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { 
                     <div class="rounded-2xl bg-ink-50 p-4">
                         <div class="text-xs font-semibold text-ink-500">② Stripe → Airwallex</div>
                         <div class="mt-1 font-display text-xl font-extrabold tabular-nums text-ink-900">{{ m(totals.payouts_in) }}</div>
-                        <div class="mt-1 text-xs text-ink-500">Payouts that landed this month</div>
+                        <div class="mt-1 text-xs text-ink-500">Payouts that landed in this period</div>
                     </div>
                     <div class="hidden items-center text-ink-300 md:flex"><Icon name="arrow" :size="18" /></div>
                     <div class="rounded-2xl bg-ink-50 p-4">
@@ -124,20 +149,20 @@ const dayLabel = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { 
             <!-- Daily spend -->
             <div class="card mt-5 p-5 sm:p-6">
                 <div class="flex flex-wrap items-baseline justify-between gap-2">
-                    <div class="card-title">Meta spend per day</div>
+                    <div class="card-title">Meta spend per {{ byMonth ? 'month' : 'day' }}</div>
                     <div class="text-sm text-ink-500">
-                        <template v-if="hovered">{{ dayLabel(hovered.date) }} · <b class="tabular-nums text-ink-900">{{ m(hovered.spend) }}</b></template>
-                        <template v-else>{{ activeDays }} day{{ activeDays === 1 ? '' : 's' }} with ads · {{ m(totals.spend) }}</template>
+                        <template v-if="hovered">{{ hovered.label }} · <b class="tabular-nums text-ink-900">{{ m(hovered.spend) }}</b></template>
+                        <template v-else>{{ activeDays }} {{ byMonth ? 'month' : 'day' }}{{ activeDays === 1 ? '' : 's' }} with ads · {{ m(totals.spend) }}</template>
                     </div>
                 </div>
                 <div v-if="totals.spend > 0" class="mt-4 flex h-36 items-end gap-[2px]" @mouseleave="hovered = null">
                     <div v-for="d in days" :key="d.date" class="flex h-full flex-1 cursor-default items-end" @mouseenter="hovered = d" @click="hovered = d">
                         <div class="w-full rounded-t-[4px] transition-colors" :class="hovered?.date === d.date ? 'bg-brand-700' : 'bg-brand-500'"
-                            :style="{ height: d.spend ? Math.max(3, (d.spend / maxDay) * 100) + '%' : '2px', opacity: d.spend ? 1 : 0.25 }" :title="`${dayLabel(d.date)}: ${m(d.spend)}`"></div>
+                            :style="{ height: d.spend ? Math.max(3, (d.spend / maxDay) * 100) + '%' : '2px', opacity: d.spend ? 1 : 0.25 }" :title="`${d.label}: ${m(d.spend)}`"></div>
                     </div>
                 </div>
-                <div v-if="totals.spend > 0" class="mt-1.5 flex justify-between text-[11px] text-ink-400"><span>{{ dayLabel(days[0].date) }}</span><span>{{ dayLabel(days[days.length - 1].date) }}</span></div>
-                <p v-else class="mt-3 text-sm text-ink-500">No Meta spend this month yet.</p>
+                <div v-if="totals.spend > 0" class="mt-1.5 flex justify-between text-[11px] text-ink-400"><span>{{ days[0].label }}</span><span>{{ days[days.length - 1].label }}</span></div>
+                <p v-else class="mt-3 text-sm text-ink-500">No Meta spend in this period.</p>
             </div>
 
             <!-- Every movement -->
@@ -170,7 +195,7 @@ const dayLabel = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { 
                         </div>
                     </div>
                 </div>
-                <EmptyState v-else compact icon="chart" title="Nothing this month" text="Spend, top-ups, payouts and Airwallex movements show here as they happen." />
+                <EmptyState v-else compact icon="chart" title="Nothing in this period" text="Spend, top-ups, payouts and Airwallex movements show here as they happen." />
             </div>
         </template>
     </AuthenticatedLayout>
