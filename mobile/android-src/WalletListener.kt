@@ -16,7 +16,7 @@ class WalletListener : NotificationListenerService() {
 
     companion object {
         /** Words in a wallet app's package or name; set from the app (Settings), these by default. */
-        val DEFAULT_APPS = listOf("nsave", "rizon", "elevatepay", "worldfirst", "airwallex", "payoneer")
+        val DEFAULT_APPS = listOf("nsave", "rizon", "elevatepay", "worldfirst", "airwallex", "payoneer", "redotpay", "binance")
         private const val SEEN = "klok_wallet_seen"
     }
 

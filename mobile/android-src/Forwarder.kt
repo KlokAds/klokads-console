@@ -35,7 +35,7 @@ object Forwarder {
     private const val WORK = "klok-forward"
     private const val KEEP = 300
 
-    private val MONEY = Regex("(tk\\.?|bdt|৳|taka|usd|us\\$|sgd|s\\$|\\$)\\s*\\d|\\d[\\d,.]*\\s*(tk|bdt|taka|usd|sgd)\\b", RegexOption.IGNORE_CASE)
+    private val MONEY = Regex("(tk\\.?|bdt|৳|taka|usdt|usdc|usd|us\\$|sgd|s\\$|\\$)\\s*\\d|\\d[\\d,.]*\\s*(tk|bdt|taka|usdt|usdc|usd|sgd)\\b", RegexOption.IGNORE_CASE)
     private val TRX = Regex("trx ?id|txn ?id|transaction id", RegexOption.IGNORE_CASE)
 
     private fun flutter(context: Context) = context.getSharedPreferences(FLUTTER, Context.MODE_PRIVATE)

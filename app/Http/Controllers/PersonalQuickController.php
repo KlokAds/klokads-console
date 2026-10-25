@@ -31,13 +31,13 @@ class PersonalQuickController extends Controller
 
         return response()->json([
             'accounts' => $accounts->map(fn (Account $a) => [
-                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4'),
+                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'in_fee_pct', 'in_fee_fixed', 'out_fee_pct', 'out_fee_fixed'),
                 'currency' => strtoupper($a->currency),
                 'balance' => Ledger::balance($a),
             ])->values(),
             // Moves can go to / come from a business account (capital in, owner draw out).
             'business' => Account::where('scope', 'business')->where('archived', false)->orderBy('name')->get()->map(fn (Account $a) => [
-                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4'),
+                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'in_fee_pct', 'in_fee_fixed', 'out_fee_pct', 'out_fee_fixed'),
                 'currency' => strtoupper($a->currency),
                 'balance' => Ledger::balance($a),
                 'business' => true,

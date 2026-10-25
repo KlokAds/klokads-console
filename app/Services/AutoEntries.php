@@ -86,7 +86,7 @@ class AutoEntries
         $this->rememberBankBalance($account, $p);
 
         $date = ($message->received_at ?? now())->toDateString();
-        if ($this->alreadyRecorded($account, $p, $date)) {
+        if ($this->alreadyRecorded($account, $p, $date, $message->source)) {
             $message->update(['status' => 'ignored', 'account_id' => $account->id, 'note' => 'Already recorded']);
 
             return $message;
@@ -215,24 +215,34 @@ class AutoEntries
     private function pairOwnTransfer(InboxMessage $message, MoneyTransaction $tx): ?MoneyTransaction
     {
         $tx->loadMissing('account');
-        $other = MoneyTransaction::with('account')
+        // What arrives can be a little less than what left (the wallet's fee): up to 6% + 5.
+        [$low, $high] = $tx->kind === 'income'
+            ? [$tx->amount, (int) ceil($tx->amount * 1.06) + 500]
+            : [max(0, (int) floor($tx->amount * 0.94) - 500), $tx->amount + $tx->fee];
+        $candidates = MoneyTransaction::with('account')
             ->where('id', '!=', $tx->id)->where('account_id', '!=', $tx->account_id)
             ->where('kind', $tx->kind === 'income' ? 'expense' : 'income')
-            ->where('amount', $tx->amount)->whereNull('to_account_id')
+            ->whereBetween('amount', [$low, $high])->whereNull('to_account_id')
             ->where('description', 'like', 'Auto ·%')
             ->whereNotIn('category', ['work', 'envelope', ...array_keys(Catalog::LOAN_CATEGORIES)])
             ->whereBetween('occurred_on', [$tx->occurred_on->copy()->subDay()->toDateString(), $tx->occurred_on->copy()->addDay()->toDateString().' 23:59:59'])
-            ->latest('id')->get()
-            ->first(fn (MoneyTransaction $t) => strtoupper($t->account->currency) === strtoupper($tx->account->currency));
+            ->latest('id')->get();
+        // A different amount only counts when a wallet that keeps fees is in it; bank to bank must match.
+        $keepsFees = fn (Account $a) => in_array($a->provider, ['nsave', 'rizon', 'redotpay', 'binance', 'elevatepay', 'worldfirst', 'airwallex', 'payoneer', 'wise'], true)
+            || $a->in_fee_pct > 0 || $a->in_fee_fixed > 0 || $a->out_fee_pct > 0 || $a->out_fee_fixed > 0;
+        $other = $candidates->filter(fn (MoneyTransaction $t) => strtoupper($t->account->currency) === strtoupper($tx->account->currency))
+            ->filter(fn (MoneyTransaction $t) => $t->amount === $tx->amount || $keepsFees($t->account) || $keepsFees($tx->account))
+            ->sortBy(fn (MoneyTransaction $t) => abs($t->amount - $tx->amount))->first();
         if (! $other) {
-            return null;
+            return $this->pairConversion($tx);
         }
 
         [$out, $in] = $tx->kind === 'expense' ? [$tx, $other] : [$other, $tx];
         $transfer = DB::transaction(function () use ($out, $in) {
+            // What arrived moved; whatever went missing on the way is the fee.
             $transfer = Ledger::save([
                 'kind' => 'transfer', 'account_id' => $out->account_id, 'to_account_id' => $in->account_id,
-                'amount' => $out->amount, 'to_amount' => $in->amount, 'fee' => $out->fee,
+                'amount' => $in->amount, 'to_amount' => $in->amount, 'fee' => $out->amount + $out->fee - $in->amount,
                 'description' => 'Auto · own transfer', 'occurred_on' => $out->occurred_on->toDateString(),
             ]);
             InboxMessage::whereIn('money_transaction_id', [$out->id, $in->id])
@@ -244,8 +254,59 @@ class AutoEntries
         });
 
         $name = fn (Account $a) => $a->name.($a->last4 && ! str_contains($a->name, $a->last4) ? " ••{$a->last4}" : '');
-        $this->notify->send('info', '🔁 '.$name($out->account).' → '.$name($in->account).' '.Notify::money($out->amount, $out->account->currency),
+        $fee = $transfer->fee ? ' · fee '.Notify::money($transfer->fee, $out->account->currency) : '';
+        $this->notify->send('info', '🔁 '.$name($out->account).' → '.$name($in->account).' '.Notify::money($in->amount, $in->account->currency).$fee,
             'Moved between your own accounts — not spending, not income.', route('personal.activity'), 'klok-money');
+
+        return $transfer;
+    }
+
+    /**
+     * USDT sold on Binance / RedotPay and the taka that arrives for it (bKash, bank) within a few
+     * hours: one conversion, with the rate I got — not a dollar expense plus taka income.
+     */
+    private function pairConversion(MoneyTransaction $tx): ?MoneyTransaction
+    {
+        $usd = fn (MoneyTransaction $t) => strtoupper($t->account->currency) === 'USD' && in_array($t->account->provider, ['binance', 'redotpay'], true);
+        $bdt = fn (MoneyTransaction $t) => strtoupper($t->account->currency) === 'BDT';
+        if (! ($tx->kind === 'expense' ? $usd($tx) : ($tx->kind === 'income' && $bdt($tx)))) {
+            return null;
+        }
+
+        $other = MoneyTransaction::with('account')->where('id', '!=', $tx->id)->whereNull('to_account_id')
+            ->where('kind', $tx->kind === 'expense' ? 'income' : 'expense')->where('description', 'like', 'Auto ·%')
+            ->whereNotIn('category', ['work', 'envelope', 'interest', ...array_keys(Catalog::LOAN_CATEGORIES)])
+            ->where('created_at', '>=', now()->subHours(6))->latest('id')->get()
+            ->filter(fn (MoneyTransaction $t) => $tx->kind === 'expense' ? $bdt($t) : $usd($t))
+            // A believable taka-per-dollar rate.
+            ->first(function (MoneyTransaction $t) use ($tx) {
+                [$dollars, $taka] = $tx->kind === 'expense' ? [$tx->amount, $t->amount] : [$t->amount, $tx->amount];
+                $rate = $dollars > 0 ? $taka / $dollars : 0;
+
+                return $rate >= 90 && $rate <= 160;
+            });
+        if (! $other) {
+            return null;
+        }
+
+        [$out, $in] = $tx->kind === 'expense' ? [$tx, $other] : [$other, $tx];
+        $transfer = DB::transaction(function () use ($out, $in) {
+            $transfer = Ledger::save([
+                'kind' => 'transfer', 'account_id' => $out->account_id, 'to_account_id' => $in->account_id,
+                'amount' => $out->amount, 'to_amount' => $in->amount, 'fee' => $out->fee,
+                'description' => 'Auto · USDT sold', 'occurred_on' => $in->occurred_on->toDateString(),
+            ]);
+            InboxMessage::whereIn('money_transaction_id', [$out->id, $in->id])
+                ->update(['money_transaction_id' => $transfer->id, 'note' => "USDT sold: {$out->account->name} → {$in->account->name}"]);
+            Ledger::delete($out);
+            Ledger::delete($in);
+
+            return $transfer;
+        });
+
+        $rate = number_format($in->amount / max(1, $out->amount), 2);
+        $this->notify->send('info', '💱 '.Notify::money($out->amount, 'USD').' USDT → '.Notify::money($in->amount, 'BDT'),
+            "{$out->account->name} → {$in->account->name} · rate ৳{$rate} per USDT · a conversion, not spending or income.", route('personal.activity'), 'klok-money');
 
         return $transfer;
     }
@@ -286,17 +347,25 @@ class AutoEntries
      * amount by hand within a day (auto entries never count here, so two genuine
      * payments of the same amount both get in).
      */
-    private function alreadyRecorded(Account $account, array $p, string $date): bool
+    private function alreadyRecorded(Account $account, array $p, string $date, string $source = 'sms'): bool
     {
         if ($p['reference'] && MoneyTransaction::where('account_id', $account->id)->where('description', 'like', "%{$p['reference']}%")->exists()) {
             return true;
         }
 
-        return MoneyTransaction::where('account_id', $account->id)->where('amount', $p['amount'])
-            ->where('kind', $p['direction'] === 'in' ? 'income' : 'expense')
-            ->where(fn ($q) => $q->whereNull('description')->orWhere('description', 'not like', 'Auto ·%'))
-            ->whereBetween('occurred_on', [CarbonImmutable::parse($date)->subDay()->toDateString(), CarbonImmutable::parse($date)->addDay()->toDateString().' 23:59:59'])
-            ->exists();
+        $window = [CarbonImmutable::parse($date)->subDay()->toDateString(), CarbonImmutable::parse($date)->addDay()->toDateString().' 23:59:59'];
+        $same = MoneyTransaction::where('account_id', $account->id)->where('amount', $p['amount'])
+            ->where('kind', $p['direction'] === 'in' ? 'income' : 'expense')->whereBetween('occurred_on', $window);
+
+        // Typed by hand already.
+        if ((clone $same)->where(fn ($q) => $q->whereNull('description')->orWhere('description', 'not like', 'Auto ·%'))->exists()) {
+            return true;
+        }
+
+        // The same transaction already came in through another channel (SMS vs email vs app).
+        $autoIds = (clone $same)->where('description', 'like', 'Auto ·%')->pluck('id');
+
+        return $autoIds->isNotEmpty() && InboxMessage::whereIn('money_transaction_id', $autoIds)->where('source', '!=', $source)->exists();
     }
 
     /** An open invoice this payment is for: by TrxID, by what the client reported, by their phone, or the only one with that amount. */

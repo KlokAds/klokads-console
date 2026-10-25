@@ -34,6 +34,15 @@ const allAccounts = computed(() => [...accounts.value, ...(data.value?.business 
 const fromList = allAccounts;
 const from = computed(() => allAccounts.value.find((a) => a.id === Number(f.account_id)));
 const to = computed(() => allAccounts.value.find((a) => a.id === Number(f.to_account_id)));
+// What the wallets keep on this move (their fee rules): taken out of what was sent.
+const ruleFee = computed(() => {
+    const sent = Math.round((parseFloat(String(f.amount).replace(/,/g, '')) || 0) * 100);
+    if (f.kind !== 'transfer' || editing.value || !from.value || !sent) return 0;
+    let fee = Math.round((sent * (Number(from.value.out_fee_pct) || 0)) / 100) + (Number(from.value.out_fee_fixed) || 0);
+    if (to.value && to.value.currency === from.value.currency) fee += Math.round((sent * (Number(to.value.in_fee_pct) || 0)) / 100) + (Number(to.value.in_fee_fixed) || 0);
+    return Math.min(fee, sent);
+});
+const arrives = computed(() => Math.round((parseFloat(String(f.amount).replace(/,/g, '')) || 0) * 100) - ruleFee.value);
 const converting = computed(() => f.kind === 'transfer' && from.value && to.value && from.value.currency !== to.value.currency);
 const categories = computed(() => categoryList(f.kind, !!from.value?.business));
 // Switching between a personal and a business account switches the category list too.
@@ -153,7 +162,9 @@ watch(() => f.counterparty, (name) => {
 function payload() {
     return {
         kind: f.kind, account_id: f.account_id, to_account_id: f.kind === 'transfer' ? f.to_account_id : null,
-        amount: f.amount, to_amount: converting.value ? f.to_amount : null, fee: f.fee || null,
+        // With fee rules the amount typed is what was sent: the move carries what arrives, the rest is the fee.
+        amount: ruleFee.value ? (arrives.value / 100).toFixed(2) : f.amount, to_amount: converting.value ? f.to_amount : null,
+        fee: ruleFee.value ? ((ruleFee.value + Math.round((parseFloat(f.fee) || 0) * 100)) / 100).toFixed(2) : f.fee || null,
         category: f.kind === 'transfer' ? null : f.category, counterparty: f.kind === 'transfer' ? null : f.counterparty || null,
         for_whom: f.kind === 'expense' ? f.for_whom || null : null,
         description: f.description || null, occurred_on: f.occurred_on,
@@ -302,6 +313,10 @@ onUnmounted(() => {
                                 <p v-if="from?.business !== to?.business && to" class="mt-2 text-[11px] text-ink-500">
                                     {{ to.business ? '💼 Money put into the business — not personal spending.' : '💼 Taken out of the business (owner draw / salary) — not counted as personal income.' }}
                                 </p>
+                                <div v-if="ruleFee" class="mt-3 rounded-2xl bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+                                    By your fee rules: <b class="tabular-nums">−{{ cash(ruleFee, from?.currency) }}</b>
+                                    <template v-if="!converting"> · arrives <b class="tabular-nums">{{ cash(arrives, from?.currency) }}</b></template>
+                                </div>
                                 <!-- A move usually costs a fee (bank / bKash charge): asked right here. -->
                                 <div class="mt-3">
                                     <label class="label">Transfer fee <span class="font-normal text-ink-400">({{ symbol }}, from {{ from?.name ?? 'the first account' }})</span></label>

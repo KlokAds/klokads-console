@@ -68,7 +68,7 @@ class PersonalActivityController extends Controller
             'month' => $month,
             'period' => ['key' => $period, 'from' => $start->toDateString(), 'to' => $end->toDateString()],
             'accounts' => $all->map(fn (Account $a) => [
-                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'app_profile', 'opening_balance', 'notes', 'guide', 'bank_balance', 'archived', 'scope'),
+                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'app_profile', 'in_fee_pct', 'in_fee_fixed', 'out_fee_pct', 'out_fee_fixed', 'opening_balance', 'notes', 'guide', 'bank_balance', 'archived', 'scope'),
                 'currency' => strtoupper($a->currency),
                 'balance' => Ledger::balance($a),
                 'bank_balance_at' => $a->bank_balance_at?->toIso8601String(),
@@ -96,7 +96,7 @@ class PersonalActivityController extends Controller
             'kinds' => Catalog::options(Catalog::ACCOUNT_KINDS),
             'currencies' => Catalog::PERSONAL_CURRENCIES,
             'business' => $business->map(fn (Account $a) => [
-                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'app_profile', 'opening_balance', 'notes', 'guide', 'bank_balance', 'archived', 'scope'),
+                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'app_profile', 'in_fee_pct', 'in_fee_fixed', 'out_fee_pct', 'out_fee_fixed', 'opening_balance', 'notes', 'guide', 'bank_balance', 'archived', 'scope'),
                 'currency' => strtoupper($a->currency),
                 'balance' => Ledger::balance($a),
             ])->values(),

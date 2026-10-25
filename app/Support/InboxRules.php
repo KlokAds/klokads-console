@@ -20,7 +20,7 @@ class InboxRules
         ['name' => 'AB BANK', 'type' => 'sms'], ['name' => 'BANK ASIA', 'type' => 'sms'], ['name' => 'StanChart', 'type' => 'sms'],
         ['name' => 'Cellfin', 'type' => 'sms'], ['name' => 'nSave', 'type' => 'app'], ['name' => 'Rizon', 'type' => 'app'],
         ['name' => 'Elevate Pay', 'type' => 'app'], ['name' => 'WorldFirst', 'type' => 'app'], ['name' => 'Airwallex', 'type' => 'app'],
-        ['name' => 'Payoneer', 'type' => 'app'],
+        ['name' => 'Payoneer', 'type' => 'app'], ['name' => 'RedotPay', 'type' => 'app'], ['name' => 'Binance', 'type' => 'app'],
     ];
 
     public const DEFAULT_IGNORE = ['otp', 'one time password', 'verification code', 'verification number', 'security code', 'your code is',

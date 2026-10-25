@@ -193,6 +193,10 @@ class MoneyController extends Controller
             'provider' => ['nullable', 'string', 'max:40'],
             'last4' => ['nullable', 'digits:4'],
             'app_profile' => ['nullable', Rule::in(['main', 'clone'])],
+            'in_fee_pct' => ['nullable', 'numeric', 'min:0', 'max:50'],
+            'in_fee_fixed' => ['nullable', 'numeric', 'min:0'],
+            'out_fee_pct' => ['nullable', 'numeric', 'min:0', 'max:50'],
+            'out_fee_fixed' => ['nullable', 'numeric', 'min:0'],
             'guide' => ['nullable', 'string', 'max:4000'],
             'purpose' => ['nullable', Rule::in(['spending', 'savings'])],
             'opening_balance' => ['nullable', 'numeric'],
@@ -203,6 +207,10 @@ class MoneyController extends Controller
 
         $data['currency'] = strtoupper($data['currency']);
         $data['opening_balance'] = $this->toCents($data['opening_balance'] ?? 0);
+        foreach (['in', 'out'] as $side) {
+            $data["{$side}_fee_pct"] = (float) ($data["{$side}_fee_pct"] ?? 0);
+            $data["{$side}_fee_fixed"] = $this->toCents($data["{$side}_fee_fixed"] ?? 0);
+        }
         $data['opening_rate'] = strtolower($data['currency']) === Ledger::base() ? null : ($data['opening_rate'] ?? null);
 
         if ($account && $account->currency !== $data['currency'] && ($account->outgoing()->exists() || $account->incoming()->exists())) {

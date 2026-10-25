@@ -188,6 +188,47 @@ class PersonalAutomationTest extends TestCase
         $this->getJson('/personal/quick')->assertJsonPath('people.1.name', 'Nana');
     }
 
+    public function test_wallet_moves_with_a_fee_become_one_transfer_with_that_fee(): void
+    {
+        $nsave = Account::create(['name' => 'nSave', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'nsave', 'currency' => 'USD', 'opening_balance' => 150000, 'out_fee_pct' => 0.6]);
+        $binance = Account::create(['name' => 'Binance', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'binance', 'currency' => 'USD']);
+        $entries = app(AutoEntries::class);
+
+        $entries->ingest('app', 'nSave', 'Money sent. ⬆️ Sent $1,000.00 to Binance');
+        $entries->ingest('app', 'Binance', 'Deposit Successful: 994.00 USDT has arrived in your account');
+
+        $tx = MoneyTransaction::sole();
+        $this->assertSame(['transfer', 99400, 600], [$tx->kind, $tx->amount, $tx->fee]);
+        $this->assertSame([50000, 99400], [Ledger::balance($nsave), Ledger::balance($binance)]);
+        $this->get('/personal')->assertInertia(fn ($page) => $page->where('stats.USD.current.spent', 600)->where('stats.USD.current.by_category.bank_fees', 600));
+    }
+
+    public function test_usdt_sold_and_the_taka_that_arrives_are_one_conversion(): void
+    {
+        $binance = Account::create(['name' => 'Binance', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'binance', 'currency' => 'USD', 'opening_balance' => 50000]);
+        $entries = app(AutoEntries::class);
+
+        $entries->ingest('app', 'Binance', 'P2P order completed. You sold 100.00 USDT');
+        $entries->ingest('sms', 'bKash', 'You have received Tk 12,240.00 from 01911000000. Fee Tk 0.00. TrxID 7P2P0001 at 25/10/2026 12:00');
+
+        $tx = MoneyTransaction::sole();
+        $this->assertSame(['transfer', $binance->id, $this->bkash->id, 10000, 1224000], [$tx->kind, $tx->account_id, $tx->to_account_id, $tx->amount, $tx->to_amount]);
+        $this->assertStringContainsString('rate ৳122.40 per USDT', AppNotification::latest('id')->first()->body);
+        $this->get('/personal')->assertInertia(fn ($page) => $page->where('stats.BDT.current.in', 0)->where('stats.USD.current.spent', 0));
+    }
+
+    public function test_the_same_payment_by_sms_and_by_email_is_booked_once(): void
+    {
+        $brac = Account::create(['name' => 'BRAC Bank', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'brac', 'last4' => '0001', 'currency' => 'BDT']);
+        $entries = app(AutoEntries::class);
+
+        $entries->ingest('sms', 'BRAC BANK', 'Your A/C ...0001 has been credited by BDT 3,000.00 on 25-Oct-2026.');
+        $second = $entries->ingest('email', 'alerts@bracbank.com', 'Dear customer, your account ...0001 has been credited by BDT 3,000.00 on 25-Oct-2026.');
+
+        $this->assertSame('ignored', $second->status);
+        $this->assertSame(300000, Ledger::balance($brac));
+    }
+
     public function test_bank_interest_is_booked_as_interest_income(): void
     {
         $ucb = Account::create(['name' => 'UCB', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'ucb', 'last4' => '6318', 'currency' => 'BDT']);

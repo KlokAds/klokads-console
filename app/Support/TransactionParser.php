@@ -36,16 +36,18 @@ class TransactionParser
         'aspire' => ['aspire'],
         'wise' => ['wise', 'transferwise'],
         'nsave' => ['nsave'],
+        'redotpay' => ['redotpay', 'redot pay'],
+        'binance' => ['binance'],
         'rizon' => ['rizon'],
         'revolut' => ['revolut'],
         'youtrip' => ['youtrip'],
         'grabpay' => ['grabpay', 'grab'],
     ];
 
-    private const IN = ['int:', 'interest credited', 'interest paid', 'profit credited', 'profit paid', 'you have received', 'received from', 'received tk', 'received bdt', 'received sgd', 'money received', 'cash in', 'has been credited', 'credited with', 'credited by', 'credited to',
+    private const IN = ['deposit successful', 'deposit confirmed', 'you bought', 'bought ', 'int:', 'interest credited', 'interest paid', 'profit credited', 'profit paid', 'you have received', 'received from', 'received tk', 'received bdt', 'received sgd', 'money received', 'cash in', 'has been credited', 'credited with', 'credited by', 'credited to',
         'deposit', 'deposited', 'incoming', 'you received', "you've received", 'payment received', 'refund', 'added to your', 'add money', 'remittance received', 'salary'];
 
-    private const OUT = ['send money', 'money sent', 'sent $', 'sent usd', 'sent sgd', 'sent bdt', 'sent tk', 'has been debited', 'debited with', 'debited by', 'debited from', 'payment tk', 'payment of', 'paid tk', 'you paid', 'you have paid', 'cash out',
+    private const OUT = ['you sold', 'sold ', 'sell order', 'send money', 'money sent', 'sent $', 'sent usd', 'sent sgd', 'sent bdt', 'sent tk', 'has been debited', 'debited with', 'debited by', 'debited from', 'payment tk', 'payment of', 'paid tk', 'you paid', 'you have paid', 'cash out',
         'withdraw', 'purchase', 'card transaction', 'spent', 'transferred', 'transfer of', 'bill pay', 'recharge', 'merchant payment', 'you sent', "you've sent", 'debit'];
 
     /** Not a completed transaction: codes, promotions, failures (whole words only). */
@@ -113,7 +115,8 @@ class TransactionParser
     /** First money amount with a currency marker: "Tk 1,000.00", "BDT5000", "৳500", "SGD 12.30", "S$50". */
     private static function amount(string $raw): array
     {
-        $pattern = '/(?:(?<cur>tk\.?|bdt|৳|sgd|s\$|usd|us\$|\$)\s*(?<a>\d[\d,]*(?:\.\d{1,2})?))|(?:(?<b>\d[\d,]*(?:\.\d{1,2})?)\s*(?<cur2>tk|bdt|taka|sgd|usd))/iu';
+        // USDT / USDC (Binance, RedotPay) count as US dollars; crypto amounts can have more decimals.
+        $pattern = '/(?:(?<cur>tk\.?|bdt|৳|sgd|s\$|usdt|usdc|usd|us\$|\$)\s*(?<a>\d[\d,]*(?:\.\d{1,8})?))|(?:(?<b>\d[\d,]*(?:\.\d{1,8})?)\s*(?<cur2>tk|bdt|taka|sgd|usdt|usdc|usd))/iu';
         if (! preg_match($pattern, $raw, $m)) {
             return [0, ''];
         }

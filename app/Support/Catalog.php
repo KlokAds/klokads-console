@@ -109,6 +109,8 @@ class Catalog
         ],
         'USD' => [
             'nsave' => ['nSave', 'wallet'],
+            'redotpay' => ['RedotPay', 'wallet'],
+            'binance' => ['Binance (USDT)', 'wallet'],
             'rizon' => ['Rizon', 'wallet'],
             'elevatepay' => ['Elevate Pay', 'wallet'],
             'worldfirst' => ['WorldFirst', 'wallet'],
@@ -150,6 +152,8 @@ class Catalog
      * Each account's own text (edited by me) replaces this.
      */
     public const WITHDRAW_GUIDES = [
+        'redotpay' => "1. Open the RedotPay app and log in.\n2. Send the USDT to Binance (or sell it in RedotPay if it offers taka).\n3. In Binance: P2P → Sell USDT → pick a buyer who pays to your bKash / bank.\n4. Release the USDT only after the taka has arrived.",
+        'binance' => "1. Open the Binance app and log in.\n2. P2P → Sell → USDT → BDT.\n3. Pick a buyer who pays to your bKash / Nagad / bank account.\n4. When the taka has arrived in that account, tap Release. Never release before the money is in.",
         'airwallex' => "1. Open the Airwallex app (or airwallex.com) and log in.\n2. Go to Transfers → New transfer.\n3. Pick a saved Bangladesh bank account, or add one: bank name, account name, account number, branch routing number.\n4. Send the SGD — it arrives in taka, usually in 1–3 working days.",
         'worldfirst' => "1. Open the WorldFirst app (or worldfirst.com) and log in.\n2. Choose Withdraw / Transfer out.\n3. Pick a saved Bangladesh bank account, or add one with its routing number.\n4. Choose the amount — it is paid in taka in 1–2 working days.",
         'nsave' => "1. Open the nSave app and log in.\n2. Choose Send / Withdraw.\n3. Pick a Bangladesh bank account or wallet as the receiver.\n4. Confirm — check the rate and fee shown before sending.",
