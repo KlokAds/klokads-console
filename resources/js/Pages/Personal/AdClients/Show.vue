@@ -187,38 +187,67 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
         <Link :href="route('ad-clients.index')" class="inline-flex items-center gap-1 text-sm font-semibold text-teal-700 hover:underline"><Icon name="chevron" :size="14" class="rotate-90" /> All client ads</Link>
 
         <!-- Hero: who, how it's going, what is owed -->
-        <div class="mt-3 overflow-hidden rounded-3xl bg-gradient-to-br from-[#0b1020] via-[#10213a] to-[#0d3b3a] p-5 text-white shadow-lg sm:p-6">
-            <div class="flex flex-wrap items-start gap-4">
-                <span class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-2xl font-extrabold ring-1 ring-white/15">{{ initial }}</span>
+        <div class="relative mt-3 overflow-hidden rounded-[28px] bg-gradient-to-br from-[#0b1020] via-[#10213a] to-[#0d3b3a] p-4 text-white shadow-lg sm:p-6">
+            <div class="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-teal-400/15 blur-3xl"></div>
+
+            <!-- Who -->
+            <div class="relative flex items-center gap-3">
+                <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-400 to-brand-600 text-xl font-extrabold shadow-md shadow-teal-500/20">{{ initial }}</span>
                 <div class="min-w-0 flex-1">
-                    <div class="text-xl font-extrabold">{{ client.name }}</div>
-                    <div class="mt-1 flex flex-wrap gap-1.5 text-[11px] font-bold">
-                        <span class="rounded-full px-2.5 py-1" :class="myCard ? 'bg-amber-400/20 text-amber-200' : 'bg-white/10 text-white/80'">{{ myCard ? 'My card pays — I bill them' : 'They pay with their own card' }}</span>
-                        <span class="rounded-full bg-white/10 px-2.5 py-1 text-white/80">{{ running }} running</span>
+                    <div class="truncate text-lg font-extrabold leading-tight sm:text-xl">{{ client.name }}</div>
+                    <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
+                        <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5" :class="myCard ? 'bg-amber-400/15 text-amber-200' : 'bg-white/10 text-white/75'"><Icon name="card" :size="11" /> {{ myCard ? 'My card · I bill' : 'Their own card' }}</span>
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-0.5 text-white/80"><span class="h-1.5 w-1.5 rounded-full" :class="running ? 'bg-emerald-400' : 'bg-white/40'"></span>{{ running }} running</span>
                     </div>
                 </div>
-                <div class="flex shrink-0 gap-2">
-                    <div class="w-40 text-ink-900"><Select v-model="period" :options="PERIODS" :searchable="false" @change="go" /></div>
-                    <button class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15 hover:bg-white/20" :disabled="syncing" aria-label="Update from Meta" @click="sync"><Icon name="sync" :size="16" :class="{ 'animate-spin': syncing }" /></button>
-                </div>
+                <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15 hover:bg-white/20" :disabled="syncing" aria-label="Update from Meta" @click="sync"><Icon name="sync" :size="16" :class="{ 'animate-spin': syncing }" /></button>
             </div>
-            <div v-if="period === 'custom'" class="mt-3 flex flex-wrap items-center justify-end gap-2 text-ink-900">
-                <DatePicker v-model="from" :max="to || null" size="sm" class="w-40" />
+
+            <!-- Period -->
+            <div class="relative -mx-4 mt-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:px-0">
+                <button v-for="p in PERIODS" :key="p.value" class="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition"
+                    :class="period === p.value ? 'bg-white text-ink-900' : 'bg-white/[0.07] text-white/70 ring-1 ring-white/10 hover:text-white'" @click="period = p.value; go()">{{ p.label.replace('…', '') }}</button>
+            </div>
+            <div v-if="period === 'custom'" class="relative mt-3 flex flex-wrap items-center gap-2 text-ink-900">
+                <DatePicker v-model="from" :max="to || null" size="sm" class="w-36" />
                 <span class="text-sm text-white/60">to</span>
-                <DatePicker v-model="to" :min="from || null" size="sm" class="w-40" />
+                <DatePicker v-model="to" :min="from || null" size="sm" class="w-36" />
                 <button class="btn-primary btn-sm" :disabled="!from || !to" @click="go">Show</button>
             </div>
-            <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div><div class="text-[11px] font-semibold text-white/60">Spent · {{ range.label }}</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ sum(props.money, 'spend') }}</div></div>
-                <div><div class="text-[11px] font-semibold text-white/60">Results</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ results.toLocaleString() }}</div></div>
+
+            <!-- How it's going -->
+            <div class="relative mt-5 flex items-end justify-between gap-4">
+                <div class="min-w-0">
+                    <div class="text-[11px] font-semibold text-white/55">Spent · {{ range.label }}</div>
+                    <div class="mt-0.5 truncate text-[28px] font-extrabold leading-tight tabular-nums sm:text-3xl">{{ sum(props.money, 'spend') }}</div>
+                </div>
+                <div class="shrink-0 text-right">
+                    <div class="text-[11px] font-semibold text-white/55">Results</div>
+                    <div class="mt-0.5 text-[28px] font-extrabold leading-tight tabular-nums sm:text-3xl">{{ results.toLocaleString() }}</div>
+                </div>
+            </div>
+
+            <!-- Money at a glance -->
+            <div class="relative mt-4 grid grid-cols-2 gap-2">
                 <template v-if="myCard">
-                    <div><div class="text-[11px] font-semibold text-white/60">Not charged yet · not billed</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ ledger.meta.length ? ledger.meta.map((x) => m(x.unbilled, x.currency)).join(' + ') : '—' }}</div></div>
-                    <div><div class="text-[11px] font-semibold text-white/60">{{ ledger.credit > 0 && !totalDue ? 'Their credit' : 'They owe' }}</div>
-                        <div class="mt-0.5 text-lg font-extrabold tabular-nums" :class="totalDue ? 'text-amber-300' : 'text-emerald-300'">{{ ledger.credit > 0 && !totalDue ? m(ledger.credit, 'BDT') : m(totalDue, 'BDT') }}</div></div>
+                    <div class="rounded-2xl bg-white/[0.06] p-3 ring-1 ring-white/10">
+                        <div class="text-[11px] font-semibold text-white/55">Not charged yet</div>
+                        <div class="mt-0.5 truncate text-base font-extrabold tabular-nums">{{ ledger.meta.length ? ledger.meta.map((x) => m(x.unbilled, x.currency)).join(' + ') : '—' }}</div>
+                    </div>
+                    <div class="rounded-2xl p-3 ring-1" :class="totalDue ? 'bg-amber-400/10 ring-amber-300/25' : 'bg-emerald-400/10 ring-emerald-300/25'">
+                        <div class="text-[11px] font-semibold text-white/55">{{ ledger.credit > 0 && !totalDue ? 'Their credit' : 'They owe' }}</div>
+                        <div class="mt-0.5 truncate text-base font-extrabold tabular-nums" :class="totalDue ? 'text-amber-300' : 'text-emerald-300'">{{ ledger.credit > 0 && !totalDue ? m(ledger.credit, 'BDT') : m(totalDue, 'BDT') }}</div>
+                    </div>
                 </template>
                 <template v-else>
-                    <div><div class="text-[11px] font-semibold text-white/60">Best campaign</div><div class="mt-0.5 truncate text-sm font-bold">{{ best?.name ?? '—' }}</div></div>
-                    <div><div class="text-[11px] font-semibold text-white/60">Its cost</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ best ? m(best.cost_per_result, best.currency) : '—' }}</div></div>
+                    <div class="rounded-2xl bg-white/[0.06] p-3 ring-1 ring-white/10">
+                        <div class="text-[11px] font-semibold text-white/55">Best campaign</div>
+                        <div class="mt-0.5 truncate text-sm font-bold">{{ best?.name ?? '—' }}</div>
+                    </div>
+                    <div class="rounded-2xl bg-white/[0.06] p-3 ring-1 ring-white/10">
+                        <div class="text-[11px] font-semibold text-white/55">Its cost</div>
+                        <div class="mt-0.5 truncate text-base font-extrabold tabular-nums">{{ best ? m(best.cost_per_result, best.currency) : '—' }}</div>
+                    </div>
                 </template>
             </div>
         </div>
