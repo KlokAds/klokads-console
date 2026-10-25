@@ -162,6 +162,16 @@ class MetaAds
     }
 
     /**
+     * The account's billing now: spent in all and not charged yet (minor units), and the card.
+     *
+     * @return array{currency: string, amount_spent: int, unbilled: int, card: ?string}
+     */
+    public function billing(string $accountId): array
+    {
+        return $this->pilot('ad-accounts/'.self::act($accountId).'/billing')['data'];
+    }
+
+    /**
      * A campaign's limits now: on or paused, budget a day (cents), last day, and whether that can move.
      *
      * @return array{active: bool, daily_budget: ?int, end: ?string, extendable: bool, why_not: ?string}

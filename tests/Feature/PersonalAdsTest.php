@@ -2,8 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\Account;
 use App\Models\AppNotification;
+use App\Models\MoneyTransaction;
 use App\Models\PersonalAdBill;
+use App\Models\PersonalAdCharge;
 use App\Models\PersonalAdDay;
 use App\Models\PersonalClient;
 use App\Models\PersonalInvoice;
@@ -41,8 +44,12 @@ class PersonalAdsTest extends TestCase
         $this->marine = PersonalClient::create(['name' => 'Marine Orvion']);
     }
 
-    private function fakePilot(string $edgeStatus = 'ACTIVE'): void
+    private function fakePilot(string $edgeStatus = 'ACTIVE', bool $billing = true): void
     {
+        if ($billing) {
+            Http::fake(['pilot.test/internal/console/ad-accounts/*/billing' => Http::response(['data' => ['currency' => 'BDT', 'amount_spent' => 1000000, 'unbilled' => 0, 'card' => 'VISA *5372']])]);
+        }
+        Http::preventStrayRequests();
         Http::fake([
             'pilot.test/internal/console/ad-accounts' => Http::response(['data' => [
                 ['id' => 'act_1', 'name' => 'Edge Meta Account', 'currency' => 'BDT', 'client' => 'Edge'],
@@ -168,6 +175,51 @@ class PersonalAdsTest extends TestCase
         app(PersonalAds::class)->sync(force: true);
 
         $this->assertSame(1, AppNotification::where('title', 'Edge Education: “Edge Leads” ▶️ running again')->count());
+    }
+
+    public function test_payments_any_amount_pay_the_oldest_bills_and_the_rest_is_credit_for_the_next(): void
+    {
+        $this->fakePilot();
+        $this->assignBoth();
+        $this->edge->update(['ad_bill_basis' => 'charges']);
+        $ucb = Account::create(['name' => 'UCB', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'ucb', 'currency' => 'BDT']);
+
+        $this->post("/personal/client-ads/{$this->edge->id}/charges", ['date' => '2026-10-24', 'amount' => '2501.94', 'currency' => 'BDT']);
+        $this->post("/personal/client-ads/{$this->edge->id}/bill");
+        $first = PersonalAdBill::where('personal_client_id', $this->edge->id)->sole()->invoice;
+
+        // They pay more than the bill: the bill is paid, the rest is credit; the money lands once in UCB.
+        $this->post("/personal/client-ads/{$this->edge->id}/payments", ['date' => '2026-10-31', 'amount' => '5000', 'account_id' => $ucb->id])->assertSessionHas('success');
+        $this->assertSame('paid', $first->fresh()->status);
+        $this->assertSame(500000 - $first->total, PersonalAds::credit($this->edge->fresh()));
+        $this->assertSame(500000, (int) MoneyTransaction::where('account_id', $ucb->id)->sum('amount'), 'booked once, not again per bill');
+
+        // The next bill takes the credit first.
+        $this->post("/personal/client-ads/{$this->edge->id}/charges", ['date' => '2026-10-31', 'amount' => '10', 'currency' => 'USD']);
+        $this->post("/personal/client-ads/{$this->edge->id}/bill");
+        $second = PersonalAdBill::where('personal_client_id', $this->edge->id)->latest('id')->first()->invoice->fresh();
+        $this->assertSame(min($second->total, 500000 - $first->total), $second->paid);
+        $this->assertSame(500000, (int) MoneyTransaction::where('account_id', $ucb->id)->sum('amount'));
+    }
+
+    public function test_metas_charge_is_seen_from_its_numbers_and_added_by_itself(): void
+    {
+        $this->fakePilot(billing: false);
+        $this->assignBoth();
+        $this->edge->update(['ad_bill_basis' => 'charges']);
+        Http::fake(['pilot.test/internal/console/ad-accounts/act_1/billing' => Http::sequence()
+            ->push(['data' => ['currency' => 'BDT', 'amount_spent' => 1000000, 'unbilled' => 240000, 'card' => 'VISA *5372']])
+            ->push(['data' => ['currency' => 'BDT', 'amount_spent' => 1010000, 'unbilled' => 0, 'card' => 'VISA *5372']])]);
+
+        app(PersonalAds::class)->sync(force: true); // first look: remembers
+        $this->assertSame(0, PersonalAdCharge::where('source', 'auto')->count());
+        app(PersonalAds::class)->sync(force: true); // spent ৳100 more, and ৳2,400 waiting is gone → charged ৳2,500
+
+        $charge = PersonalAdCharge::where('source', 'auto')->sole();
+        $this->assertSame(250000, $charge->amount);
+        $this->assertSame($this->edge->id, $charge->personal_client_id);
+        $this->assertSame(1, AppNotification::where('title', 'like', '💳 Meta charged your card for Edge Education%')->count());
+        $this->assertSame(0, PersonalAdCharge::where('personal_client_id', $this->marine->id)->count(), 'their own card: nothing');
     }
 
     public function test_billed_by_each_card_charge_i_enter_in_taka_or_dollars(): void

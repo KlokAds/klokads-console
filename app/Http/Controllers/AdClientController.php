@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Account;
 use App\Models\PersonalAdAssignment;
 use App\Models\PersonalAdCharge;
 use App\Models\PersonalAdDay;
@@ -52,6 +53,8 @@ class AdClientController extends Controller
         return Inertia::render('Personal/AdClients/Show', [
             'client' => $client->only('id', 'name', 'ad_bill', 'ad_fee_percent', 'ad_bill_basis', 'ad_meta_rate') + ['billed_until' => $client->ad_billed_until?->toDateString()],
             'rate' => KlokOneRate::current(),
+            'tab' => in_array($request->query('tab'), ['overview', 'campaigns', 'money', 'setup'], true) ? $request->query('tab') : 'overview',
+            'payAccounts' => Account::where('archived', false)->where('scope', 'personal')->where('currency', 'BDT')->orderBy('name')->get(['id', 'name']),
             'range' => ['period' => $period, 'from' => $start->toDateString(), 'to' => $end->toDateString(), 'label' => PersonalAds::period($start, $end)],
             'campaigns' => PersonalAds::table($client, $start, $end, $request->boolean('all')),
             'showAll' => $request->boolean('all'),
@@ -162,6 +165,21 @@ class AdClientController extends Controller
             'amount' => $this->toCents($data['amount']), 'note' => $data['note'] ?? null]);
 
         return back()->with('success', 'Charge added — it goes on the next bill.');
+    }
+
+    /** The client paid for their ads — any amount, before or after a bill. */
+    public function payment(Request $request, PersonalClient $client): RedirectResponse
+    {
+        $data = $request->validate([
+            'date' => ['required', 'date', 'before_or_equal:today'],
+            'amount' => ['required', 'numeric', 'min:1', 'max:100000000'],
+            'account_id' => ['nullable', 'integer', 'exists:accounts,id'],
+            'note' => ['nullable', 'string', 'max:200'],
+        ]);
+        $this->ads->receivePayment($client, $this->toCents($data['amount']), $data['date'], $data['account_id'] ?? null, $data['note'] ?? null);
+        $credit = PersonalAds::credit($client);
+
+        return back()->with('success', 'Payment saved'.($credit > 0 ? ' — '.number_format($credit / 100, 2).' taka left as credit for the next bill.' : ' — put on their bills.'));
     }
 
     public function removeCharge(PersonalClient $client, PersonalAdCharge $charge): RedirectResponse

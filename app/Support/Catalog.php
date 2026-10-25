@@ -41,6 +41,7 @@ class Catalog
         'personal' => [
             'salary' => 'Salary / owner draw',
             'work' => 'Work / invoices',
+            'client_ads' => 'Client ads payment',
             'family' => 'From family',
             'gift' => 'Gift',
             'investment' => 'Investment return',

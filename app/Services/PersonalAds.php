@@ -2,11 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\AdAccountState;
 use App\Models\PersonalAdAssignment;
 use App\Models\PersonalAdBill;
 use App\Models\PersonalAdCharge;
 use App\Models\PersonalAdDay;
+use App\Models\PersonalAdPayment;
 use App\Models\PersonalClient;
+use App\Support\Ledger;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -69,12 +72,91 @@ class PersonalAds
                     $rows++;
                 }
                 $this->watch($assignments, $account);
+                $this->watchBilling($assignments, $account);
             } catch (Throwable $e) {
                 report($e);
             }
         }
 
         return $rows;
+    }
+
+    /**
+     * Meta's charges, seen from its numbers: between two looks, what was spent minus how much more
+     * is waiting to be charged = what Meta took from the card. For an account my card pays for one
+     * client, that charge goes on their list by itself (I can correct or remove it).
+     */
+    private function watchBilling(Collection $assignments, string $account): void
+    {
+        $mine = $assignments->where('account_id', $account)->where('paid_by', 'me');
+        if ($mine->isEmpty()) {
+            return;
+        }
+        $now = $this->meta->billing($account);
+        $before = AdAccountState::where('account_id', $account)->first();
+        AdAccountState::updateOrCreate(['account_id' => $account], [
+            'currency' => $now['currency'], 'amount_spent' => $now['amount_spent'], 'unbilled' => $now['unbilled'], 'card' => $now['card'], 'checked_at' => now(),
+        ]);
+        if (! $before) {
+            return; // the first look only remembers
+        }
+        $charged = ($now['amount_spent'] - $before->amount_spent) - ($now['unbilled'] - $before->unbilled);
+        $owners = $mine->pluck('personal_client_id')->unique();
+        if ($charged < 100 || $owners->count() !== 1) {
+            return; // nothing charged, or shared between clients (enter it by hand)
+        }
+        $client = PersonalClient::find($owners->first());
+        PersonalAdCharge::create(['personal_client_id' => $client->id, 'date' => CarbonImmutable::today()->toDateString(), 'currency' => $now['currency'],
+            'amount' => $charged, 'note' => 'Meta charged '.($now['card'] ?: 'the card'), 'source' => 'auto']);
+        $this->notify->send('billing', "💳 Meta charged your card for {$client->name}: ".Notify::money($charged, $now['currency']),
+            ($now['card'] ? "{$now['card']} · " : '').'Added to their charges — it goes on their next ads bill. Wrong? Remove it on their page.',
+            route('ad-clients.show', ['client' => $client, 'tab' => 'money']), 'klok-adcharge-'.$client->id);
+    }
+
+    /**
+     * Money a client paid for their ads (any amount): it lands in my account once, then pays their
+     * oldest ads bills; what is left is credit for the next bill.
+     */
+    public function receivePayment(PersonalClient $c, int $amount, string $date, ?int $accountId, ?string $note): PersonalAdPayment
+    {
+        $tx = $accountId ? Ledger::save([
+            'kind' => 'income', 'account_id' => $accountId, 'amount' => $amount, 'category' => 'client_ads',
+            'counterparty' => $c->company ?: $c->name, 'description' => 'Ads payment'.($note ? " · {$note}" : ''), 'occurred_on' => $date,
+        ]) : null;
+        $payment = PersonalAdPayment::create(['personal_client_id' => $c->id, 'date' => $date, 'amount' => $amount, 'account_id' => $accountId,
+            'money_transaction_id' => $tx?->id, 'note' => $note]);
+        $this->applyCredit($c);
+
+        return $payment;
+    }
+
+    /** Their credit (paid, not on a bill yet), in taka. */
+    public static function credit(PersonalClient $c): int
+    {
+        return (int) PersonalAdPayment::where('personal_client_id', $c->id)->get()->sum(fn ($p) => $p->amount - $p->applied);
+    }
+
+    /** Put their credit on their unpaid ads bills, oldest first (no new money is booked: it came in already). */
+    public function applyCredit(PersonalClient $c): void
+    {
+        $payments = PersonalAdPayment::where('personal_client_id', $c->id)->whereColumn('applied', '<', 'amount')->orderBy('date')->orderBy('id')->get();
+        $bills = PersonalAdBill::with('invoice')->where('personal_client_id', $c->id)->orderBy('period_from')->get()
+            ->filter(fn ($b) => $b->invoice && in_array($b->invoice->status, ['unpaid', 'partial'], true));
+        foreach ($bills as $bill) {
+            foreach ($payments as $payment) {
+                $due = $bill->invoice->fresh()->due();
+                $left = $payment->amount - $payment->applied;
+                if ($due <= 0) {
+                    break;
+                }
+                if ($left <= 0) {
+                    continue;
+                }
+                $put = min($due, $left);
+                app(PersonalInvoicing::class)->recordPayment($bill->invoice, $put, $payment->date->toDateString(), 'other', 'Ads payment (from their payments)', null, 'ads');
+                $payment->increment('applied', $put);
+            }
+        }
     }
 
     /** Each client's campaigns as they are now; a change (rejected, paused, running again) is told. */
@@ -321,6 +403,7 @@ class PersonalAds
             "{$what} my card paid, {$period}. Dollar rate {$rate}.", null, 'BDT');
         $bill = PersonalAdBill::create(['personal_client_id' => $c->id, 'period_from' => $from->toDateString(), 'period_to' => $to->toDateString(),
             'currency' => 'BDT', 'spend' => (int) array_sum($amounts), 'basis' => $basis, 'usd' => $taka['usd'], 'fx_rate' => $taka['fx'], 'personal_invoice_id' => $invoice->id]);
+        $this->applyCredit($c); // money they paid ahead goes on it at once
         $this->notify->send('invoice', "🧾 {$c->name}: ads bill ready — ".Notify::money($invoice->total, 'BDT'),
             "{$period} · ".Notify::money($taka['usd'], 'USD')." × {$rate} + commission. Drafted in My invoices — check it, then send it.", route('personal.invoices.index'));
 
@@ -370,9 +453,17 @@ class PersonalAds
         }
         $now = $unbilled ? self::inTaka($c, $unbilled) : null;
 
+        $state = AdAccountState::whereIn('account_id', $c->adAssignments()->where('paid_by', 'me')->pluck('account_id'))->get();
+
         return ['bills' => $rows->reverse()->values()->all(), 'totals' => $totals, 'unbilled' => $unbilled, 'unbilled_from' => $from?->toDateString(),
+            'credit' => self::credit($c),
+            'payments' => PersonalAdPayment::with('account')->where('personal_client_id', $c->id)->orderByDesc('date')->orderByDesc('id')->limit(30)->get()
+                ->map(fn ($p) => ['id' => $p->id, 'date' => $p->date->toDateString(), 'amount' => $p->amount, 'applied' => $p->applied, 'account' => $p->account?->name, 'note' => $p->note])->all(),
+            // Meta: spent but not charged yet, and the card it will charge.
+            'meta' => $state->map(fn ($s) => ['account' => $s->account_id, 'currency' => $s->currency, 'unbilled' => $s->unbilled, 'card' => $s->card, 'checked_at' => $s->checked_at->toIso8601String()])->values()->all(),
             'unbilled_taka' => $now ? ['usd' => $now['usd'], 'bdt' => $now['bdt'], 'with_fee' => (int) round($now['bdt'] * (1 + $c->ad_fee_percent / 100)), 'fx' => $now['fx']] : null,
             'charges' => PersonalAdCharge::where('personal_client_id', $c->id)->orderByDesc('date')->orderByDesc('id')->limit(30)->get()
-                ->map(fn ($ch) => ['id' => $ch->id, 'date' => $ch->date->toDateString(), 'currency' => $ch->currency, 'amount' => $ch->amount, 'note' => $ch->note, 'billed' => (bool) $ch->personal_ad_bill_id])->all()];
+                ->map(fn ($ch) => ['id' => $ch->id, 'date' => $ch->date->toDateString(), 'currency' => $ch->currency, 'amount' => $ch->amount, 'note' => $ch->note,
+                    'auto' => $ch->source === 'auto', 'billed' => (bool) $ch->personal_ad_bill_id])->all()];
     }
 }

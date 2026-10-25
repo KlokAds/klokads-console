@@ -126,6 +126,7 @@ Route::middleware('auth')->group(function () {
         Route::put('/{client}/settings', [AdClientController::class, 'settings'])->name('settings');
         Route::post('/{client}/bill', [AdClientController::class, 'bill'])->name('bill');
         Route::post('/{client}/charges', [AdClientController::class, 'charge'])->name('charges.store');
+        Route::post('/{client}/payments', [AdClientController::class, 'payment'])->name('payments.store');
         Route::delete('/{client}/charges/{charge}', [AdClientController::class, 'removeCharge'])->name('charges.destroy');
         Route::post('/{client}/campaigns/{campaign}', [AdClientController::class, 'control'])->name('control');
     });
