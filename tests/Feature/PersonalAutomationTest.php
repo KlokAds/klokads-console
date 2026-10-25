@@ -49,6 +49,34 @@ class PersonalAutomationTest extends TestCase
         $this->assertStringContainsString('Balance ৳20,000.00', $note->body);
     }
 
+    public function test_two_accounts_in_the_same_wallet_app_are_told_apart_by_the_app_clone(): void
+    {
+        $main = Account::create(['name' => 'nSave', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'nsave', 'currency' => 'USD', 'app_profile' => 'main']);
+        $copy = Account::create(['name' => 'nSave 2', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'nsave', 'currency' => 'USD', 'app_profile' => 'clone']);
+        $url = '/inbox/sms/'.AutoEntries::token();
+
+        $this->postJson($url, ['source' => 'app', 'app' => 'nSave', 'profile' => 'clone', 'text' => 'You received $40.00 from Upwork.'])->assertJson(['status' => 'added']);
+        $this->postJson($url, ['source' => 'app', 'app' => 'nSave', 'profile' => 'main', 'text' => 'You received $25.00 from Fiverr.'])->assertJson(['status' => 'added']);
+
+        $this->assertSame([2500, 4000], [Ledger::balance($main), Ledger::balance($copy)]);
+    }
+
+    public function test_without_the_copy_the_reported_balance_or_my_last_choice_decides(): void
+    {
+        $a = Account::create(['name' => 'Rizon A', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'rizon', 'currency' => 'USD', 'opening_balance' => 10000]);
+        $b = Account::create(['name' => 'Rizon B', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'rizon', 'currency' => 'USD', 'opening_balance' => 50000]);
+        $entries = app(AutoEntries::class);
+
+        // $500 + $20 = $520: only Rizon B fits the balance in the alert.
+        $this->assertSame($b->id, $entries->ingest('app', 'Rizon', 'You received $20.00. Your new balance is $520.00')->account_id);
+
+        // No balance: unsure the first time, I pick A, and next time it goes to A by itself.
+        $m = $entries->ingest('app', 'Rizon', 'You received $7.00 from Client X');
+        $this->assertSame('review', $m->status);
+        $this->post("/personal/inbox/{$m->id}/add", ['account_id' => $a->id])->assertSessionHas('success');
+        $this->assertSame($a->id, $entries->ingest('app', 'Rizon', 'You received $9.00 from Client Y')->account_id);
+    }
+
     public function test_money_moved_between_my_own_accounts_becomes_one_transfer(): void
     {
         $from = Account::create(['name' => 'UCB', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'ucb', 'last4' => '1603', 'currency' => 'BDT', 'opening_balance' => 1112200]);

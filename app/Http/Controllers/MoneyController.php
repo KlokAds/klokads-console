@@ -190,6 +190,7 @@ class MoneyController extends Controller
             'currency' => ['required', 'alpha', 'size:3', Rule::when($request->input('scope') === 'personal', [Rule::in(array_merge(Catalog::PERSONAL_CURRENCIES, array_map('strtolower', Catalog::PERSONAL_CURRENCIES)))])],
             'provider' => ['nullable', 'string', 'max:40'],
             'last4' => ['nullable', 'digits:4'],
+            'app_profile' => ['nullable', Rule::in(['main', 'clone'])],
             'guide' => ['nullable', 'string', 'max:4000'],
             'purpose' => ['nullable', Rule::in(['spending', 'savings'])],
             'opening_balance' => ['nullable', 'numeric'],

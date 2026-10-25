@@ -39,7 +39,9 @@ class InboxController extends Controller
 
         // The MH-Bot app also forwards notifications from wallet apps (nSave, Rizon, Elevate Pay…).
         $source = in_array($request->input('source'), ['app', 'notification'], true) ? 'app' : 'sms';
-        $message = $this->entries->ingest($source, $pick(['from', 'sender', 'phone', 'address', 'number', 'app', 'data.from']), (string) $text);
+        // Which copy of a wallet app (the phone's App Clone) the notification came from.
+        $profile = $request->input('profile') === 'clone' ? 'clone' : 'main';
+        $message = $this->entries->ingest($source, $pick(['from', 'sender', 'phone', 'address', 'number', 'app', 'data.from']), (string) $text, null, $profile);
 
         return response()->json(['ok' => true, 'status' => $message->status, 'note' => $message->note, 'account' => $message->account?->name]);
     }
@@ -109,6 +111,10 @@ class InboxController extends Controller
 
         $this->entries->process($message, (int) $data['account_id'], $data['category'] ?? null);
         $message->refresh();
+        // Next time the same bank / wallet (and app copy) can't decide, it goes here.
+        if ($message->status !== 'review') {
+            AutoEntries::learn($message->parsed, (int) $data['account_id']);
+        }
 
         return back()->with($message->status === 'review' ? 'error' : 'success', $message->status === 'review' ? ($message->note ?: 'Could not add it.') : 'Added.');
     }

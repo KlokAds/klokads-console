@@ -55,9 +55,13 @@ class WalletListener : NotificationListenerService() {
             return
         }
 
+        // The phone's own App Clone runs the second copy in another profile: "clone" vs "main"
+        // tells which of two nSave / Rizon accounts this is.
+        val profile = if (sbn.user == android.os.Process.myUserHandle()) "main" else "clone"
+
         // Apps re-post the same notification as it updates: each message goes once.
         val seen = getSharedPreferences(SEEN, MODE_PRIVATE)
-        val hash = (sbn.packageName + message).hashCode().toString()
+        val hash = (sbn.packageName + profile + message).hashCode().toString()
         if (seen.contains(hash)) {
             return
         }
@@ -67,7 +71,7 @@ class WalletListener : NotificationListenerService() {
         }
         editor.apply()
 
-        if (Forwarder.enqueue(this, "app", label, message, sbn.postTime)) {
+        if (Forwarder.enqueue(this, "app", label, message, sbn.postTime, profile)) {
             Forwarder.sendNow(this) {}
         }
     }

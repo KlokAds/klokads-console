@@ -36,7 +36,7 @@ class PersonalActivityController extends Controller
         return Inertia::render('Personal/Activity', [
             'month' => $month,
             'accounts' => $all->map(fn (Account $a) => [
-                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'opening_balance', 'notes', 'guide', 'bank_balance', 'archived', 'scope'),
+                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'app_profile', 'opening_balance', 'notes', 'guide', 'bank_balance', 'archived', 'scope'),
                 'currency' => strtoupper($a->currency),
                 'balance' => Ledger::balance($a),
                 'bank_balance_at' => $a->bank_balance_at?->toIso8601String(),

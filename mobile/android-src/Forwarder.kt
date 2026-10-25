@@ -114,12 +114,12 @@ object Forwarder {
 
     /** Keeps a message (if it is allowed at all). @return true when it waits to be sent. */
     @Synchronized
-    fun enqueue(context: Context, source: String, from: String, text: String, at: Long): Boolean {
+    fun enqueue(context: Context, source: String, from: String, text: String, at: Long, profile: String = "main"): Boolean {
         if (url(context) == null || ignored(context, text)) {
             return false
         }
         val money = looksLikeMoney(text)
-        val item = JSONObject().put("id", UUID.randomUUID().toString()).put("source", source).put("from", from)
+        val item = JSONObject().put("id", UUID.randomUUID().toString()).put("source", source).put("from", from).put("profile", profile)
             .put("text", text).put("at", at).put("state", if (money) "pending" else "skipped")
         if (!money) {
             item.put("note", "No amount — not a transaction")
@@ -200,6 +200,7 @@ object Forwarder {
             val (status, body) = try {
                 post(target, quick, JSONObject()
                     .put("source", item.optString("source", "sms"))
+                    .put("profile", item.optString("profile", "main"))
                     .put("from", item.getString("from"))
                     .put("text", item.getString("text"))
                     .put("receivedStamp", item.getLong("at")))

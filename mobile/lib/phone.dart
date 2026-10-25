@@ -439,7 +439,7 @@ class _MessagesTabState extends State<MessagesTab> {
               Row(children: [
                 Icon(m['source'] == 'app' ? Icons.notifications_outlined : Icons.sms_outlined, size: 16, color: Colors.grey),
                 const SizedBox(width: 6),
-                Expanded(child: Text('${m['from']}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5))),
+                Expanded(child: Text('${m['from']}${m['profile'] == 'clone' ? ' (clone)' : ''}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5))),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                   decoration: BoxDecoration(color: look.$2, borderRadius: BorderRadius.circular(20)),

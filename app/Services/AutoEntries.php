@@ -47,12 +47,15 @@ class AutoEntries
     }
 
     /** Store an alert once and turn it into an entry if possible. */
-    public function ingest(string $source, ?string $sender, string $body, ?CarbonImmutable $receivedAt = null): InboxMessage
+    public function ingest(string $source, ?string $sender, string $body, ?CarbonImmutable $receivedAt = null, string $profile = 'main'): InboxMessage
     {
         $body = trim(mb_substr($body, 0, 5000));
         $parsed = InboxRules::ignored($body) ? null : TransactionParser::parse($sender, $body);
+        if ($parsed) {
+            $parsed['profile'] = $profile;
+        }
         // The wallet's own transaction ID identifies a payment even if the alert arrives twice (SMS + email).
-        $hash = hash('sha256', $parsed['reference'] ?? null ? ($parsed['provider'] ?? '').'|'.$parsed['reference'] : $source.'|'.$sender.'|'.$body);
+        $hash = hash('sha256', $parsed['reference'] ?? null ? ($parsed['provider'] ?? '').'|'.$parsed['reference'] : $source.'|'.$profile.'|'.$sender.'|'.$body);
 
         $existing = InboxMessage::firstWhere('hash', $hash);
         if ($existing) {
@@ -165,8 +168,41 @@ class AutoEntries
                 return $byDigits->first();
             }
         }
+        if ($candidates->count() <= 1) {
+            return $candidates->first();
+        }
 
-        return $candidates->count() === 1 ? $candidates->first() : null;
+        // Two accounts in the same wallet app (main app + the phone's App Clone): the copy decides.
+        $profile = $p['profile'] ?? 'main';
+        $byCopy = $candidates->filter(fn ($a) => ($a->app_profile ?: 'main') === $profile);
+        if ($byCopy->count() === 1) {
+            return $byCopy->first();
+        }
+
+        // The balance the alert reports fits only one of them.
+        if (($p['balance'] ?? null) !== null) {
+            $change = $p['direction'] === 'in' ? $p['amount'] - ($p['fee'] ?? 0) : -($p['amount'] + ($p['fee'] ?? 0));
+            $byBalance = $candidates->filter(fn ($a) => Ledger::balance($a) + $change === $p['balance']);
+            if ($byBalance->count() === 1) {
+                return $byBalance->first();
+            }
+        }
+
+        // What I chose last time for this bank / wallet (and app copy).
+        $learned = json_decode((string) Setting::get('inbox_learned'), true)[$p['provider'].'|'.$profile] ?? null;
+
+        return $candidates->firstWhere('id', $learned);
+    }
+
+    /** Remembers which account I picked for a bank / wallet (and app copy) that had several. */
+    public static function learn(?array $parsed, int $accountId): void
+    {
+        if (! ($parsed['provider'] ?? null)) {
+            return;
+        }
+        $map = json_decode((string) Setting::get('inbox_learned'), true) ?: [];
+        $map[$parsed['provider'].'|'.($parsed['profile'] ?? 'main')] = $accountId;
+        Setting::put('inbox_learned', json_encode($map));
     }
 
     /**

@@ -75,7 +75,7 @@ const filterChips = computed(() => live.value.map((a) => ({ id: a.id, name: a.na
 
 const sheet = ref(false);
 const editing = ref(null);
-const blankAccount = () => ({ name: '', scope: 'personal', kind: 'bank', currency: props.currencies[0], provider: '', last4: '', purpose: 'spending', opening_balance: '', notes: '', guide: '', archived: false });
+const blankAccount = () => ({ name: '', scope: 'personal', kind: 'bank', currency: props.currencies[0], provider: '', last4: '', app_profile: 'main', purpose: 'spending', opening_balance: '', notes: '', guide: '', archived: false });
 const form = useForm(blankAccount());
 const isMfs = computed(() => props.mfs.includes(form.provider));
 const isForeign = computed(() => form.currency !== props.currencies[0]);
@@ -86,7 +86,7 @@ const providerList = computed(() => Object.entries(props.providers[form.currency
 function openAccount(a = null) {
     editing.value = a;
     form.defaults(a
-        ? { ...blankAccount(), name: a.name, kind: a.kind, currency: a.currency, provider: a.provider ?? '', last4: a.last4 ?? '', purpose: a.purpose ?? 'spending', opening_balance: a.opening_balance ? String(a.opening_balance / 100) : '', notes: a.notes ?? '', guide: a.guide ?? '', archived: !!a.archived }
+        ? { ...blankAccount(), name: a.name, kind: a.kind, currency: a.currency, provider: a.provider ?? '', last4: a.last4 ?? '', app_profile: a.app_profile ?? 'main', purpose: a.purpose ?? 'spending', opening_balance: a.opening_balance ? String(a.opening_balance / 100) : '', notes: a.notes ?? '', guide: a.guide ?? '', archived: !!a.archived }
         : blankAccount());
     form.reset();
     form.clearErrors();
@@ -200,7 +200,7 @@ onMounted(() => {
                         <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-extrabold" :class="a.purpose === 'savings' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'">{{ a.name.slice(0, 1) }}</span>
                         <span class="min-w-0 flex-1">
                             <span class="block truncate text-[15px] font-semibold text-ink-900">{{ a.name }}<span class="font-normal text-ink-400">{{ digits(a) }}</span></span>
-                            <span class="block truncate text-xs text-ink-500">{{ a.purpose === 'savings' ? 'Savings' : 'Spending' }} · {{ kinds.find((k) => k.value === a.kind)?.label.split(' (')[0] }}<template v-if="!a.last4 && a.kind !== 'cash'"> · <span class="text-amber-600">add last 4 digits</span></template></span>
+                            <span class="block truncate text-xs text-ink-500">{{ a.purpose === 'savings' ? 'Savings' : 'Spending' }} · {{ kinds.find((k) => k.value === a.kind)?.label.split(' (')[0] }}<template v-if="a.app_profile === 'clone'"> · App Clone</template><template v-if="!a.last4 && a.kind !== 'cash'"> · <span class="text-amber-600">add last 4 digits</span></template></span>
                         </span>
                         <span class="text-right">
                             <span class="block text-[15px] font-bold tabular-nums" :class="a.balance < 0 ? 'text-rose-600' : 'text-ink-900'">{{ cash(a.balance, a.currency) }}</span>
@@ -287,6 +287,11 @@ onMounted(() => {
                     <div>
                         <div class="label">Type</div>
                         <Segmented v-model="form.kind" :options="kinds.map((k) => ({ value: k.value, label: k.label.split(' (')[0] }))" block size="sm" />
+                    </div>
+                    <div v-if="form.kind === 'wallet' && !isMfs">
+                        <div class="label">On the phone</div>
+                        <Segmented v-model="form.app_profile" :options="[{ value: 'main', label: '📱 Main app' }, { value: 'clone', label: '👯 App Clone' }]" block />
+                        <p class="mt-1 text-[11px] text-ink-500">Two accounts in the same app (e.g. two nSave)? Mark which one runs in the phone's App Clone — its notifications go to that account.</p>
                     </div>
                     <div v-if="isForeign || form.guide">
                         <label class="label" for="acc-guide">{{ isForeign ? 'How to bring it to BDT (for family)' : 'Note for family' }}</label>
