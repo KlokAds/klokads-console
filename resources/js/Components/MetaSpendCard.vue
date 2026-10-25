@@ -67,6 +67,8 @@ const save = () => form.post(route('clients.meta', props.client.id), { preserveS
 
 const syncForm = useForm({});
 const sync = () => syncForm.post(route('clients.meta.sync', props.client.id), { preserveScroll: true });
+const historyForm = useForm({});
+const importHistory = () => historyForm.post(route('clients.meta.history', props.client.id), { preserveScroll: true });
 
 const showCharge = ref(false);
 const chargeForm = useForm({ confirm: false });
@@ -83,9 +85,14 @@ const charge = () => chargeForm.post(route('clients.meta.charge', props.client.i
                     <template v-if="s.meta_ad_account_id">{{ s.meta_ad_account_id }}<template v-if="s.meta_campaign_filter"> · campaigns with “{{ s.meta_campaign_filter }}”</template></template>
                     <template v-else>Read this client's campaign spend from Meta and charge as it builds up</template>
                 </div>
+                <div v-if="s.history_from" class="mt-1 text-xs text-ink-500">
+                    History since {{ date(s.history_from) }}: {{ money(s.history_total, meta.currency || currency) }} spent
+                    <span v-if="!s.history_done" class="text-amber-600">· still coming in (back to {{ date(s.history_back_to) }})</span>
+                </div>
             </div>
             <div v-if="meta.connected" class="flex gap-1.5">
                 <button v-if="s.meta_ad_account_id" class="btn-secondary btn-sm" :disabled="syncForm.processing" @click="sync"><Icon name="sync" :size="14" :class="{ 'animate-spin': syncForm.processing }" /> Update</button>
+                <button v-if="s.meta_ad_account_id && !s.history_from" class="btn-secondary btn-sm" :disabled="historyForm.processing" @click="importHistory">Full history</button>
                 <button class="btn-secondary btn-sm" @click="showSettings = !showSettings"><Icon name="cog" :size="14" /> Settings</button>
             </div>
         </div>

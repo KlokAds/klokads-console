@@ -9,7 +9,16 @@ import { breakdown } from '@/pricing';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
-const props = defineProps({ stripe: Object, business: Object, pricing: Object, descriptors: Object, gst: Object, templates: Object, mail: Object });
+const props = defineProps({ stripe: Object, business: Object, pricing: Object, descriptors: Object, gst: Object, templates: Object, mail: Object, flow: Object });
+
+// ---------------------------------------------------------------- Airwallex & Meta
+const airwallexForm = useForm({ client_id: props.flow.airwallex_client_id ?? '', api_key: '' });
+const saveAirwallex = () => save(airwallexForm, 'settings.airwallex', { onSuccess: () => airwallexForm.reset('api_key') });
+async function disconnectAirwallex() {
+    if (await confirmDialog({ title: 'Disconnect Airwallex?', message: 'Deposits and Meta charges stop coming in. The key is removed.', confirmLabel: 'Disconnect', tone: 'danger' })) {
+        router.delete(route('settings.airwallex.disconnect'), { preserveScroll: true });
+    }
+}
 
 // ---------------------------------------------------------------- forms
 const businessForm = useForm({
@@ -101,6 +110,7 @@ const tabs = computed(() => [
     { key: 'stripe', label: 'Stripe & payments', short: 'Stripe', icon: 'card', status: props.stripe.connected ? (props.stripe.mode === 'live' ? 'Live' : 'Test mode') : 'Not connected', ok: props.stripe.connected && !!props.stripe.publishable },
     { key: 'email', label: 'Email', short: 'Email', icon: 'send', status: props.mail.configured ? 'Active' : 'Not set up', ok: props.mail.configured },
     { key: 'invoices', label: 'Invoices & GST', short: 'Invoices', icon: 'invoice', status: props.gst.enabled ? `GST ${props.gst.rate}%` : 'GST off', ok: true },
+    { key: 'money', label: 'Airwallex & Meta', short: 'Airwallex', icon: 'bank', status: props.flow.airwallex ? (props.flow.airwallex_error ? 'Problem' : 'Connected') : 'Not connected', ok: props.flow.airwallex && !props.flow.airwallex_error },
     { key: 'pricing', label: 'Commission & fees', short: 'Fees', icon: 'chart', status: `${props.pricing.commission_rate}% commission`, ok: true },
     { key: 'statement', label: 'Bank statement', short: 'Statement', icon: 'receipt', status: props.descriptors.prefix ? `${props.descriptors.prefix}* …` : 'Prefix not set', ok: !!props.descriptors.prefix },
 ]);
@@ -188,6 +198,7 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                             <template v-else-if="tab === 'stripe'">The Stripe account that takes payments. Keys are encrypted and never shown again after saving.</template>
                             <template v-else-if="tab === 'email'">Invoices and receipts go out from your own address with the PDF attached — never from Stripe.</template>
                             <template v-else-if="tab === 'invoices'">Which design each service uses, and GST once you're registered.</template>
+                            <template v-else-if="tab === 'money'">Where the ad money goes after Stripe: the payout lands in Airwallex, and Meta charges the Airwallex card.</template>
                             <template v-else-if="tab === 'pricing'">For ad-budget billing: the client pays the fees, you net the budget, your commission is a share of it.</template>
                             <template v-else>What clients see on their card statement for each charge.</template>
                         </p>
@@ -484,6 +495,53 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                         <button class="btn-primary" :disabled="pricingForm.processing || !pricingForm.isDirty">Save</button>
                     </div>
                 </form>
+
+                <!-- ============================== Airwallex & Meta -->
+                <template v-else-if="tab === 'money'">
+                    <div class="card p-5 sm:p-6">
+                        <div class="card-title">The money flow</div>
+                        <ol class="mt-3 space-y-2 text-sm text-ink-700">
+                            <li><b>1.</b> Meta spend per campaign comes from Klok Pilot <span :class="flow.meta_via_pilot ? 'text-emerald-600' : 'text-amber-600'">{{ flow.meta_via_pilot ? '✓ connected' : '— not linked yet' }}</span></li>
+                            <li><b>2.</b> When the client's balance lasts less than their backup days, their card is charged (Stripe)<template v-if="flow.meta_client"> — {{ flow.meta_client.company || flow.meta_client.name }}</template></li>
+                            <li><b>3.</b> Stripe pays out to Airwallex; it is matched when it lands</li>
+                            <li><b>4.</b> Meta charges the Airwallex card; each charge is booked to the client</li>
+                        </ol>
+                        <p class="mt-3 text-xs text-ink-500">Each step sends a notification to MH-Bot.</p>
+                    </div>
+
+                    <form class="card" @submit.prevent="saveAirwallex">
+                        <div class="card-head">
+                            <div>
+                                <div class="card-title">Airwallex API</div>
+                                <div class="card-sub">Airwallex web → Settings → Developer → API keys → create a key with <b>read</b> access only (Balances, Transactions, Issuing). Paste it here yourself.</div>
+                            </div>
+                        </div>
+                        <div class="space-y-4 px-5 pb-5 sm:px-6">
+                            <div v-if="flow.airwallex" class="rounded-xl px-4 py-3 text-sm" :class="flow.airwallex_error ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-800'">
+                                <template v-if="flow.airwallex_error">{{ flow.airwallex_error }}</template>
+                                <template v-else>
+                                    Connected<template v-if="flow.airwallex_synced_at"> · read {{ date(flow.airwallex_synced_at) }}</template>
+                                    <span v-for="(cents, cur) in flow.airwallex_balances" :key="cur" class="ml-2 font-semibold tabular-nums">{{ money(cents, cur) }}</span>
+                                </template>
+                            </div>
+                            <div>
+                                <label class="label" for="aw-client">Client ID</label>
+                                <input id="aw-client" v-model="airwallexForm.client_id" class="input font-mono" autocomplete="off" />
+                                <div v-if="airwallexForm.errors.client_id" class="error">{{ airwallexForm.errors.client_id }}</div>
+                            </div>
+                            <div>
+                                <label class="label" for="aw-key">API key</label>
+                                <input id="aw-key" v-model="airwallexForm.api_key" type="password" class="input font-mono" autocomplete="new-password" :placeholder="flow.airwallex ? 'Saved — leave empty to keep it' : ''" />
+                                <div v-if="airwallexForm.errors.api_key" class="error">{{ airwallexForm.errors.api_key }}</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between gap-3 border-t border-line bg-ink-50/60 px-6 py-4">
+                            <button v-if="flow.airwallex" type="button" class="btn-ghost text-rose-600" @click="disconnectAirwallex">Disconnect</button>
+                            <span v-else></span>
+                            <button class="btn-primary" :disabled="airwallexForm.processing || !airwallexForm.client_id">{{ flow.airwallex ? 'Save' : 'Connect' }}</button>
+                        </div>
+                    </form>
+                </template>
 
                 <!-- ============================== Bank statement -->
                 <template v-else>

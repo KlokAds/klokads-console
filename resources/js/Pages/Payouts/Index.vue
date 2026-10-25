@@ -21,7 +21,10 @@ const props = defineProps({
     totals: Object,
     weekdays: Array,
     bank: Object,
+    airwallex: Object,
 });
+
+const KIND = { deposit: '🏦 Deposit', meta: '💳 Meta', card: '💳 Card', payout: '↗️ Sent', fee: 'Fee', other: 'Other' };
 
 const m = (v) => money(v, props.currency);
 
@@ -230,6 +233,35 @@ function payOut() {
                 </form>
             </div>
 
+            <!-- Airwallex: where payouts land and Meta charges the card -->
+            <div class="card mt-5">
+                <div class="card-head flex-wrap">
+                    <div>
+                        <div class="card-title">Airwallex</div>
+                        <div class="card-sub">Payouts land here; Meta charges the card for the client's ads.</div>
+                    </div>
+                    <Link v-if="!airwallex.connected" :href="route('settings.edit', { tab: 'money' })" class="btn-secondary btn-sm">Connect Airwallex</Link>
+                    <div v-else class="flex flex-wrap items-center gap-2 text-sm">
+                        <span v-for="(cents, cur) in airwallex.balances" :key="cur" class="rounded-full bg-ink-50 px-3 py-1 font-semibold tabular-nums text-ink-900">{{ money(cents, cur) }}</span>
+                    </div>
+                </div>
+                <p v-if="airwallex.error" class="mx-5 mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 sm:mx-6">{{ airwallex.error }}</p>
+                <div v-if="airwallex.entries.length" class="overflow-x-auto">
+                    <table class="table">
+                        <thead><tr><th>Date</th><th>What</th><th>Details</th><th class="num">Amount</th></tr></thead>
+                        <tbody>
+                            <tr v-for="e in airwallex.entries" :key="e.id">
+                                <td>{{ date(e.occurred_at) }}</td>
+                                <td class="whitespace-nowrap">{{ KIND[e.kind] ?? e.kind }}<span v-if="e.payout_id" class="ml-1 text-xs text-emerald-600">Stripe payout ✓</span></td>
+                                <td class="max-w-[16rem] truncate text-ink-500">{{ e.client ? e.client + ' · ' : '' }}{{ e.description || '—' }}</td>
+                                <td class="num font-semibold" :class="e.amount >= 0 ? 'text-emerald-600' : 'text-ink-900'">{{ e.amount >= 0 ? '+' : '−' }}{{ money(Math.abs(e.amount), e.currency) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <EmptyState v-else-if="airwallex.connected" compact icon="bank" title="Nothing yet" text="Deposits and card charges of the last two weeks show here." />
+            </div>
+
             <!-- History -->
             <div class="card mt-5">
                 <div class="card-head">
@@ -238,7 +270,7 @@ function payOut() {
                 </div>
                 <div v-if="payouts.data.length" class="overflow-x-auto">
                     <table class="table">
-                        <thead><tr><th>Created</th><th class="num">Amount</th><th class="num">Bank fee</th><th class="num">You get</th><th>Status</th><th>Arrives</th><th>Type</th></tr></thead>
+                        <thead><tr><th>Created</th><th class="num">Amount</th><th class="num">Bank fee</th><th class="num">You get</th><th>Status</th><th>Arrives</th><th>Airwallex</th></tr></thead>
                         <tbody>
                             <tr v-for="p in payouts.data" :key="p.id">
                                 <td>{{ date(p.occurred_at) }}</td>
@@ -247,7 +279,7 @@ function payOut() {
                                 <td class="num font-semibold text-ink-900">{{ money(p.received, p.currency) }}</td>
                                 <td><StatusBadge :status="p.status" /></td>
                                 <td>{{ date(p.arrival_at) }}</td>
-                                <td class="capitalize text-ink-500">{{ p.method || '—' }}</td>
+                                <td :class="p.in_airwallex ? 'font-medium text-emerald-600' : 'text-ink-400'">{{ p.in_airwallex ? '✓ ' + date(p.in_airwallex) : '—' }}</td>
                             </tr>
                         </tbody>
                     </table>

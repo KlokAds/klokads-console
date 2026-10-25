@@ -98,6 +98,23 @@ class SpendBillingController extends Controller
         return back()->with('success', 'Spend updated from Meta.');
     }
 
+    /** The account's whole spend history (a record only — never billed); imported in the background. */
+    public function history(Client $client, SpendBilling $billing): RedirectResponse
+    {
+        try {
+            $first = $billing->startHistory($client);
+            if ($first) {
+                $billing->importHistory($client->fresh(), 1);
+            }
+        } catch (Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', $first
+            ? 'History since '.$first->format('M Y').' is coming in — a month at a time; you\'ll get a notification when it is all in.'
+            : 'Meta shows no spend on this account in the last 3 years.');
+    }
+
     /** Charge all unbilled finished days now, even below the threshold. */
     public function charge(Request $request, Client $client, SpendBilling $billing): RedirectResponse
     {
@@ -154,6 +171,10 @@ class SpendBillingController extends Controller
             'settings' => $client->only('meta_ad_account_id', 'meta_campaign_filter', 'spend_billing', 'billing_mode', 'prepaid_buffer_days', 'prepaid_topup_days', 'prepaid_min_topup') + [
                 'spend_threshold' => $client->spend_threshold,
                 'billed_until' => $client->spend_billed_until?->toDateString(),
+                'history_from' => $client->history_from?->toDateString(),
+                'history_done' => $client->history_from && $client->history_cursor?->lte($client->history_from),
+                'history_back_to' => $client->history_cursor?->toDateString(),
+                'history_total' => (int) MetaSpendDay::where('client_id', $client->id)->sum('spend'),
                 'synced_at' => $client->spend_synced_at?->toIso8601String(),
                 'error' => $client->spend_error,
             ],

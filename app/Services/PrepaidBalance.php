@@ -34,8 +34,8 @@ class PrepaidBalance
             return 0;
         }
         $currency = strtolower($days->first()->first()->currency);
-        if ($currency !== $this->stripe->currency()) {
-            $this->billing->failed($client, 'The ad account is in '.strtoupper($currency).' but the balance is in '.strtoupper($this->stripe->currency()).' — they must match.');
+        if ($currency !== $this->stripe->currencyFor($client)) {
+            $this->billing->failed($client, 'The ad account is in '.strtoupper($currency).' but the balance is in '.strtoupper($this->stripe->currencyFor($client)).' — they must match.');
 
             return 0;
         }
@@ -63,7 +63,25 @@ class PrepaidBalance
             $client->update(['spend_billed_until' => $days->keys()->last()]);
         });
 
+        $this->tellDay($client->fresh(), $days->keys()->last(), $days->last(), $rate);
+
         return $days->count();
+    }
+
+    /** Each finished day: what it cost and what is left. */
+    private function tellDay(Client $client, string $date, $rows, float $rate): void
+    {
+        $spend = (int) $rows->sum('spend');
+        if ($spend <= 0) {
+            return;
+        }
+        $currency = $rows->first()->currency;
+        $status = $this->status($client);
+        $top = $rows->sortByDesc('spend')->first();
+        $this->billing->tell($client, '📊 '.$this->billing->name($client).' · '.CarbonImmutable::parse($date)->format('j M'),
+            'Meta spent '.$this->billing->money($spend, $currency).' on '.$rows->count().' campaign'.($rows->count() === 1 ? '' : 's').' (most: '.$top->campaign_name.')'
+            .' · '.$this->billing->money((int) round($spend * (1 + $rate / 100)), $currency).' from the balance'
+            .' · left '.$this->billing->money($status['balance'], $currency).($status['days_left'] !== null ? " ≈ {$status['days_left']} days" : '').'.');
     }
 
     /**
@@ -116,7 +134,7 @@ class PrepaidBalance
 
         $amount ??= $status['topup'];
         if (! $manual && $amount > $client->prepaid_min_topup * self::SAFETY_MULTIPLE) {
-            return $this->billing->failed($client, 'Top-up of '.number_format($amount / 100, 2).' is unusually large — check the spend and use "Top up now".');
+            return $this->billing->failed($client, 'Top-up of '.$this->money($amount, $client).' is unusually large — check the spend and use "Top up now".');
         }
 
         // Client pays the card fee on top, so the full amount lands in their balance.
@@ -136,8 +154,8 @@ class PrepaidBalance
         $client->update(['spend_error' => null]);
 
         $after = $this->status($client->fresh());
-        $this->billing->tell('💳 Topped up '.($client->company ?: $client->name),
-            $this->money($amount).' added — balance '.$this->money($after['balance']).($after['days_left'] !== null ? ", about {$after['days_left']} days of ads" : '').'.');
+        $this->billing->tell($client, '💳 Topped up '.$this->billing->name($client),
+            $this->money($amount, $client).' charged to their card — balance '.$this->money($after['balance'], $client).($after['days_left'] !== null ? ", about {$after['days_left']} days of ads" : '').'. Stripe pays it out to Airwallex in ~7 days.');
 
         return $invoice->fresh();
     }
@@ -159,14 +177,14 @@ class PrepaidBalance
         $fresh = $client->fresh();
         $status = $this->status($fresh);
         if (! $invoice && $status['balance'] <= 0 && $status['daily'] > 0 && ! $fresh->spend_error) {
-            $this->billing->failed($client, 'Balance is used up ('.$this->money($status['balance']).') — ads are running on our money. Top up or pause the campaigns.');
+            $this->billing->failed($client, 'Balance is used up ('.$this->money($status['balance'], $fresh).') — ads are running on our money. Top up or pause the campaigns.');
         }
 
         return $invoice;
     }
 
-    private function money(int $cents): string
+    private function money(int $cents, Client $client): string
     {
-        return strtoupper($this->stripe->currency()).' '.number_format($cents / 100, 2);
+        return $this->billing->money($cents, $this->stripe->currencyFor($client));
     }
 }

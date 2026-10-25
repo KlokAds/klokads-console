@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Setting;
+use App\Services\Airwallex;
+use App\Services\MetaAds;
+use App\Services\Notify;
 use App\Services\StripeService;
 use App\Support\Business;
 use App\Support\Catalog;
@@ -63,6 +66,15 @@ class SettingsController extends Controller
                     'value' => StripeService::descriptorFor($key),
                 ])->values(),
             ],
+            'flow' => [
+                'meta_via_pilot' => MetaAds::viaPilot(),
+                'airwallex' => Airwallex::configured(),
+                'airwallex_client_id' => Setting::get('airwallex_client_id'),
+                'airwallex_synced_at' => Setting::get('airwallex_synced_at'),
+                'airwallex_error' => Setting::get('airwallex_error'),
+                'airwallex_balances' => json_decode((string) Setting::get('airwallex_balances'), true) ?: [],
+                'meta_client' => Airwallex::metaClient()?->only('id', 'name', 'company'),
+            ],
             'pricing' => [
                 'commission_rate' => (float) Setting::get('commission_rate', 20),
                 'card_fee_percent' => (float) Setting::get('card_fee_percent', 2.9),
@@ -117,6 +129,42 @@ class SettingsController extends Controller
         }
 
         return back()->with('success', "Test email sent to {$to} — check your inbox.");
+    }
+
+    /** Airwallex read-only API key: checked by reading the balance before it is kept. */
+    public function updateAirwallex(Request $request, Airwallex $airwallex): RedirectResponse
+    {
+        $data = $request->validate([
+            'client_id' => ['required', 'string', 'max:100'],
+            'api_key' => [Setting::get('airwallex_api_key') ? 'nullable' : 'required', 'string', 'max:300'],
+        ]);
+        $old = [Setting::get('airwallex_client_id'), Setting::get('airwallex_api_key')];
+        Setting::put('airwallex_client_id', trim($data['client_id']));
+        if (filled($data['api_key'] ?? null)) {
+            Setting::put('airwallex_api_key', trim($data['api_key']));
+        }
+
+        try {
+            $balances = $airwallex->balances();
+        } catch (Throwable $e) {
+            Setting::put('airwallex_client_id', $old[0]);
+            Setting::put('airwallex_api_key', $old[1]);
+
+            return back()->with('error', $e->getMessage().' — nothing was changed.');
+        }
+        Setting::put('airwallex_balances', json_encode($balances));
+        $airwallex->run(force: true);
+
+        return back()->with('success', 'Airwallex connected — '.(collect($balances)->map(fn ($c, $cur) => Notify::money($c, $cur))->implode(', ') ?: 'no balance yet').'.');
+    }
+
+    public function disconnectAirwallex(): RedirectResponse
+    {
+        foreach (['airwallex_client_id', 'airwallex_api_key', 'airwallex_balances', 'airwallex_error', 'airwallex_synced_at'] as $key) {
+            Setting::put($key, null);
+        }
+
+        return back()->with('success', 'Airwallex disconnected.');
     }
 
     public function updateGst(Request $request): RedirectResponse

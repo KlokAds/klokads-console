@@ -6,7 +6,6 @@ use App\Models\Client;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\MetaSpendDay;
-use App\Models\PushSubscription;
 use App\Support\Business;
 use App\Support\Pricing;
 use Carbon\CarbonImmutable;
@@ -24,7 +23,13 @@ class SpendBilling
     /** A charge bigger than this many thresholds waits for a manual go-ahead. */
     private const SAFETY_MULTIPLE = 4;
 
-    public function __construct(private MetaAds $meta, private StripeService $stripe, private PushNotifier $push) {}
+    /** History is imported this many days per step (one bridge request). */
+    private const HISTORY_STEP_DAYS = 31;
+
+    /** Meta keeps insights for 37 months. */
+    private const HISTORY_MONTHS = 37;
+
+    public function __construct(private MetaAds $meta, private StripeService $stripe, private Notify $notify) {}
 
     /** Every client with a Meta ad account: refresh spend, then bill if due. At most once an hour. */
     public function runAll(bool $force = false): array
@@ -59,8 +64,15 @@ class SpendBilling
         }
 
         $currency = $this->meta->account($client->meta_ad_account_id)['currency'];
-        $rows = $this->meta->dailyCampaignSpend($client->meta_ad_account_id, $from, $today, $client->meta_campaign_filter);
+        $this->store($client, $this->meta->dailyCampaignSpend($client->meta_ad_account_id, $from, $today, $client->meta_campaign_filter), $currency);
 
+        // Charge in the ad account's own currency (Tasfia's runs in SGD).
+        $client->update(['spend_synced_at' => now(), 'spend_error' => null, 'currency' => $client->currency ?: strtolower($currency)]);
+    }
+
+    /** @param  array<int, array<string, mixed>>  $rows */
+    private function store(Client $client, array $rows, string $currency): void
+    {
         DB::transaction(function () use ($client, $rows, $currency) {
             foreach ($rows as $r) {
                 $day = MetaSpendDay::firstOrNew(['client_id' => $client->id, 'campaign_id' => $r['campaign_id'], 'date' => $r['date']]);
@@ -70,8 +82,73 @@ class SpendBilling
                 $day->fill($r + ['currency' => $currency])->save();
             }
         });
+    }
 
-        $client->update(['spend_synced_at' => now(), 'spend_error' => null]);
+    /**
+     * Bring in the account's whole history: find the first month it spent, then import back to it
+     * a step at a time (see importHistory). History is a record only — it is never billed, because
+     * billing counts from spend_billed_until.
+     */
+    public function startHistory(Client $client): ?CarbonImmutable
+    {
+        $today = CarbonImmutable::today();
+        $months = collect($this->meta->monthlySpend($client->meta_ad_account_id, $today->subMonths(self::HISTORY_MONTHS)->startOfMonth(), $today))
+            ->filter(fn ($m) => $m['spend'] > 0)->sortBy('month');
+        $first = $months->first() ? CarbonImmutable::parse($months->first()['month'].'-01') : null;
+
+        $client->update([
+            'history_from' => $first?->toDateString(),
+            'history_cursor' => $first ? $today->startOfMonth()->toDateString() : null,
+            // Billing starts now: nothing from the history is ever charged.
+            'spend_billed_until' => $client->spend_billed_until ?? CarbonImmutable::yesterday()->toDateString(),
+        ]);
+
+        return $first;
+    }
+
+    /** Heartbeat: keep importing any history still missing (a few steps per run). */
+    public function importAllHistory(): int
+    {
+        if (! MetaAds::configured()) {
+            return 0;
+        }
+        $n = 0;
+        foreach (Client::whereNotNull('meta_ad_account_id')->whereNotNull('history_cursor')->whereColumn('history_cursor', '>', 'history_from')->get() as $client) {
+            try {
+                $this->importHistory($client);
+                $n++;
+            } catch (Throwable $e) {
+                $client->update(['spend_error' => 'History: '.mb_substr($e->getMessage(), 0, 480)]);
+            }
+        }
+
+        return $n;
+    }
+
+    /** Import the next step(s) of history, newest first. Returns how far back it now goes (null when nothing to do). */
+    public function importHistory(Client $client, int $steps = 2): ?CarbonImmutable
+    {
+        if (! $client->history_from || ! $client->history_cursor || $client->history_cursor->lte($client->history_from)) {
+            return null;
+        }
+
+        $currency = $this->meta->account($client->meta_ad_account_id)['currency'];
+        $cursor = CarbonImmutable::parse($client->history_cursor);
+        $from = CarbonImmutable::parse($client->history_from);
+        for ($i = 0; $i < $steps && $cursor->gt($from); $i++) {
+            $start = $cursor->subDays(self::HISTORY_STEP_DAYS)->max($from);
+            $this->store($client, $this->meta->dailyCampaignSpend($client->meta_ad_account_id, $start, $cursor->subDay(), $client->meta_campaign_filter), $currency);
+            $cursor = $start;
+            $client->update(['history_cursor' => $cursor->toDateString()]);
+        }
+
+        if ($cursor->lte($from)) {
+            $total = (int) MetaSpendDay::where('client_id', $client->id)->sum('spend');
+            $this->notify->send('billing', '📚 '.$this->name($client).': full ad history in',
+                'Since '.$from->format('M Y').' — '.$this->money($total, $currency).' spent in all.', route('clients.show', $client), 'klok-history');
+        }
+
+        return $cursor;
     }
 
     /** Finished days (before today) not billed yet. */
@@ -102,8 +179,8 @@ class SpendBilling
         }
 
         $currency = strtolower($days->first()->currency);
-        if ($currency !== $this->stripe->currency()) {
-            return $this->failed($client, "The ad account is in {$days->first()->currency} but Stripe charges in ".strtoupper($this->stripe->currency()).'. Charge this one manually.');
+        if ($currency !== $this->stripe->currencyFor($client)) {
+            return $this->failed($client, "The ad account is in {$days->first()->currency} but Stripe charges in ".strtoupper($this->stripe->currencyFor($client)).'. Charge this one manually.');
         }
         if (! $manual && $spend > $client->spend_threshold * self::SAFETY_MULTIPLE) {
             return $this->failed($client, 'Unbilled spend '.number_format($spend / 100, 2).' is far above the threshold — check it and use "Charge now" on the client page.');
@@ -148,7 +225,7 @@ class SpendBilling
             ]);
         });
 
-        $this->tell("💳 Charged {$this->name($client)}", 'Meta spend '.$this->money($spend, $currency).' + '.rtrim(rtrim(number_format($budget['commission_rate'], 2), '0'), '.').'% = '.$this->money($budget['charge'], $currency).' (incl. card fee)');
+        $this->tell($client, "💳 Charged {$this->name($client)}", 'Meta spend '.$this->money($spend, $currency).' + '.rtrim(rtrim(number_format($budget['commission_rate'], 2), '0'), '.').'% = '.$this->money($budget['charge'], $currency).' (incl. card fee)');
 
         return $invoice->fresh();
     }
@@ -172,29 +249,28 @@ class SpendBilling
         $first = $client->spend_error !== $message;
         $client->update(['spend_error' => $message, 'spend_attempted_at' => now()]);
         if ($first) {
-            $this->tell("⚠️ {$this->name($client)}: not charged", $message);
+            $this->tell($client, "⚠️ {$this->name($client)}: not charged", $message);
         }
 
         return null;
     }
 
-    public function tell(string $title, string $body): void
+    /** To the MH-Bot feed and the phones, like every other alert. */
+    public function tell(Client $client, string $title, string $body): void
     {
-        foreach (PushSubscription::all() as $sub) {
-            try {
-                $this->push->send($sub, ['title' => $title, 'body' => $body, 'url' => route('clients.index'), 'tag' => 'klok-billing']);
-            } catch (Throwable) {
-                // a notification problem must never undo a charge
-            }
+        try {
+            $this->notify->send('billing', $title, $body, route('clients.show', $client), 'klok-billing');
+        } catch (Throwable) {
+            // a notification problem must never undo a charge
         }
     }
 
-    private function name(Client $client): string
+    public function name(Client $client): string
     {
         return $client->company ?: $client->name;
     }
 
-    private function money(int $cents, string $currency): string
+    public function money(int $cents, string $currency): string
     {
         return strtoupper($currency).' '.number_format($cents / 100, 2);
     }

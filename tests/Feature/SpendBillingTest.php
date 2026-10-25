@@ -42,6 +42,7 @@ class SpendBillingTest extends TestCase
 
         $this->mock(StripeService::class, function (MockInterface $m) {
             $m->shouldReceive('currency')->andReturn('sgd');
+            $m->shouldReceive('currencyFor')->andReturn('sgd');
             $m->shouldReceive('chargeNow')->andReturnUsing(function ($client, $amount, $description, $service, $pm, $budget) {
                 $this->charges[] = compact('amount', 'description', 'budget');
 
@@ -133,6 +134,7 @@ class SpendBillingTest extends TestCase
         $this->metaReturns([$this->day('2026-10-15', 60000)]);
         $this->mock(StripeService::class, function (MockInterface $m) {
             $m->shouldReceive('currency')->andReturn('sgd');
+            $m->shouldReceive('currencyFor')->andReturn('sgd');
             $m->shouldReceive('chargeNow')->once()->andThrow(new RuntimeException('Your card was declined.'));
         });
         $billing = app(SpendBilling::class);

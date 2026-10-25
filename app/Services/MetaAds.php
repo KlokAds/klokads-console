@@ -3,18 +3,44 @@
 namespace App\Services;
 
 use App\Models\Setting;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
-/** Read-only Meta Marketing API calls with the System User token from Settings. */
+/**
+ * Read-only Meta Marketing API calls: through Klok Pilot's bridge (where the ad accounts are
+ * connected — preferred), or with a System User token from Settings.
+ */
 class MetaAds
 {
     public const VERSION = 'v26.0';
 
+    /** The bridge answers at most this many days per spend request. */
+    private const BRIDGE_DAYS = 31;
+
     public static function configured(): bool
     {
-        return (bool) Setting::get('meta_token');
+        return self::viaPilot() || (bool) Setting::get('meta_token');
+    }
+
+    public static function viaPilot(): bool
+    {
+        return filled(Setting::get('pilot_url')) && filled(Setting::get('pilot_bridge_key'));
+    }
+
+    /** @return array<string, mixed> */
+    private function pilot(string $path, array $params = []): array
+    {
+        $res = Http::timeout(120)->retry(2, 1000, throw: false)->acceptJson()
+            ->withHeaders(['X-Console-Key' => Setting::get('pilot_bridge_key')])
+            ->get(rtrim(Setting::get('pilot_url'), '/').'/internal/console/'.ltrim($path, '/'), $params);
+
+        if ($res->failed()) {
+            throw new RuntimeException('Klok Pilot: '.($res->json('error.message') ?? $res->json('message') ?? 'request failed ('.$res->status().')'));
+        }
+
+        return $res->json();
     }
 
     /** @return array<string, mixed> */
@@ -38,6 +64,11 @@ class MetaAds
     /** Ad accounts the token can read: [act_id => "Name (CUR)"]. */
     public function adAccounts(): array
     {
+        if (self::viaPilot()) {
+            return collect($this->pilot('ad-accounts')['data'] ?? [])
+                ->mapWithKeys(fn ($a) => [self::act($a['id']) => "{$a['name']} ({$a['currency']})"])->all();
+        }
+
         $out = [];
         $page = $this->get('me/adaccounts', ['fields' => 'name,account_id,currency', 'limit' => 100]);
         foreach ($page['data'] ?? [] as $a) {
@@ -50,6 +81,13 @@ class MetaAds
     /** @return array{name: string, currency: string} */
     public function account(string $id): array
     {
+        if (self::viaPilot()) {
+            $a = collect($this->pilot('ad-accounts')['data'] ?? [])->first(fn ($a) => self::act($a['id']) === self::act($id))
+                ?? throw new RuntimeException("Ad account {$id} is not connected in Klok Pilot.");
+
+            return ['name' => $a['name'], 'currency' => strtoupper($a['currency'])];
+        }
+
         $a = $this->get(self::act($id), ['fields' => 'name,currency']);
 
         return ['name' => $a['name'] ?? $id, 'currency' => strtoupper($a['currency'] ?? '')];
@@ -62,6 +100,20 @@ class MetaAds
      */
     public function dailyCampaignSpend(string $accountId, CarbonInterface $from, CarbonInterface $to, ?string $filter = null): array
     {
+        if (self::viaPilot()) {
+            $rows = [];
+            for ($start = CarbonImmutable::parse($from->toDateString()); $start->lte($to); $start = $start->addDays(self::BRIDGE_DAYS)) {
+                $end = $start->addDays(self::BRIDGE_DAYS - 1)->min($to);
+                foreach ($this->pilot('ad-accounts/'.self::act($accountId).'/spend', ['from' => $start->toDateString(), 'to' => $end->toDateString()])['data'] ?? [] as $r) {
+                    if (blank($filter) || str_contains(mb_strtolower($r['campaign_name']), mb_strtolower($filter))) {
+                        $rows[] = array_intersect_key($r, array_flip(['campaign_id', 'campaign_name', 'date', 'spend', 'impressions', 'clicks']));
+                    }
+                }
+            }
+
+            return $rows;
+        }
+
         $params = [
             'level' => 'campaign',
             'time_increment' => 1,
@@ -93,6 +145,18 @@ class MetaAds
         }
 
         return $rows;
+    }
+
+    /**
+     * Account spend per month, to see where its history starts (through Klok Pilot only).
+     *
+     * @return array<int, array{month: string, spend: int}>
+     */
+    public function monthlySpend(string $accountId, CarbonInterface $from, CarbonInterface $to): array
+    {
+        return self::viaPilot()
+            ? $this->pilot('ad-accounts/'.self::act($accountId).'/months', ['from' => $from->toDateString(), 'to' => $to->toDateString()])['data'] ?? []
+            : [];
     }
 
     public static function act(string $id): string

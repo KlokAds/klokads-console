@@ -40,6 +40,7 @@ class PrepaidBalanceTest extends TestCase
 
         $this->mock(StripeService::class, function (MockInterface $m) {
             $m->shouldReceive('currency')->andReturn('sgd');
+            $m->shouldReceive('currencyFor')->andReturn('sgd');
             $m->shouldReceive('chargeNow')->andReturnUsing(function ($client, $amount, $description, $service, $pm, $budget) {
                 $this->charges[] = compact('amount', 'description', 'budget');
 

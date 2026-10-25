@@ -72,6 +72,12 @@ class StripeService
         return strtolower(Setting::get('currency', 'sgd'));
     }
 
+    /** A client is charged in their own currency (their ad account's), else the account's default. */
+    public function currencyFor(Client $client): string
+    {
+        return strtolower($client->currency ?: $this->currency());
+    }
+
     // ---------------------------------------------------------------- customers
 
     public function ensureCustomer(Client $client): string
@@ -238,7 +244,7 @@ class StripeService
             'customer' => $customer,
             'collection_method' => 'charge_automatically',
             'auto_advance' => false,
-            'currency' => $this->currency(),
+            'currency' => $this->currencyFor($client),
             'description' => $description,
             'pending_invoice_items_behavior' => 'exclude',
             'metadata' => ['klok_client_id' => $client->id, 'service' => $service ?? '', 'charged_from' => 'klokads-console'] + self::budgetMetadata($budget),
@@ -249,7 +255,7 @@ class StripeService
             $stripe->invoiceItems->create([
                 'customer' => $customer,
                 'invoice' => $invoice->id,
-                'currency' => $this->currency(),
+                'currency' => $this->currencyFor($client),
                 'amount' => $item['amount'],
                 'description' => $item['description'],
             ]);
@@ -1010,6 +1016,16 @@ class StripeService
         ]);
     }
 
+    /** Heartbeat: payouts of the last two weeks, at most once an hour (each step is told). */
+    public function syncRecentPayouts(): int
+    {
+        if (! self::configured() || ! Cache::add('stripe-payouts-run', 1, now()->addMinutes(55))) {
+            return 0;
+        }
+
+        return $this->syncPayouts(now()->subDays(14));
+    }
+
     public function syncPayouts(Carbon $from): int
     {
         $n = 0;
@@ -1023,6 +1039,7 @@ class StripeService
 
     public function upsertPayout(\Stripe\Payout $p): Payout
     {
+        $before = Payout::where('stripe_payout_id', $p->id)->value('status');
         $payout = Payout::updateOrCreate(['stripe_payout_id' => $p->id], [
             'amount' => $p->amount,
             'currency' => $p->currency,
@@ -1034,6 +1051,20 @@ class StripeService
         ]);
 
         Ledger::recordPayout($payout); // lands in the chosen bank account, minus its fee
+
+        // Tell about this payout's steps (only recent ones, never a first sync's old history).
+        if ($payout->status !== $before && $payout->occurred_at?->gt(now()->subDays(14))) {
+            $money = Notify::money($payout->amount, strtoupper($payout->currency));
+            $step = match ($payout->status) {
+                'pending', 'in_transit' => ['💸 Stripe payout on its way: '.$money, 'To Airwallex, arriving about '.$payout->arrival_at?->format('D j M').'.'],
+                'paid' => ['💸 Stripe says the payout is paid: '.$money, 'Airwallex should show it now — it is matched when it lands.'],
+                'failed', 'canceled' => ['⚠️ Stripe payout '.$payout->status.': '.$money, 'The money went back to the Stripe balance — check the bank details in Stripe.'],
+                default => null,
+            };
+            if ($step) {
+                app(Notify::class)->send('billing', $step[0], $step[1], route('payouts.index'), 'klok-payout');
+            }
+        }
 
         return $payout;
     }

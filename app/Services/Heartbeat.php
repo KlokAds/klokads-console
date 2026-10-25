@@ -42,6 +42,9 @@ class Heartbeat
         foreach ([
             'reminders' => fn () => app(Reminders::class)->run(),
             'billing' => fn () => app(SpendBilling::class)->runAll(),
+            'ad_history' => fn () => app(SpendBilling::class)->importAllHistory(),
+            'stripe_payouts' => fn () => app(StripeService::class)->syncRecentPayouts(),
+            'airwallex' => fn () => app(Airwallex::class)->run(),
             'emails' => fn () => app(EmailInbox::class)->poll(),
             'personal_invoices' => fn () => app(PersonalInvoicing::class)->runRecurring(),
             'personal_reminders' => fn () => app(PersonalReminders::class)->run(),

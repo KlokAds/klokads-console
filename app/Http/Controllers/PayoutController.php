@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\AirwallexEntry;
 use App\Models\Payout;
 use App\Models\Setting;
+use App\Services\Airwallex;
 use App\Services\StripeService;
 use App\Support\Ledger;
 use Illuminate\Http\RedirectResponse;
@@ -44,11 +46,24 @@ class PayoutController extends Controller
             'currency' => $currency,
             'available' => (int) ($balance['available'][$currency] ?? 0),
             'pending' => (int) ($balance['pending'][$currency] ?? 0),
-            'payouts' => Payout::latest('occurred_at')->paginate(20)->through(fn (Payout $p) => [
-                ...$p->toArray(),
+            'payouts' => Payout::with('airwallexEntries')->latest('occurred_at')->paginate(20)->through(fn (Payout $p) => [
+                ...collect($p->toArray())->except('airwallex_entries')->all(),
                 'bank_fee' => $fee = Ledger::payoutFee($p->amount),
                 'received' => $p->amount - $fee,
+                'in_airwallex' => $p->airwallexEntries->first()?->occurred_at?->toIso8601String(),
             ]),
+            'airwallex' => [
+                'connected' => Airwallex::configured(),
+                'error' => Setting::get('airwallex_error'),
+                'synced_at' => Setting::get('airwallex_synced_at'),
+                'balances' => json_decode((string) Setting::get('airwallex_balances'), true) ?: [],
+                'entries' => AirwallexEntry::with('client:id,name,company')->latest('occurred_at')->limit(25)->get()->map(fn (AirwallexEntry $e) => [
+                    ...$e->only('id', 'kind', 'amount', 'currency', 'description', 'payout_id'),
+                    'occurred_at' => $e->occurred_at->toIso8601String(),
+                    'client' => $e->client ? ($e->client->company ?: $e->client->name) : null,
+                ]),
+                'meta_month' => -(int) AirwallexEntry::where('kind', 'meta')->where('occurred_at', '>=', now()->startOfMonth())->sum('amount'),
+            ],
             'bank' => [
                 'fee_rate' => Ledger::bankFeeRate(),
                 'account_id' => Setting::get('payout_account_id'),

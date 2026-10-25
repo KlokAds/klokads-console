@@ -183,6 +183,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/clients/{client}/charge', [ClientCardController::class, 'chargeNow'])->name('clients.charge');
     Route::post('/clients/{client}/meta', [SpendBillingController::class, 'update'])->name('clients.meta');
     Route::post('/clients/{client}/meta/sync', [SpendBillingController::class, 'sync'])->name('clients.meta.sync');
+    Route::post('/clients/{client}/meta/history', [SpendBillingController::class, 'history'])->name('clients.meta.history');
     Route::post('/clients/{client}/meta/charge', [SpendBillingController::class, 'charge'])->name('clients.meta.charge');
     Route::post('/clients/{client}/meta/top-up', [SpendBillingController::class, 'topUp'])->name('clients.meta.topup');
     Route::post('/clients/{client}/meta/adjust', [SpendBillingController::class, 'adjust'])->name('clients.meta.adjust');
@@ -236,6 +237,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/settings/pricing', [SettingsController::class, 'updatePricing'])->name('settings.pricing');
     Route::post('/settings/descriptors', [SettingsController::class, 'updateDescriptors'])->name('settings.descriptors');
     Route::post('/settings/gst', [SettingsController::class, 'updateGst'])->name('settings.gst');
+    Route::post('/settings/airwallex', [SettingsController::class, 'updateAirwallex'])->name('settings.airwallex');
+    Route::delete('/settings/airwallex', [SettingsController::class, 'disconnectAirwallex'])->name('settings.airwallex.disconnect');
     Route::post('/settings/email', [SettingsController::class, 'updateEmail'])->name('settings.email');
     Route::post('/settings/email/test', [SettingsController::class, 'testEmail'])->name('settings.email.test');
     Route::post('/settings/templates', [SettingsController::class, 'updateTemplates'])->name('settings.templates');
