@@ -62,7 +62,14 @@ class PersonalDashboardController extends Controller
         $monthTx = $transactions->filter(fn ($t) => $t->occurred_on->format('Y-m') === $thisMonth);
         $budgets = Budget::all();
 
-        $stats = $currencies->mapWithKeys(function (string $currency) use ($transactions, $ids, $savingsIds, $monthKeys, $accounts, $balances, $budgets) {
+        // This year, from 1 January: a new year starts again from zero.
+        $yearTx = MoneyTransaction::with('account:id,name,currency,scope,provider,purpose', 'toAccount:id,name,currency,scope,provider,purpose')
+            ->where(fn ($q) => $q->whereIn('account_id', $ids)->orWhereIn('to_account_id', $ids))
+            ->where('occurred_on', '>=', now()->startOfYear()->toDateString())
+            ->where(fn ($q) => $q->whereNull('category')->orWhere('category', '!=', Catalog::SADAQAH))
+            ->get();
+
+        $stats = $currencies->mapWithKeys(function (string $currency) use ($transactions, $yearTx, $ids, $savingsIds, $monthKeys, $accounts, $balances, $budgets) {
             $months = $monthKeys->map(fn ($m) => [
                 'month' => $m->format('Y-m'),
                 'label' => $m->format('M'),
@@ -75,6 +82,7 @@ class PersonalDashboardController extends Controller
                 'months' => $months->values(),
                 'current' => $current,
                 'previous' => $months->get(4),
+                'year' => $this->summary($yearTx, $ids, $savingsIds, $currency),
                 'total' => (int) $mine->sum(fn ($a) => $balances[$a->id]),
                 'savings' => (int) $mine->where('purpose', 'savings')->sum(fn ($a) => $balances[$a->id]),
                 'spending' => (int) $mine->where('purpose', '!=', 'savings')->sum(fn ($a) => $balances[$a->id]),

@@ -180,6 +180,13 @@ function dismissReminders() {
                         </div>
                     </div>
 
+                    <Link :href="route('personal.activity', { period: 'year' })" class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl bg-ink-50 px-3.5 py-2.5 text-xs transition hover:bg-ink-100">
+                        <span class="font-bold text-ink-700">{{ new Date().getFullYear() }} so far</span>
+                        <span class="text-ink-500">In <b class="tabular-nums text-emerald-600">{{ C(s.year?.in ?? 0) }}</b></span>
+                        <span class="text-ink-500">Spent <b class="tabular-nums text-ink-900">{{ C(s.year?.spent ?? 0) }}</b></span>
+                        <span class="text-ink-500">Saved <b class="tabular-nums text-teal-700">{{ C(s.year?.saved ?? 0) }}</b></span>
+                    </Link>
+
                     <div v-if="where.length" class="mt-5 space-y-3">
                         <div v-for="c in where" :key="c.key" class="flex items-center gap-3">
                             <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base" :class="cat(c.key)[1]">{{ cat(c.key)[0] }}</span>

@@ -7,12 +7,13 @@ import DatePicker from '@/Components/Ui/DatePicker.vue';
 import Segmented from '@/Components/Ui/Segmented.vue';
 import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { confirmDialog } from '@/confirm';
-import { cash, dayLabel, quickAdd } from '@/personal';
+import { cash, cat, dayLabel, quickAdd } from '@/personal';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
 
 const props = defineProps({
     month: String,
+    period: { type: Object, default: () => ({ key: 'month' }) },
     accounts: Array,
     entries: Array,
     totals: Object,
@@ -30,12 +31,44 @@ const tab = ref('entries');
 const q = ref('');
 const only = ref(null); // account id filter
 
-// ---------------------------------------------------------------- month
+// ---------------------------------------------------------------- period
+// A month starts on the 1st and a year on 1 January; the rest count back from today.
+const PERIODS = [
+    { value: 'today', label: 'Today' }, { value: 'yesterday', label: 'Yesterday' }, { value: '15d', label: '15 days' },
+    { value: 'month', label: 'Month' }, { value: '3m', label: '3 months' }, { value: '6m', label: '6 months' },
+    { value: '1y', label: '1 year' }, { value: 'year', label: 'This year' }, { value: 'custom', label: 'Custom' },
+];
+const custom = ref({ from: props.period.from, to: props.period.to });
+const fmt = (iso, withYear = true) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}) });
 const monthLabel = computed(() => new Date(`${props.month}-01T00:00:00`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }));
+const periodLabel = computed(() => {
+    const p = props.period;
+    if (p.key === 'month') return monthLabel.value;
+    if (p.key === 'today' || p.key === 'yesterday') return `${p.key === 'today' ? 'Today' : 'Yesterday'} · ${fmt(p.from)}`;
+    if (p.key === 'year') return `This year · ${p.from.slice(0, 4)}`;
+    return `${fmt(p.from, p.from.slice(0, 4) !== p.to.slice(0, 4))} – ${fmt(p.to)}`;
+});
 const isThisMonth = computed(() => props.month >= `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
-function goMonth(m) {
-    router.get(route('personal.activity'), { month: m }, { preserveState: true, preserveScroll: true, only: ['month', 'entries', 'totals'] });
+function go(query) {
+    router.get(route('personal.activity'), query, { preserveState: true, preserveScroll: true, only: ['month', 'period', 'entries', 'totals'] });
 }
+function pickPeriod(key) {
+    if (key === 'custom') {
+        custom.value = { from: props.period.from, to: props.period.to };
+        go({ period: 'custom', from: custom.value.from, to: custom.value.to });
+        return;
+    }
+    go(key === 'month' ? { period: 'month', month: props.month } : { period: key });
+}
+const applyCustom = () => custom.value.from && custom.value.to && go({ period: 'custom', from: custom.value.from, to: custom.value.to });
+function goMonth(m) {
+    go({ period: 'month', month: m });
+}
+// Where the money went in this period, per currency.
+const breakdown = computed(() => activeTotals.value.map(([c, t]) => {
+    const rows = Object.entries(t.by_category ?? {}).map(([key, amount]) => ({ key, amount, label: label(key) })).sort((a, b) => b.amount - a.amount);
+    return { c, rows, max: Math.max(1, ...rows.map((r) => r.amount)) };
+}).filter((b) => b.rows.length));
 function shift(n) {
     const d = new Date(`${props.month}-01T00:00:00`);
     d.setMonth(d.getMonth() + n);
@@ -154,8 +187,20 @@ onMounted(() => {
 
         <!-- ============================================================ Entries -->
         <template v-if="tab === 'entries'">
-            <div class="mt-4 flex flex-wrap items-center gap-2">
-                <div class="flex items-center gap-1 rounded-2xl border border-line/70 bg-surface p-1 shadow-sm">
+            <!-- Period -->
+            <div class="no-scrollbar -mx-4 mt-4 flex gap-1.5 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
+                <button v-for="p in PERIODS" :key="p.value" class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition"
+                    :class="period.key === p.value ? 'bg-teal-600 text-white shadow-sm' : 'bg-surface text-ink-600 ring-1 ring-line hover:text-ink-900'" @click="pickPeriod(p.value)">{{ p.label }}</button>
+            </div>
+            <div v-if="period.key === 'custom'" class="mt-3 flex flex-wrap items-center gap-2">
+                <DatePicker v-model="custom.from" :max="custom.to" :shortcuts="false" class="w-44" placeholder="From" />
+                <span class="text-xs text-ink-400">to</span>
+                <DatePicker v-model="custom.to" :min="custom.from" :shortcuts="false" class="w-44" placeholder="To" />
+                <button class="btn-primary btn-sm" @click="applyCustom">Show</button>
+            </div>
+
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+                <div v-if="period.key === 'month'" class="flex items-center gap-1 rounded-2xl border border-line/70 bg-surface p-1 shadow-sm">
                     <button class="icon-btn h-9 w-9" aria-label="Previous month" @click="shift(-1)"><Icon name="chevron" :size="16" class="rotate-90" /></button>
                     <DatePicker :model-value="month" month :shortcuts="false" class="w-40 [&>button]:border-0 [&>button]:shadow-none" @change="goMonth" />
                     <button class="icon-btn h-9 w-9" aria-label="Next month" :disabled="isThisMonth" @click="shift(1)"><Icon name="chevron" :size="16" class="-rotate-90" /></button>
@@ -175,13 +220,32 @@ onMounted(() => {
             <!-- Month totals -->
             <div v-if="activeTotals.length" class="mt-4 grid gap-3" :class="activeTotals.length > 1 ? 'sm:grid-cols-2' : ''">
                 <div v-for="[c, s] in activeTotals" :key="c" class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm">
-                    <div class="text-[11px] font-bold uppercase tracking-[0.14em] text-ink-400">{{ monthLabel }} · {{ c }}</div>
+                    <div class="text-[11px] font-bold uppercase tracking-[0.14em] text-ink-400">{{ periodLabel }} · {{ c }}</div>
                     <div class="mt-2 grid grid-cols-3 gap-2">
                         <div><div class="text-[11px] text-ink-500">Came in</div><div class="font-bold tabular-nums text-emerald-600">{{ cash(s.in, c) }}</div></div>
                         <div><div class="text-[11px] text-ink-500">Spent</div><div class="font-bold tabular-nums text-ink-900">{{ cash(s.spent, c) }}</div></div>
                         <div><div class="text-[11px] text-ink-500">Saved</div><div class="font-bold tabular-nums text-teal-700">{{ cash(s.saved, c) }}</div></div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Where it went -->
+            <div v-if="breakdown.length && !q && !only" class="mt-4 grid gap-3" :class="breakdown.length > 1 ? 'sm:grid-cols-2' : ''">
+                <section v-for="b in breakdown" :key="b.c" class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm">
+                    <div class="text-[11px] font-bold uppercase tracking-[0.14em] text-ink-400">Where it went · {{ b.c }}</div>
+                    <div class="mt-3 space-y-2.5">
+                        <div v-for="r in b.rows" :key="r.key" class="flex items-center gap-3">
+                            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm" :class="cat(r.key)[1]">{{ cat(r.key)[0] }}</span>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex justify-between gap-2 text-sm">
+                                    <span class="truncate text-ink-700">{{ r.label }}</span>
+                                    <span class="font-bold tabular-nums text-ink-900">{{ cash(r.amount, b.c) }}</span>
+                                </div>
+                                <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-ink-100"><div class="h-full rounded-full bg-gradient-to-r from-teal-400 to-brand-500" :style="{ width: `${(r.amount / b.max) * 100}%` }"></div></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
 
             <div class="mt-4 space-y-4">
@@ -194,7 +258,7 @@ onMounted(() => {
                 </section>
                 <div v-if="!days.length" class="rounded-3xl border border-dashed border-ink-200 bg-surface/60 px-6 py-12 text-center">
                     <div class="text-4xl">🧾</div>
-                    <p class="mt-3 text-sm text-ink-500">{{ q || only ? 'Nothing matches.' : `No entries in ${monthLabel}.` }}</p>
+                    <p class="mt-3 text-sm text-ink-500">{{ q || only ? 'Nothing matches.' : `No entries in ${periodLabel}.` }}</p>
                     <button v-if="!q && !only" class="btn-primary mt-4" @click="quickAdd()"><Icon name="plus" :size="16" /> Add entry</button>
                 </div>
             </div>

@@ -143,6 +143,31 @@ class PersonalAutomationTest extends TestCase
         $this->assertStringContainsString('Today: ৳120.00 spent', AppNotification::latest('id')->first()->body);
     }
 
+    public function test_activity_shows_any_period_and_the_home_shows_this_year(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-25 12:00'));
+        $add = fn (string $on, int $amount) => $this->post('/money', ['kind' => 'expense', 'account_id' => $this->bkash->id, 'amount' => $amount, 'category' => 'food', 'occurred_on' => $on]);
+        $add('2026-10-25', 100);
+        $add('2026-10-24', 200);
+        $add('2026-10-05', 400);
+        $add('2026-06-01', 800);
+        $add('2025-12-20', 1600);
+
+        $spent = fn (array $query) => $this->get('/personal/activity?'.http_build_query($query))->viewData('page')['props']['totals']['BDT']['spent'];
+        $this->assertSame(10000, $spent(['period' => 'today']));
+        $this->assertSame(20000, $spent(['period' => 'yesterday']));
+        $this->assertSame(30000, $spent(['period' => '15d']));
+        $this->assertSame(70000, $spent(['period' => 'month']));
+        $this->assertSame(70000, $spent(['period' => '3m']));
+        $this->assertSame(150000, $spent(['period' => '6m']));
+        $this->assertSame(310000, $spent(['period' => '1y']));
+        $this->assertSame(150000, $spent(['period' => 'year']), 'a new year starts from 1 January');
+        $this->assertSame(240000, $spent(['period' => 'custom', 'from' => '2025-12-01', 'to' => '2026-06-30']));
+        $this->assertSame(160000, $spent(['period' => 'month', 'month' => '2025-12']));
+
+        $this->get('/personal')->assertInertia(fn ($page) => $page->where('stats.BDT.year.spent', 150000)->where('stats.BDT.current.spent', 70000));
+    }
+
     public function test_sadaqah_only_lowers_the_balance_and_leaves_no_record(): void
     {
         // Sent by bKash: the SMS came in as an entry; I mark it sadaqah.
