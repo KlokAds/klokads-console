@@ -7,6 +7,7 @@ use App\Models\MoneyTransaction;
 use App\Models\Setting;
 use App\Support\Catalog;
 use App\Support\Ledger;
+use App\Support\People;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -73,7 +74,7 @@ class PersonalActivityController extends Controller
                 'bank_balance_at' => $a->bank_balance_at?->toIso8601String(),
             ])->values(),
             'entries' => $transactions->map(fn (MoneyTransaction $t) => [
-                ...$t->only('id', 'kind', 'account_id', 'to_account_id', 'amount', 'to_amount', 'fee', 'category', 'counterparty', 'description', 'bill_id'),
+                ...$t->only('id', 'kind', 'account_id', 'to_account_id', 'amount', 'to_amount', 'fee', 'category', 'counterparty', 'for_whom', 'description', 'bill_id'),
                 'occurred_on' => $t->occurred_on->toDateString(),
                 'account' => $t->account?->only('id', 'name', 'currency', 'provider'),
                 'to_account' => $t->toAccount?->only('id', 'name', 'currency', 'provider'),
@@ -81,6 +82,12 @@ class PersonalActivityController extends Controller
                 'auto' => str_starts_with((string) $t->description, 'Auto ·'),
             ])->values(),
             'totals' => $currencies->mapWithKeys(fn ($c) => [$c => $dashboard->summary($transactions, $ids, $savingsIds, $c)]),
+            // What each person cost in this period (spending from my accounts, fee included).
+            'byPerson' => $transactions->where('kind', 'expense')->whereNotNull('for_whom')->filter(fn ($t) => in_array($t->account_id, $ids, true))
+                ->groupBy(fn ($t) => strtoupper($t->account->currency).'|'.$t->for_whom)
+                ->map(fn ($list, $key) => ['currency' => explode('|', $key)[0], 'person' => explode('|', $key, 2)[1], 'amount' => (int) $list->sum(fn ($t) => $t->amount + $t->fee), 'count' => $list->count()])
+                ->sortByDesc('amount')->values(),
+            'people' => People::all(),
             'categories' => Catalog::PERSONAL_CATEGORIES + Catalog::INCOME_CATEGORIES['personal'] + Catalog::LOAN_CATEGORIES,
             'providers' => Catalog::PROVIDERS,
             'kinds' => Catalog::options(Catalog::ACCOUNT_KINDS),

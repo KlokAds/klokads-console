@@ -16,6 +16,7 @@ const meta = computed(() => {
     const t = props.entry;
     const parts = [];
     if (t.kind !== 'transfer' && t.counterparty) parts.push(label(t.category));
+    if (t.for_whom) parts.push(`for ${t.for_whom}`);
     if (props.showAccount && t.kind !== 'transfer') parts.push(t.account?.name);
     if (t.kind === 'transfer' && t.to_amount && t.account?.currency !== t.to_account?.currency) parts.push('converted');
     if (t.description && !t.auto) parts.push(t.description);

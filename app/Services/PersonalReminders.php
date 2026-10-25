@@ -63,11 +63,14 @@ class PersonalReminders
             ->map(fn ($list, $currency) => Notify::money((int) $list->sum(fn ($t) => $t->amount + $t->fee), $currency))->implode(' · ');
         $url = route('personal.activity', ['new' => 1]);
         $sent = 0;
+        // Bank / bKash payments that came in by themselves and still say nothing about what for.
+        $unsure = $entries->filter(fn ($t) => $t->kind === 'expense' && str_starts_with((string) $t->description, 'Auto ·') && $t->category === 'other' && ! $t->for_whom)->count();
+        $ask = $unsure ? " {$unsure} automatic payment".($unsure === 1 ? '' : 's').' still need "what for / for whom" — tap one in Activity.' : '';
 
         // The last one, an hour before midnight: the day's total, and a last call.
         if ($time >= self::SPEND_LAST) {
             return (int) $this->notify->once("spend:{$today}:last", 'reminder', '🌙 Day ends in an hour — anything not written down?',
-                ($spent ? "Today: {$spent} spent." : 'Nothing written down today.').' Cash, rickshaw, tea… tap to add.', $url);
+                ($spent ? "Today: {$spent} spent." : 'Nothing written down today.').' Cash, rickshaw, tea… tap to add.'.$ask, $url);
         }
 
         // During the day: only the latest check that is due, and not if I added something by hand in the last 2 hours.
@@ -83,7 +86,7 @@ class PersonalReminders
         }
         $label = ['10:00' => '☀️ Morning', '15:00' => '🌤️ Afternoon', '20:00' => '🌆 Evening'][$due] ?? '🧾';
         $sent += (int) $this->notify->once("spend:{$today}:{$due}", 'reminder', "{$label} — spent anything?",
-            ($spent ? "So far today: {$spent}." : 'Nothing written down yet today.').' Tap to add it now.', $url);
+            ($spent ? "So far today: {$spent}." : 'Nothing written down yet today.').' Tap to add it now.'.$ask, $url);
 
         return $sent;
     }

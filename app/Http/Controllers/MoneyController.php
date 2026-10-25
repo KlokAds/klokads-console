@@ -225,6 +225,7 @@ class MoneyController extends Controller
             'base_amount' => ['nullable', 'numeric', 'min:0'],
             'category' => ['nullable', 'string', 'max:40'],
             'counterparty' => ['nullable', 'string', 'max:150'],
+            'for_whom' => ['nullable', 'string', 'max:40'],
             'description' => ['nullable', 'string', 'max:500'],
             'occurred_on' => ['required', 'date'],
         ], ['to_account_id.different' => 'Pick a different account to move money to.']);

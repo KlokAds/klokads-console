@@ -123,7 +123,7 @@ class AutoEntries
             ]);
             $message->update(['status' => 'added', 'account_id' => $account->id, 'money_transaction_id' => $tx->id, 'note' => null]);
             if (! $this->pairOwnTransfer($message, $tx)) {
-                $this->tellEntry($account, $p);
+                $this->tellEntry($account, $p, null, $tx->id);
             }
         } catch (Throwable $e) {
             $message->update(['status' => 'review', 'note' => mb_substr($e->getMessage(), 0, 250)]);
@@ -259,17 +259,20 @@ class AutoEntries
     }
 
     /** "💰 UCB ••4567 +৳20,000 · From X · Balance ৳45,500" */
-    private function tellEntry(Account $account, array $p, ?string $extra = null): void
+    private function tellEntry(Account $account, array $p, ?string $extra = null, ?int $txId = null): void
     {
         $in = $p['direction'] === 'in';
+        // My own money out: tapping it asks what it was for and for whom.
+        $ask = ! $in && $account->scope === 'personal' && ! $extra ? 'Tap: what for, for whom?' : null;
         $name = ($account->scope === 'business' ? '💼 ' : '').$account->name.($account->last4 && ! str_contains($account->name, $account->last4) ? " ••{$account->last4}" : '');
         $parts = array_filter([
             $p['counterparty'] ? ($in ? 'From ' : 'To ').$p['counterparty'] : null,
             $extra,
             'Balance '.Notify::money(Ledger::balance($account->fresh()), $account->currency),
+            $ask,
         ]);
         $this->notify->send($in ? 'credit' : 'debit', ($in ? '💰 ' : '💸 ').$name.' '.($in ? '+' : '−').Notify::money($p['amount'], $account->currency),
-            implode(' · ', $parts), route('personal.activity'), 'klok-money');
+            implode(' · ', $parts), route('personal.activity', array_filter(['entry' => $txId])), 'klok-money');
     }
 
     /**

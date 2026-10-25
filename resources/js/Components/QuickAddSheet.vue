@@ -22,7 +22,7 @@ const showMore = ref(false);
 let loadedAt = 0;
 
 const today = () => new Date().toISOString().slice(0, 10);
-const blank = () => ({ kind: 'expense', account_id: '', to_account_id: '', amount: '', to_amount: '', fee: '', category: '', counterparty: '', description: '', occurred_on: today() });
+const blank = () => ({ kind: 'expense', account_id: '', to_account_id: '', amount: '', to_amount: '', fee: '', category: '', counterparty: '', for_whom: '', description: '', occurred_on: today() });
 // The first category of a kind is the default (the list comes from the server).
 const firstCategory = (kind) => data.value?.categories?.[kind === 'income' ? 'income' : 'expense']?.[0]?.value ?? '';
 const f = reactive(blank());
@@ -35,6 +35,23 @@ const from = computed(() => allAccounts.value.find((a) => a.id === Number(f.acco
 const to = computed(() => allAccounts.value.find((a) => a.id === Number(f.to_account_id)));
 const converting = computed(() => f.kind === 'transfer' && from.value && to.value && from.value.currency !== to.value.currency);
 const categories = computed(() => data.value?.categories?.[f.kind === 'income' ? 'income' : 'expense'] ?? []);
+// For whom (Ma, Bou, Shoshur…): my own list, added to right here.
+const people = computed(() => data.value?.people ?? []);
+const addingPerson = ref(false);
+const newPerson = ref('');
+async function addPerson() {
+    const name = newPerson.value.trim();
+    addingPerson.value = false;
+    newPerson.value = '';
+    if (!name) return;
+    if (!people.value.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
+        const list = [...people.value, { name, emoji: '🙂' }];
+        data.value.people = list;
+        const xsrf = decodeURIComponent(document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/)?.[1] ?? '');
+        fetch(route('personal.people'), { method: 'PUT', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-XSRF-TOKEN': xsrf }, credentials: 'same-origin', body: JSON.stringify({ people: list }) }).catch(() => {});
+    }
+    f.for_whom = name;
+}
 const payees = computed(() => (data.value?.payees ?? []).filter((p) => p.kind === f.kind).map((p) => p.name));
 const symbol = computed(() => ({ SGD: 'S$', USD: '$' })[from.value?.currency] ?? '৳');
 const canSave = computed(() => Number(f.amount) > 0 && f.account_id && (f.kind !== 'transfer' || (f.to_account_id && (!converting.value || Number(f.to_amount) > 0))));
@@ -65,7 +82,7 @@ async function show(detail = {}) {
         Object.assign(f, {
             kind: e.kind, account_id: e.account_id, to_account_id: e.to_account_id ?? '', amount: (e.amount / 100).toString(),
             to_amount: e.to_amount ? (e.to_amount / 100).toString() : '', fee: e.fee ? (e.fee / 100).toString() : '',
-            category: e.category ?? '', counterparty: e.counterparty ?? '', description: e.description ?? '', occurred_on: e.occurred_on,
+            category: e.category ?? '', counterparty: e.counterparty ?? '', for_whom: e.for_whom ?? '', description: e.description ?? '', occurred_on: e.occurred_on,
         });
         showMore.value = !!(e.fee || e.description);
     } else {
@@ -93,6 +110,7 @@ function payload() {
         kind: f.kind, account_id: f.account_id, to_account_id: f.kind === 'transfer' ? f.to_account_id : null,
         amount: f.amount, to_amount: converting.value ? f.to_amount : null, fee: f.fee || null,
         category: f.kind === 'transfer' ? null : f.category, counterparty: f.kind === 'transfer' ? null : f.counterparty || null,
+        for_whom: f.kind === 'expense' ? f.for_whom || null : null,
         description: f.description || null, occurred_on: f.occurred_on,
     };
 }
@@ -124,7 +142,7 @@ function summary() {
     const cents = Math.round((parseFloat(String(f.amount).replace(/,/g, '')) || 0) * 100);
     const label = f.kind === 'transfer' ? `to ${accounts.value.find((a) => a.id === Number(f.to_account_id))?.name ?? ''}` : categories.value.find((c) => c.value === f.category)?.label;
     const where = (f.kind === 'income' ? 'into ' : 'from ') + (from.value?.name ?? '');
-    return [cash(cents, from.value?.currency), f.counterparty || label, f.kind === 'transfer' ? `from ${from.value?.name ?? ''}` : where].filter(Boolean).join(' · ');
+    return [cash(cents, from.value?.currency), f.counterparty || label, f.kind === 'expense' && f.for_whom ? `for ${f.for_whom}` : null, f.kind === 'transfer' ? `from ${from.value?.name ?? ''}` : where].filter(Boolean).join(' · ');
 }
 
 function afterSave(again) {
@@ -245,6 +263,18 @@ onUnmounted(() => {
                                         <span class="flex h-10 w-10 items-center justify-center rounded-xl text-xl" :class="cat(c.value)[1]">{{ cat(c.value)[0] }}</span>
                                         <span class="line-clamp-2 text-[11px] font-semibold leading-tight text-ink-700">{{ c.label }}</span>
                                     </button>
+                                </div>
+                            </template>
+
+                            <!-- For whom -->
+                            <template v-if="f.kind === 'expense' && f.category !== 'sadaqah'">
+                                <div class="mt-5 mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">For whom <span class="font-normal normal-case tracking-normal">(optional)</span></div>
+                                <div class="flex flex-wrap gap-1.5">
+                                    <button type="button" class="rounded-full px-3 py-1.5 text-sm font-semibold transition" :class="!f.for_whom ? 'bg-ink-900 text-white' : 'bg-ink-50 text-ink-700 hover:bg-ink-100'" @click="f.for_whom = ''">🙋 Me</button>
+                                    <button v-for="p in people" :key="p.name" type="button" class="rounded-full px-3 py-1.5 text-sm font-semibold transition"
+                                        :class="f.for_whom === p.name ? 'bg-teal-600 text-white' : 'bg-ink-50 text-ink-700 hover:bg-ink-100'" @click="f.for_whom = f.for_whom === p.name ? '' : p.name">{{ p.emoji }} {{ p.name }}</button>
+                                    <input v-if="addingPerson" v-model="newPerson" class="input w-32 py-1.5 text-sm" placeholder="Name" autofocus @keydown.enter.prevent="addPerson" @blur="addPerson" />
+                                    <button v-else type="button" class="rounded-full border border-dashed border-ink-200 px-3 py-1.5 text-sm font-semibold text-ink-500 hover:border-teal-400 hover:text-teal-700" @click="addingPerson = true">+ Person</button>
                                 </div>
                             </template>
 

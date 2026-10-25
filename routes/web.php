@@ -111,6 +111,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/app/latest', [AppReleaseController::class, 'latest'])->middleware('throttle:30,1')->name('app.latest');
     Route::get('/personal/activity', PersonalActivityController::class)->middleware('personal')->name('personal.activity');
     Route::get('/personal/quick', PersonalQuickController::class)->middleware('personal')->name('personal.quick');
+    Route::put('/personal/people', [PersonalQuickController::class, 'people'])->middleware('personal')->name('personal.people');
     Route::post('/personal/budgets', [PlanningController::class, 'saveBudgets'])->middleware('personal')->name('personal.budgets');
     Route::post('/personal/goals', [PlanningController::class, 'storeGoal'])->middleware('personal')->name('personal.goals.store');
     Route::put('/personal/goals/{goal}', [PlanningController::class, 'updateGoal'])->middleware('personal')->name('personal.goals.update');

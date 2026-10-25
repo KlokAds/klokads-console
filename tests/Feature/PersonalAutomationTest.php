@@ -168,6 +168,26 @@ class PersonalAutomationTest extends TestCase
         $this->get('/personal')->assertInertia(fn ($page) => $page->where('stats.BDT.year.spent', 150000)->where('stats.BDT.current.spent', 70000));
     }
 
+    public function test_spending_says_for_whom_and_each_person_has_a_total(): void
+    {
+        $cash = Account::create(['name' => 'Cash in hand', 'scope' => 'personal', 'kind' => 'cash', 'provider' => 'cash', 'currency' => 'BDT', 'opening_balance' => 300000]);
+
+        // Paid to Mithu, but for Ma; makeup for Bou from cash; Shali 500 from cash.
+        $this->post('/money', ['kind' => 'expense', 'account_id' => $this->bkash->id, 'amount' => 2000, 'category' => 'family', 'counterparty' => 'Mithu', 'for_whom' => 'Ma', 'occurred_on' => now()->toDateString()])->assertSessionHasNoErrors();
+        $this->post('/money', ['kind' => 'expense', 'account_id' => $cash->id, 'amount' => 1200, 'category' => 'shopping', 'for_whom' => 'Bou', 'occurred_on' => now()->toDateString()]);
+        $this->post('/money', ['kind' => 'expense', 'account_id' => $cash->id, 'amount' => 500, 'category' => 'family', 'for_whom' => 'Shali', 'occurred_on' => now()->toDateString()]);
+
+        $this->get('/personal/activity')->assertInertia(fn ($page) => $page
+            ->where('byPerson.0.person', 'Ma')->where('byPerson.0.amount', 200000)
+            ->where('byPerson.1.person', 'Bou')->where('byPerson.2.amount', 50000)
+            ->where('entries.0.for_whom', 'Shali'));
+        $this->assertSame(300000 - 120000 - 50000, Ledger::balance($cash));
+
+        // The family list is mine to change.
+        $this->putJson('/personal/people', ['people' => [['name' => 'Ma', 'emoji' => '👩‍🦳'], ['name' => 'Nana', 'emoji' => '👴']]])->assertOk();
+        $this->getJson('/personal/quick')->assertJsonPath('people.1.name', 'Nana');
+    }
+
     public function test_sadaqah_only_lowers_the_balance_and_leaves_no_record(): void
     {
         // Sent by bKash: the SMS came in as an entry; I mark it sadaqah.

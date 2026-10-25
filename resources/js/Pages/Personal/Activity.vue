@@ -25,6 +25,8 @@ const props = defineProps({
     guides: Object,
     familyGuide: Object,
     business: { type: Array, default: () => [] },
+    byPerson: { type: Array, default: () => [] },
+    people: { type: Array, default: () => [] },
 });
 
 const tab = ref('entries');
@@ -82,7 +84,7 @@ const shown = computed(() => {
     return props.entries.filter((t) => {
         if (only.value && t.account_id !== only.value && t.to_account_id !== only.value) return false;
         if (!needle) return true;
-        return [t.counterparty, t.description, label(t.category), t.account?.name, t.to_account?.name, String(t.amount / 100)].some((v) => v && String(v).toLowerCase().includes(needle));
+        return [t.counterparty, t.for_whom, t.description, label(t.category), t.account?.name, t.to_account?.name, String(t.amount / 100)].some((v) => v && String(v).toLowerCase().includes(needle));
     });
 });
 // Day groups with what went out that day, per currency.
@@ -176,6 +178,9 @@ onMounted(() => {
         openAccount();
     }
     if (params.get('new')) quickAdd();
+    // Opened from a payment notification: straight into that entry (what for, for whom).
+    const entry = props.entries.find((e) => String(e.id) === params.get('entry'));
+    if (entry) quickAdd({ entry });
 });
 </script>
 
@@ -228,6 +233,21 @@ onMounted(() => {
                     </div>
                 </div>
             </div>
+
+            <!-- For whom -->
+            <section v-if="byPerson.length && !q && !only" class="mt-4 rounded-3xl border border-line/70 bg-surface p-4 shadow-sm">
+                <div class="text-[11px] font-bold uppercase tracking-[0.14em] text-ink-400">For whom · {{ periodLabel }}</div>
+                <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                    <button v-for="r in byPerson" :key="r.currency + r.person" class="flex items-center gap-3 rounded-2xl bg-ink-50/70 px-3 py-2.5 text-left transition hover:bg-ink-50" @click="q = r.person">
+                        <span class="text-xl">{{ people.find((p) => p.name === r.person)?.emoji ?? '🙂' }}</span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-sm font-semibold text-ink-900">{{ r.person }}</span>
+                            <span class="block text-[11px] text-ink-500">{{ r.count }} entr{{ r.count === 1 ? 'y' : 'ies' }}</span>
+                        </span>
+                        <span class="font-bold tabular-nums text-ink-900">{{ cash(r.amount, r.currency) }}</span>
+                    </button>
+                </div>
+            </section>
 
             <!-- Where it went -->
             <div v-if="breakdown.length && !q && !only" class="mt-4 grid gap-3" :class="breakdown.length > 1 ? 'sm:grid-cols-2' : ''">

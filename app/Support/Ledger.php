@@ -92,6 +92,7 @@ class Ledger
             $tx->fill($data);
             if ($tx->category === Catalog::SADAQAH) {
                 $tx->counterparty = null;
+                $tx->for_whom = null;
                 $tx->description = null;
             }
             $from = Account::findOrFail($tx->account_id);

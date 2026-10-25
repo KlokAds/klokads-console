@@ -122,7 +122,7 @@ class PersonalDashboardController extends Controller
                 'overdue' => ! $paidBills->has($b->id) && $b->day < now()->day,
             ]),
             'recent' => $transactions->take(8)->map(fn (MoneyTransaction $t) => [
-                ...$t->only('id', 'kind', 'account_id', 'to_account_id', 'amount', 'to_amount', 'fee', 'category', 'counterparty', 'description'),
+                ...$t->only('id', 'kind', 'account_id', 'to_account_id', 'amount', 'to_amount', 'fee', 'category', 'counterparty', 'for_whom', 'description'),
                 'occurred_on' => $t->occurred_on->toDateString(),
                 'account' => $t->account,
                 'to_account' => $t->toAccount,
