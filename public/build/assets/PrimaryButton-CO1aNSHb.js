@@ -1,1 +1,0 @@
-import{E as e,O as t,v as n}from"./app-Ce_s5eqK.js";import{t as r}from"./_plugin-vue_export-helper-BDNMzG2s.js";var i={},a={class:`btn-primary`};function o(r,i){return e(),n(`button`,a,[t(r.$slots,`default`)])}var s=r(i,[[`render`,o]]);export{s as t};

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AppReleaseController;
 use App\Http\Controllers\CashflowController;
+use App\Http\Controllers\ChargeRequestController;
 use App\Http\Controllers\ClientCardController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
@@ -184,6 +185,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/clients/{client}/meta', [SpendBillingController::class, 'update'])->name('clients.meta');
     Route::post('/clients/{client}/meta/sync', [SpendBillingController::class, 'sync'])->name('clients.meta.sync');
     Route::post('/clients/{client}/meta/history', [SpendBillingController::class, 'history'])->name('clients.meta.history');
+    Route::get('/charges/{charge}', [ChargeRequestController::class, 'show'])->name('charges.show');
+    Route::post('/charges/{charge}/approve', [ChargeRequestController::class, 'approve'])->name('charges.approve');
+    Route::post('/charges/{charge}/decline', [ChargeRequestController::class, 'decline'])->name('charges.decline');
     Route::post('/clients/{client}/meta/charge', [SpendBillingController::class, 'charge'])->name('clients.meta.charge');
     Route::post('/clients/{client}/meta/top-up', [SpendBillingController::class, 'topUp'])->name('clients.meta.topup');
     Route::post('/clients/{client}/meta/adjust', [SpendBillingController::class, 'adjust'])->name('clients.meta.adjust');

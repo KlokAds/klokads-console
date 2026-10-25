@@ -3,7 +3,7 @@ import Icon from '@/Components/Icon.vue';
 import Modal from '@/Components/Modal.vue';
 import Select from '@/Components/Ui/Select.vue';
 import { date, money } from '@/money';
-import { useForm } from '@inertiajs/vue3';
+import { Link, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 /**
@@ -38,6 +38,7 @@ const form = useForm({
     meta_ad_account_id: s.value.meta_ad_account_id ?? '',
     meta_campaign_filter: s.value.meta_campaign_filter ?? '',
     spend_billing: s.value.spend_billing,
+    approve_charges: s.value.approve_charges ?? true,
     spend_threshold: (s.value.spend_threshold / 100).toFixed(0),
     billing_mode: s.value.billing_mode ?? 'prepaid',
     prepaid_buffer_days: s.value.prepaid_buffer_days ?? 10,
@@ -152,12 +153,16 @@ const charge = () => chargeForm.post(route('clients.meta.charge', props.client.i
                 <label class="flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 sm:col-span-2" :class="form.spend_billing ? 'border-brand-300 bg-brand-50/60' : 'border-line bg-surface'">
                     <input v-model="form.spend_billing" type="checkbox" class="checkbox mt-0.5" />
                     <span v-if="form.billing_mode === 'prepaid'" class="text-sm text-ink-700">
-                        <b>Run it automatically:</b> each finished day's spend + {{ commissionRate }}% comes out of the balance, and when it would last less than {{ form.prepaid_buffer_days }} days the default card is charged for {{ form.prepaid_topup_days }} days' worth (at least {{ cur.toUpperCase() }} {{ form.prepaid_min_topup }}) + card fee. You get a notification each time.
+                        <b>Run it automatically:</b> each finished day's spend + {{ commissionRate }}% comes out of the balance, and when it would last less than {{ form.prepaid_buffer_days }} days a top-up for {{ form.prepaid_topup_days }} days' worth (at least {{ cur.toUpperCase() }} {{ form.prepaid_min_topup }}) + card fee is {{ form.approve_charges ? 'drafted for your approval' : 'charged to the default card' }}. You get a notification each time.
                     </span>
                     <span v-else class="text-sm text-ink-700">
                         <b>Auto-charge the default card</b> each time unbilled spend reaches {{ cur.toUpperCase() }} {{ form.spend_threshold || '—' }}:
                         spend + {{ commissionRate }}% commission + card fee. Counts from today; finished days only. You get a phone notification for every charge.
                     </span>
+                </label>
+                <label v-if="form.billing_mode === 'prepaid'" class="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface p-3.5 sm:col-span-2">
+                    <input v-model="form.approve_charges" type="checkbox" class="checkbox mt-0.5" />
+                    <span class="text-sm text-ink-700"><b>Ask me before charging:</b> the invoice is drafted and you get a notification; you can change the amount or text, and the card is charged only when you approve.</span>
                 </label>
                 <div class="flex justify-end gap-2 sm:col-span-2">
                     <button type="button" class="btn-secondary btn-sm" @click="showSettings = false">Cancel</button>
@@ -170,6 +175,13 @@ const charge = () => chargeForm.post(route('clients.meta.charge', props.client.i
             </div>
 
             <template v-if="s.meta_ad_account_id">
+                <!-- A top-up waiting for approval -->
+                <Link v-if="isPrepaid && s.waiting" :href="route('charges.show', s.waiting.id)"
+                    class="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-5 py-3.5 text-sm font-semibold text-amber-800 sm:px-6">
+                    <span>🧾 Top-up of {{ money(s.waiting.amount, s.waiting.currency) }} is waiting for your approval</span>
+                    <span class="shrink-0">Review →</span>
+                </Link>
+
                 <!-- Prepaid balance -->
                 <div v-if="isPrepaid" class="border-b border-line p-5 sm:p-6">
                     <div class="flex flex-wrap items-end justify-between gap-3">

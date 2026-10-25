@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ChargeRequest;
 use App\Models\Client;
 use App\Models\ClientBalanceEntry;
 use App\Models\Expense;
@@ -120,7 +121,7 @@ class PrepaidBalance
     }
 
     /** Charge a top-up when the balance is below the backup. Returns the paid invoice, if any. */
-    public function topUpIfLow(Client $client, ?int $amount = null): ?Invoice
+    public function topUpIfLow(Client $client, ?int $amount = null, ?string $description = null): ?Invoice
     {
         $manual = $amount !== null;
         $status = $this->status($client);
@@ -137,12 +138,19 @@ class PrepaidBalance
             return $this->billing->failed($client, 'Top-up of '.$this->money($amount, $client).' is unusually large — check the spend and use "Top up now".');
         }
 
+        // Approve first: draft it and ask; the card is charged from the approval page.
+        if (! $manual && $client->approve_charges) {
+            $this->draft($client, $amount, $status);
+
+            return null;
+        }
+
         // Client pays the card fee on top, so the full amount lands in their balance.
         $budget = ['mode' => 'topup', 'commission' => 0, 'ad_budget' => $amount] + Pricing::forClient($client)->breakdown($amount);
         $client->update(['spend_attempted_at' => now()]);
 
         try {
-            $invoice = $this->stripe->chargeNow($client, $budget['charge'], 'Ad balance top-up', 'meta_ads', null, $budget);
+            $invoice = $this->stripe->chargeNow($client, $budget['charge'], $description ?: 'Ad balance top-up', 'meta_ads', null, $budget);
         } catch (Throwable $e) {
             return $this->billing->failed($client, 'Top-up charge failed: '.$e->getMessage());
         }
@@ -158,6 +166,44 @@ class PrepaidBalance
             $this->money($amount, $client).' charged to their card — balance '.$this->money($after['balance'], $client).($after['days_left'] !== null ? ", about {$after['days_left']} days of ads" : '').'. Stripe pays it out to Airwallex in ~7 days.');
 
         return $invoice->fresh();
+    }
+
+    /**
+     * A top-up waiting for approval: one at a time per client; while it waits, a reminder once a day.
+     *
+     * @param  array<string, mixed>  $status
+     */
+    public function draft(Client $client, int $amount, array $status): ChargeRequest
+    {
+        $notify = app(Notify::class);
+        $waiting = ChargeRequest::where('client_id', $client->id)->where('status', 'pending')->first();
+        if ($waiting) {
+            if ($waiting->created_at->lt(now()->subHours(20))) {
+                $notify->once("charge-wait:{$waiting->id}:".now()->toDateString(), 'billing', '🧾 Still waiting: '.$this->billing->name($client).' top-up '.$this->money($waiting->amount, $client),
+                    'Balance '.$this->money($status['balance'], $client).($status['days_left'] !== null ? " ≈ {$status['days_left']} days of ads" : '').'. Approve to charge their card.', route('charges.show', $waiting));
+            }
+
+            return $waiting;
+        }
+        // Declined: ask again tomorrow, not every hour.
+        $declined = ChargeRequest::where('client_id', $client->id)->where('status', 'declined')->where('decided_at', '>', now()->subHours(20))->latest('id')->first();
+        if ($declined) {
+            return $declined;
+        }
+
+        $request = ChargeRequest::create([
+            'client_id' => $client->id, 'amount' => $amount, 'suggested' => $amount,
+            'currency' => strtoupper($this->stripe->currencyFor($client)),
+            'description' => 'Meta ads balance top-up · '.now()->format('j M Y'),
+            'reason' => array_intersect_key($status, array_flip(['balance', 'daily', 'days_left', 'buffer'])),
+        ]);
+        $charge = Pricing::forClient($client)->breakdown($amount)['charge'];
+        $notify->send('billing', '🧾 Approve top-up: '.$this->billing->name($client).' '.$this->money($amount, $client),
+            'Balance '.$this->money($status['balance'], $client).($status['days_left'] !== null ? " lasts ≈ {$status['days_left']} days" : '').
+            ' at '.$this->money($status['daily'], $client).'/day. Their card is charged '.$this->money($charge, $client).' (with the card fee) once you approve — you can change it first.',
+            route('charges.show', $request), 'klok-approve');
+
+        return $request;
     }
 
     /** Money received another way (bank transfer) or a correction. */

@@ -34,7 +34,7 @@ class PrepaidBalanceTest extends TestCase
         Setting::put('commission_rate', '20');
         $this->client = Client::create([
             'name' => 'Hor', 'company' => 'Tasfia Engineering', 'email' => 'hor@example.sg', 'meta_ad_account_id' => 'act_111',
-            'spend_billing' => true, 'billing_mode' => 'prepaid', 'prepaid_buffer_days' => 10, 'prepaid_topup_days' => 21,
+            'spend_billing' => true, 'approve_charges' => false, 'billing_mode' => 'prepaid', 'prepaid_buffer_days' => 10, 'prepaid_topup_days' => 21,
             'prepaid_min_topup' => 50000, 'spend_billed_until' => '2026-10-12',
         ]);
 

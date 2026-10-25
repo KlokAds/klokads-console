@@ -153,7 +153,7 @@ class AdMoneyFlowTest extends TestCase
 
     public function test_a_bad_airwallex_key_is_not_kept(): void
     {
-        Http::fake(['api.airwallex.com/*' => Http::response(['message' => 'Unauthorized'], 401)]);
+        Http::fake(['*airwallex.com/*' => Http::response(['message' => 'Unauthorized'], 401)]);
 
         $this->post('/settings/airwallex', ['client_id' => 'cid', 'api_key' => 'wrong'])->assertSessionHas('error');
         $this->assertNull(Setting::get('airwallex_api_key'));

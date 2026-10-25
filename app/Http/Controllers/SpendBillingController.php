@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ChargeRequest;
 use App\Models\Client;
 use App\Models\ClientBalanceEntry;
 use App\Models\MetaSpendDay;
@@ -54,6 +55,7 @@ class SpendBillingController extends Controller
             'meta_ad_account_id' => ['nullable', 'string', 'max:40', 'regex:/^(act_)?\d+$/'],
             'meta_campaign_filter' => ['nullable', 'string', 'max:120'],
             'spend_billing' => ['boolean'],
+            'approve_charges' => ['boolean'],
             'spend_threshold' => ['required', 'numeric', 'min:50', 'max:100000'],
             'billing_mode' => ['nullable', 'in:prepaid,postpaid'],
             'prepaid_buffer_days' => ['nullable', 'integer', 'between:1,60'],
@@ -69,6 +71,7 @@ class SpendBillingController extends Controller
             'meta_ad_account_id' => filled($data['meta_ad_account_id'] ?? null) ? MetaAds::act($data['meta_ad_account_id']) : null,
             'meta_campaign_filter' => $data['meta_campaign_filter'] ?? null,
             'spend_billing' => (bool) ($data['spend_billing'] ?? false),
+            'approve_charges' => (bool) ($data['approve_charges'] ?? $client->approve_charges),
             'spend_threshold' => $this->toCents($data['spend_threshold']),
             // Fields left out keep their current values.
             'billing_mode' => $data['billing_mode'] ?? $client->billing_mode,
@@ -172,6 +175,8 @@ class SpendBillingController extends Controller
                 'spend_threshold' => $client->spend_threshold,
                 'billed_until' => $client->spend_billed_until?->toDateString(),
                 'history_from' => $client->history_from?->toDateString(),
+                'approve_charges' => $client->approve_charges,
+                'waiting' => ChargeRequest::where('client_id', $client->id)->where('status', 'pending')->first()?->only('id', 'amount', 'currency'),
                 'history_done' => $client->history_from && $client->history_cursor?->lte($client->history_from),
                 'history_back_to' => $client->history_cursor?->toDateString(),
                 'history_total' => (int) MetaSpendDay::where('client_id', $client->id)->sum('spend'),

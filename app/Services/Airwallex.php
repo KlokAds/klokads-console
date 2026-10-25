@@ -44,9 +44,19 @@ class Airwallex
                 'x-api-key' => Setting::get('airwallex_api_key'),
             ])->post(self::BASE.'/authentication/login');
 
-            return $res->successful() && filled($res->json('token'))
-                ? $res->json('token')
-                : throw new RuntimeException('Airwallex: '.($res->json('message') ?? 'login failed ('.$res->status().')').' — check the client ID and API key.');
+            if ($res->successful() && filled($res->json('token'))) {
+                return $res->json('token');
+            }
+            // A key made in Airwallex's demo works only there: say so instead of a bare "Forbidden".
+            $demo = Http::timeout(15)->acceptJson()->withHeaders([
+                'x-client-id' => Setting::get('airwallex_client_id'),
+                'x-api-key' => Setting::get('airwallex_api_key'),
+            ])->post('https://api-demo.airwallex.com/api/v1/authentication/login');
+            if ($demo->successful() && filled($demo->json('token'))) {
+                throw new RuntimeException('Airwallex: this is a demo (sandbox) key — create the key in the live Airwallex account.');
+            }
+
+            throw new RuntimeException('Airwallex: '.($res->json('message') ?? 'login refused ('.$res->status().')').' — check the client ID, the API key, and that the key allows the server IP 77.37.34.204.');
         });
     }
 
