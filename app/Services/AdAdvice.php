@@ -32,6 +32,16 @@ class AdAdvice
         'FRAGMENTATION' => '🧩 Too many small ad sets',
         'LOW_BUDGET' => '💰 Budget too low',
         'DISAPPROVED' => '⛔ Ad rejected',
+        'MIXED_FORMATS' => '🎞 Use more ad formats',
+        'REELS_PC_RECOMMENDATION' => '🎬 Add Reels placements',
+        'GEN_AI_MVP' => "✨ Try Meta's AI creative tools",
+        'SCALE_GOOD_CAMPAIGN' => '🚀 Scale a good campaign',
+        'AUTOFLOW_OPT_IN' => '✨ Turn on Advantage+ creative',
+        'ADVANTAGE_PLUS_AUDIENCE' => '🎯 Try Advantage+ audience',
+        'ADVANTAGE_PLUS_PLACEMENTS' => '📍 Use Advantage+ placements',
+        'CONSOLIDATE_AD_SETS' => '🧩 Combine small ad sets',
+        'PIXEL_SETUP' => '📡 Set up the pixel',
+        'CAPI_SETUP' => '📡 Set up Conversions API',
     ];
 
     public function __construct(private MetaAds $meta, private Notify $notify) {}
@@ -93,7 +103,8 @@ class AdAdvice
                 }
                 $campaigns = $objects->map(fn ($o) => $names[$o] ?? null)->filter()->unique()->values();
                 $type = strtoupper((string) $item['type']);
-                $title = self::TITLES[$type] ?? ($item['kind'] === 'issue' ? '⚠️ '.($item['title'] ?: 'Delivery issue') : '💡 '.ucfirst(strtolower(str_replace('_', ' ', $type))));
+                // A known kind in plain words; otherwise Meta's own sentence, never its internal code.
+                $title = self::TITLES[$type] ?? ($item['kind'] === 'issue' ? '⚠️ '.($item['title'] ?: 'Delivery issue') : '💡 '.($item['title'] ?: 'Meta suggests a change'));
                 $body = implode("\n", array_filter([
                     $item['kind'] === 'issue' ? ($item['body'] ?? null) : (($item['title'] ?? null) ? $item['title'].'.' : null),
                     $item['kind'] === 'issue' ? null : ($item['body'] ?? null),
