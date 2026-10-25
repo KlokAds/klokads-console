@@ -54,7 +54,7 @@ const businessSections = [
     },
 ];
 
-// Business on phones: the app's own bottom bar (like the personal side), the rest under More.
+// Business tabs inside the phone app (a browser keeps the side menu).
 const businessBar = [
     { name: 'Ad desk', route: 'ad-desk', match: ['ad-desk', 'clients.campaigns.*', 'charges.*'], icon: 'megaphone' },
     { name: 'Ad money', route: 'ad-money.index', match: ['ad-money.*', 'statements.*'], icon: 'chart' },
@@ -352,7 +352,7 @@ router.on('navigate', () => {
                 </div>
             </div>
 
-            <main class="mx-auto max-w-[1400px] px-4 sm:px-8 lg:pb-8" :class="appShell ? 'pb-32 pt-4' : 'py-6 pb-28 sm:py-8'">
+            <main class="mx-auto max-w-[1400px] px-4 sm:px-8 lg:pb-8" :class="appShell ? 'pb-32 pt-4' : mode === 'personal' ? 'py-6 pb-28 sm:py-8' : 'py-6 sm:py-8'">
                 <slot />
             </main>
 
@@ -427,20 +427,6 @@ router.on('navigate', () => {
                     </div>
                 </div>
             </transition>
-
-            <!-- Business in a phone's browser: bottom bar, the rest in the side menu -->
-            <nav v-if="mode === 'business' && !appShell" class="fixed inset-x-0 bottom-0 z-30 border-t border-line/70 bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-                <div class="mx-auto grid max-w-md grid-cols-5">
-                    <Link v-for="item in businessBar" :key="item.name" :href="route(item.route)" class="flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold transition"
-                        :class="onBar(item) ? 'text-brand-600' : 'text-ink-500'">
-                        <span class="flex h-8 w-12 items-center justify-center rounded-full transition" :class="onBar(item) ? 'bg-brand-50 dark:bg-brand-500/15' : ''"><Icon :name="item.icon" :size="20" /></span>
-                        {{ item.name }}
-                    </Link>
-                    <button class="flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold text-ink-500" @click="sidebarOpen = true">
-                        <span class="flex h-8 w-12 items-center justify-center"><Icon name="menu" :size="20" /></span> More
-                    </button>
-                </div>
-            </nav>
 
             <!-- Personal app: bottom bar on phones, with quick add in the middle -->
             <nav v-if="mode === 'personal'" class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
