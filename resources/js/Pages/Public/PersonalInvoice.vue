@@ -84,20 +84,22 @@ const report = () => {
                     <div v-if="open && inv.due_on" class="mt-2 text-sm text-[#3A4060]">Please pay by <b>{{ date(inv.due_on) }}</b></div>
                 </section>
 
-                <!-- Parties & dates -->
-                <section class="grid grid-cols-2 gap-5 px-6 py-6 sm:grid-cols-3 sm:px-10">
-                    <div class="col-span-2 sm:col-span-1">
+                <!-- Parties & dates: who on the left, the dates on the right -->
+                <section class="flex items-start justify-between gap-4 px-6 py-6 sm:px-10">
+                    <div class="min-w-0">
                         <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">Billed to</div>
                         <div class="mt-1.5 font-semibold">{{ inv.client.company || inv.client.name }}</div>
                         <div v-if="inv.client.company && inv.client.name !== inv.client.company" class="text-sm text-[#6B6F82]">{{ inv.client.name }}</div>
                     </div>
-                    <div>
-                        <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">Issued</div>
-                        <div class="mt-1.5 font-semibold tabular-nums">{{ date(inv.issued_on) }}</div>
-                    </div>
-                    <div>
-                        <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">Due</div>
-                        <div class="mt-1.5 font-semibold tabular-nums">{{ inv.due_on ? date(inv.due_on) : 'On receipt' }}</div>
+                    <div class="shrink-0 space-y-3 text-right sm:flex sm:gap-10 sm:space-y-0">
+                        <div>
+                            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">Issued</div>
+                            <div class="mt-1 text-sm font-semibold tabular-nums sm:mt-1.5 sm:text-base">{{ date(inv.issued_on) }}</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">Due</div>
+                            <div class="mt-1 text-sm font-semibold tabular-nums sm:mt-1.5 sm:text-base">{{ inv.due_on ? date(inv.due_on) : 'On receipt' }}</div>
+                        </div>
                     </div>
                 </section>
 
