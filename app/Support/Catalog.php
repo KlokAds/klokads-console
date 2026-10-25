@@ -76,6 +76,7 @@ class Catalog
             'upay' => ['Upay', 'wallet'],
             'ucb' => ['UCB', 'bank'],
             'dhaka' => ['Dhaka Bank', 'bank'],
+            'midland' => ['Midland Bank', 'bank'],
             'city' => ['City Bank', 'bank'],
             'brac' => ['BRAC Bank', 'bank'],
             'dbbl' => ['Dutch-Bangla Bank', 'bank'],

@@ -152,7 +152,7 @@ class AutoEntries
         $digits = $p['last4'] ?? null;
 
         if ($digits) {
-            $byLast4 = $live->filter(fn ($a) => $a->last4 && str_ends_with($a->last4, $digits) && (! $p['provider'] || ! $a->provider || $a->provider === $p['provider']));
+            $byLast4 = $live->filter(fn ($a) => $a->last4 && str_ends_with($a->last4, $digits) && (! $p['provider'] || in_array($a->provider, [null, '', 'other'], true) || $a->provider === $p['provider']));
             if ($byLast4->count() === 1) {
                 return $byLast4->first();
             }

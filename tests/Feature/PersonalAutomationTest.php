@@ -115,6 +115,15 @@ class PersonalAutomationTest extends TestCase
         $this->assertStringContainsString('UCB ••1603 → UCB salary ••6318', AppNotification::latest('id')->first()->title);
     }
 
+    public function test_an_account_set_to_other_bank_still_matches_by_its_last_4(): void
+    {
+        $midland = Account::create(['name' => 'Midland Bank', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'other', 'last4' => '2093', 'currency' => 'BDT']);
+
+        app(AutoEntries::class)->ingest('sms', 'MDB', 'Your A/C ***2093 has been credited by BDT 1,000.00. Avl Bal: BDT 21,723.53');
+
+        $this->assertSame(100000, Ledger::balance($midland));
+    }
+
     public function test_wallet_app_notifications_from_the_phone_app_are_entries_too(): void
     {
         $nsave = Account::create(['name' => 'nSave', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'nsave', 'currency' => 'USD']);
