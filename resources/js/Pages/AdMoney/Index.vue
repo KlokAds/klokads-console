@@ -184,7 +184,7 @@ const dayLabel = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { 
                                 <td class="num text-ink-600">{{ c.daily_budget ? m(c.daily_budget) : '—' }}</td>
                                 <td class="num font-semibold text-ink-900">{{ m(c.spend) }}</td>
                                 <td class="num">{{ c.results }} <span class="text-xs text-ink-400">{{ c.result_label }}</span></td>
-                                <td class="num font-semibold">{{ c.cost_per_result !== null ? m(c.cost_per_result) : '—' }}</td>
+                                <td class="num font-semibold">{{ c.cost_per_result === null ? '—' : c.cost_per_result === 0 ? '< ' + m(1) : m(c.cost_per_result) }}</td>
                                 <td class="num text-ink-600">{{ c.clicks.toLocaleString() }}</td>
                                 <td class="num text-ink-600">{{ c.ctr !== null ? c.ctr + '%' : '—' }}</td>
                             </tr>

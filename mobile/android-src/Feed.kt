@@ -82,7 +82,9 @@ object Feed {
         for (i in 0 until items.length()) {
             val item = items.getJSONObject(i)
             val id = item.getLong("id")
-            show(context, id, item.optString("kind"), item.optString("title"), item.optString("body"), item.optString("url"))
+            // A missing link comes as JSON null, which optString turns into the word "null".
+            val link = if (item.isNull("url")) "" else item.optString("url")
+            show(context, id, item.optString("kind"), item.optString("title"), item.optString("body"), link)
             last = maxOf(last, id)
         }
         prefs.edit().putLong("flutter.feed.last", maxOf(last, if (items.length() == 0) json.optLong("last_id", last) else last)).apply()
@@ -91,7 +93,7 @@ object Feed {
 
     private fun show(context: Context, id: Long, kind: String, title: String, body: String, url: String) {
         val open = Intent(context, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             .putExtra("url", url)
         // One notification per chat (c=…): a newer message replaces it quietly instead of stacking up.
         val chat = Regex("[?&]c=([a-f0-9]+)").find(url)?.groupValues?.get(1)

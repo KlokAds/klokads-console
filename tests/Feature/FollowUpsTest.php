@@ -10,6 +10,7 @@ use App\Models\PersonalRecurring;
 use App\Models\User;
 use App\Services\AutoEntries;
 use App\Services\FollowUps;
+use App\Services\Notify;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -100,6 +101,16 @@ class FollowUpsTest extends TestCase
         $this->assertStringContainsString('Budget 50 dollar thik ache', $rahim->body);
         $this->assertStringContainsString('(2 messages)', $rahim->body);
         $this->assertMatchesRegularExpression('/[?&]c=[a-f0-9]{10}/', $rahim->url);
+    }
+
+    public function test_every_notification_opens_a_page_business_on_the_business_side(): void
+    {
+        $notify = app(Notify::class);
+
+        $this->assertSame(route('ad-money.index'), $notify->send('billing', 'Meta spend')->url);
+        $this->assertSame(route('personal.activity'), $notify->send('debit', 'bKash −500')->url);
+        $this->assertSame(route('notifications.index'), $notify->send('reminder', 'Spent anything?')->url);
+        $this->assertSame(route('personal.loans.index'), $notify->send('reminder', 'Rahim owes', null, route('personal.loans.index'))->url);
     }
 
     public function test_messenger_chats_of_another_logged_in_account_are_ignored(): void

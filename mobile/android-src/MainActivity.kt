@@ -16,7 +16,7 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        launchUrl = intent?.getStringExtra("url")
+        launchUrl = intent?.getStringExtra("url")?.takeUnless { it.isBlank() || it == "null" }
         Feed.channels(this)
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "klok/native").apply {
             setMethodCallHandler { call, result ->
@@ -82,7 +82,10 @@ class MainActivity : FlutterFragmentActivity() {
     /** A notification tapped while the app was already open: go to its page. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.getStringExtra("url")?.let { channel?.invokeMethod("open", it) }
+        setIntent(intent)
+        val url = intent.getStringExtra("url")?.takeUnless { it.isBlank() || it == "null" } ?: return
+        // Not ready to hear it yet (the app is still starting): hand it over when Flutter asks.
+        channel?.invokeMethod("open", url) ?: run { launchUrl = url }
     }
 
     private fun walletAccess(): Boolean {

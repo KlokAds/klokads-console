@@ -120,9 +120,22 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
 
   Future<void> setTheme(String value) async => web?.evaluateJavascript(source: "window.klokSetTheme && window.klokSetTheme('$value')");
 
+  /// A notification's page: in front of everything (the app's own screens close), right away —
+  /// or as soon as the page view exists, if it doesn't yet.
+  String? waiting;
   void open(String url) {
+    if (url.isEmpty || url == 'null') {
+      return;
+    }
     final target = url.startsWith('http') ? url : '$site${url.startsWith('/') ? '' : '/'}$url';
-    web?.loadUrl(urlRequest: URLRequest(url: WebUri(target)));
+    if (mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+    if (web == null) {
+      waiting = target;
+      return;
+    }
+    web!.loadUrl(urlRequest: URLRequest(url: WebUri(target)));
   }
 
   /// A JSON request as me (the page's own cookies and CSRF token).
@@ -328,7 +341,8 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
                   controller.addJavaScriptHandler(handlerName: 'appSettings', callback: (_) => openPhone());
                   controller.addJavaScriptHandler(handlerName: 'theme', callback: setBars);
                   // Opened by tapping a notification: go straight to its page.
-                  final first = await nativeChannel.invokeMethod<String>('launchUrl');
+                  final first = await nativeChannel.invokeMethod<String>('launchUrl') ?? waiting;
+                  waiting = null;
                   if (first != null && first.isNotEmpty) {
                     open(first);
                   }

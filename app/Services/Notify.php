@@ -18,6 +18,7 @@ class Notify
 
     public function send(string $kind, string $title, ?string $body = null, ?string $url = null, ?string $tag = null): AppNotification
     {
+        $url ??= self::home($kind);
         $note = AppNotification::create(compact('kind', 'title', 'body', 'url', 'tag'));
 
         foreach (PushSubscription::all() as $sub) {
@@ -29,6 +30,17 @@ class Notify
         }
 
         return $note;
+    }
+
+    /** Where a notification without its own page opens: business alerts on the business side, the rest on the personal side. */
+    public static function home(string $kind): string
+    {
+        return match ($kind) {
+            'billing' => route('ad-money.index'),
+            'credit', 'debit', 'info' => route('personal.activity'),
+            'invoice' => route('personal.invoices.index'),
+            default => route('notifications.index'),
+        };
     }
 
     /** Send only if this key was never sent before (e.g. "loan:5:due-1"). */
