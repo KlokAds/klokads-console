@@ -88,8 +88,11 @@ class KeepInTouch
             $hour = $t->window === 'auto' ? (self::usualHour($t) ?? 20) : null;
             // A part of the day, my own time ("21:00"), or the hour I usually call them.
             $slot = $hour !== null ? $today->setTime($hour, 0) : $today->setTimeFromTimeString(self::WINDOWS[$t->window] ?? (self::isTime($t->window) ? $t->window : self::WINDOWS['evening']));
+            // Their time has passed today: no catch-up now — the reminder comes at their time tomorrow.
             if ($slot->lt($local)) {
-                $slot = $local->addMinutes(5);
+                $t->update(['planned_on' => $today->toDateString(), 'remind_at' => null, 'reminded' => 0]);
+
+                continue;
             }
             while (collect($taken)->contains(fn ($at) => abs($at->diffInMinutes($slot, true)) < self::GAP_MINUTES)) {
                 $slot = $slot->addMinutes(self::GAP_MINUTES);

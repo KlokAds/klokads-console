@@ -72,6 +72,19 @@ class KeepInTouchTest extends TestCase
         $this->assertSame('13:00', $this->localRemindAt($vaiya));
     }
 
+    public function test_a_time_already_passed_today_waits_for_tomorrow_no_catch_up(): void
+    {
+        $vaiya = $this->person('Vaiya', '13:00');
+        $run = app(KeepInTouch::class);
+
+        $this->assertSame(0, $run->run(CarbonImmutable::parse('2026-10-25 17:10', 'Asia/Dhaka')));
+        $this->assertNull($vaiya->fresh()->remind_at, 'not a few minutes from now');
+        $this->assertSame(0, $run->run(CarbonImmutable::parse('2026-10-25 18:00', 'Asia/Dhaka')));
+
+        $run->run(CarbonImmutable::parse('2026-10-26 08:00', 'Asia/Dhaka'));
+        $this->assertSame('13:00', $this->localRemindAt($vaiya));
+    }
+
     public function test_learn_it_uses_the_hour_i_usually_talk_to_them(): void
     {
         $vai = $this->person('Vai', 'auto');
