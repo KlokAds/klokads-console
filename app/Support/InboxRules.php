@@ -21,6 +21,8 @@ class InboxRules
         ['name' => 'Cellfin', 'type' => 'sms'], ['name' => 'nSave', 'type' => 'app'], ['name' => 'Rizon', 'type' => 'app'],
         ['name' => 'Elevate Pay', 'type' => 'app'], ['name' => 'WorldFirst', 'type' => 'app'], ['name' => 'Airwallex', 'type' => 'app'],
         ['name' => 'Payoneer', 'type' => 'app'], ['name' => 'RedotPay', 'type' => 'app'], ['name' => 'Binance', 'type' => 'app'],
+        // The mobile wallets' own apps too (bKash, Nagad, Rocket, Upay): their notifications, like their SMS.
+        ['name' => 'bKash', 'type' => 'app'], ['name' => 'Nagad', 'type' => 'app'], ['name' => 'Rocket', 'type' => 'app'], ['name' => 'Upay', 'type' => 'app'],
     ];
 
     public const DEFAULT_IGNORE = ['otp', 'one time password', 'verification code', 'verification number', 'security code', 'your code is',
@@ -47,7 +49,7 @@ class InboxRules
             $senders = [];
             foreach ($data['senders'] as $s) {
                 $name = trim((string) ($s['name'] ?? ''));
-                $key = self::normalise($name);
+                $key = (($s['type'] ?? 'sms') === 'app' ? 'app:' : 'sms:').self::normalise($name);
                 if ($name === '' || isset($seen[$key])) {
                     continue;
                 }

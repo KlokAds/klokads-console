@@ -122,6 +122,15 @@ class AutoEntries
                 }
             }
 
+            // Cashback and reversals: say what they are.
+            if ($p['direction'] === 'in' && ! $p['counterparty']) {
+                $p['counterparty'] = match (true) {
+                    (bool) preg_match('/\brevers(?:al|ed)\b/i', $message->body) => 'Reversal',
+                    (bool) preg_match('/\bcashback\b/i', $message->body) => 'Cashback',
+                    default => null,
+                };
+            }
+
             $tx = Ledger::save([
                 'kind' => $p['direction'] === 'in' ? 'income' : 'expense',
                 'account_id' => $account->id,

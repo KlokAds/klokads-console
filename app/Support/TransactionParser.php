@@ -45,13 +45,13 @@ class TransactionParser
     ];
 
     private const IN = ['deposit successful', 'deposit confirmed', 'you bought', 'bought ', 'int:', 'interest credited', 'interest paid', 'profit credited', 'profit paid', 'you have received', 'received from', 'received tk', 'received bdt', 'received sgd', 'money received', 'cash in', 'has been credited', 'credited with', 'credited by', 'credited to',
-        'deposit', 'deposited', 'incoming', 'you received', "you've received", 'payment received', 'refund', 'added to your', 'add money', 'remittance received', 'salary'];
+        'deposit', 'deposited', 'incoming', 'you received', "you've received", 'payment received', 'refund', 'added to your', 'add money', 'money added', 'received money', 'remittance received', 'salary', 'cashback', 'reversal'];
 
     private const OUT = ['you sold', 'sold ', 'sell order', 'send money', 'money sent', 'sent $', 'sent usd', 'sent sgd', 'sent bdt', 'sent tk', 'has been debited', 'debited with', 'debited by', 'debited from', 'payment tk', 'payment of', 'paid tk', 'you paid', 'you have paid', 'cash out',
-        'withdraw', 'purchase', 'card transaction', 'card payment approved', 'paid $', 'paid us$', 'paid usd', 'paid sgd', 'paid bdt', 'spent', 'transferred', 'transfer of', 'bill pay', 'recharge', 'merchant payment', 'you sent', "you've sent", 'debit'];
+        'withdraw', 'purchase', 'card transaction', 'card payment approved', 'pay bill', 'paid bill', 'bill payment', 'make payment', 'mobile recharge', 'top-up', 'topup', 'paid $', 'paid us$', 'paid usd', 'paid sgd', 'paid bdt', 'spent', 'transferred', 'transfer of', 'bill pay', 'recharge', 'merchant payment', 'you sent', "you've sent", 'debit'];
 
     /** Not a completed transaction: codes, promotions, failures (whole words only). */
-    private const NOT_MONEY = '/\b(otp|one[- ]time password|verification code|do not share|pin|offer|cashback up to|win|\d+% off|discount|failed|unsuccessful|declined|reversed|insufficient)\b/u';
+    private const NOT_MONEY = '/\b(otp|one[- ]time password|verification code|do not share|pin|offer|cashback up to|win|\d+% off|discount|failed|unsuccessful|declined|insufficient)\b/u';
 
     /**
      * @return array{provider: ?string, direction: string, amount: int, currency: string, counterparty: ?string, reference: ?string, fee: int, last4: ?string, balance: ?int}|null
@@ -88,6 +88,10 @@ class TransactionParser
 
     private static function direction(string $t): ?string
     {
+        // Reversed / reversal: the money came back to me, whatever it was for.
+        if (preg_match('/\brevers(?:al|ed)\b/u', $t)) {
+            return 'in';
+        }
         $in = self::firstPos($t, self::IN);
         $out = self::firstPos($t, self::OUT);
 

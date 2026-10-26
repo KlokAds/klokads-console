@@ -9,6 +9,7 @@ use App\Models\PersonalClient;
 use App\Models\User;
 use App\Services\AutoEntries;
 use App\Services\PersonalInvoicing;
+use App\Support\InboxRules;
 use App\Support\Ledger;
 use App\Support\TransactionParser;
 use Carbon\CarbonImmutable;
@@ -43,6 +44,28 @@ class AutoEntriesTest extends TestCase
                 ['provider' => 'nsave', 'direction' => 'out', 'amount' => 32700, 'currency' => 'USD', 'counterparty' => 'MD ANOWAR HOSSAIN']],
             'nsave received' => ['nsave', 'Money received. 💰 Received $327.00 from Md Mujaid Hossain',
                 ['provider' => 'nsave', 'direction' => 'in', 'amount' => 32700, 'currency' => 'USD']],
+            // bKash / Nagad / Rocket / Upay apps' own notifications (title. text)
+            'bkash app recharge' => ['bKash', 'Mobile Recharge. Mobile Recharge of Tk 50.00 to 01711000000 is successful. Balance Tk 2,106.82. TrxID CJQ3XK2L1A',
+                ['provider' => 'bkash', 'direction' => 'out', 'amount' => 5000, 'reference' => 'CJQ3XK2L1A']],
+            'bkash app add money' => ['bKash', 'Add Money. Add Money Tk 1,000.00 from City Bank to bKash successful. Balance Tk 3,156.82. TrxID CJQ4AB12CD',
+                ['provider' => 'bkash', 'direction' => 'in', 'amount' => 100000]],
+            'bkash app payment' => ['bKash', 'Payment. Payment Tk 320.00 to Shwapno successful. Balance Tk 1,836.82. TrxID CJQ5PAY001',
+                ['provider' => 'bkash', 'direction' => 'out', 'amount' => 32000]],
+            'bkash app received' => ['bKash', 'Received Money. You have received Tk 2,100.00 from 01811000000. Balance Tk 4,256.82. TrxID CJQ6REC001',
+                ['provider' => 'bkash', 'direction' => 'in', 'amount' => 210000]],
+            'bkash app cashback' => ['bKash', 'Cashback. You got Cashback Tk 10.00 for your Payment to Shwapno. Balance Tk 1,846.82. TrxID CJQ7CB0001',
+                ['provider' => 'bkash', 'direction' => 'in', 'amount' => 1000]],
+            'bkash app pay bill' => ['bKash', 'Pay Bill. Pay Bill Tk 1,250.00 to DESCO Postpaid successful. Balance Tk 596.82. TrxID CJQ8BILL01',
+                ['provider' => 'bkash', 'direction' => 'out', 'amount' => 125000]],
+            'bkash app send money' => ['bKash', 'Send Money. Send Money Tk 500.00 to 01911000000 successful. Fee Tk 5.00. Balance Tk 91.82. TrxID CJQ9SEND01',
+                ['provider' => 'bkash', 'direction' => 'out', 'amount' => 50000, 'fee' => 500]],
+            'nagad app reversal' => ['Nagad', 'Reversal. Tk 500.00 has been reversed to your Nagad account. Balance Tk 500.00. TxnID 73REV12CD',
+                ['provider' => 'nagad', 'direction' => 'in', 'amount' => 50000]],
+            'nagad failed reversed is nothing' => ['Nagad', 'Send Money of Tk 500.00 failed and reversed.', null],
+            'rocket app cash out' => ['Rocket', 'Cash Out Tk 1,000.00 from A/C 01711000000 successful. Fee Tk 18.50. TxnId 1234567999',
+                ['provider' => 'rocket', 'direction' => 'out', 'amount' => 100000]],
+            'upay app received' => ['Upay', 'Received Money. You have received Tk 700.00 from 01611000000. TrxID UPAY77AB12',
+                ['provider' => 'upay', 'direction' => 'in', 'amount' => 70000]],
             'nsave card payment' => ['nSave', 'Card payment approved. 💳 Paid $19.00 at FACEBK* Z25JQBJSD4 with your card ending 6903',
                 ['provider' => 'nsave', 'direction' => 'out', 'amount' => 1900, 'currency' => 'USD', 'last4' => '6903']],
             'nsave notification' => ['nSave', 'You received $250.00 from Upwork. Your new balance is $1,240.10',
@@ -55,9 +78,14 @@ class AutoEntriesTest extends TestCase
     }
 
     #[DataProvider('messages')]
-    public function test_reads_common_alerts(string $sender, string $text, array $expected): void
+    public function test_reads_common_alerts(string $sender, string $text, ?array $expected): void
     {
         $parsed = TransactionParser::parse($sender, $text);
+        if ($expected === null) {
+            $this->assertNull($parsed, 'no money moved');
+
+            return;
+        }
 
         $this->assertNotNull($parsed);
         foreach ($expected as $key => $value) {
@@ -164,5 +192,12 @@ class AutoEntriesTest extends TestCase
         $this->assertSame('matched', $message->status);
         $this->assertSame(1, MoneyTransaction::where('account_id', $main->id)->count());
         $this->assertSame(2105, $booked->fresh()->amount);
+    }
+
+    public function test_a_wallet_can_be_an_sms_sender_and_an_app_at_once(): void
+    {
+        $rules = InboxRules::save(['senders' => [['name' => 'bKash', 'type' => 'sms'], ['name' => 'bKash', 'type' => 'app'], ['name' => 'bkash', 'type' => 'app']]]);
+
+        $this->assertSame([['bKash', 'sms'], ['bKash', 'app']], array_map(fn ($s) => [$s['name'], $s['type']], $rules['senders']));
     }
 }
