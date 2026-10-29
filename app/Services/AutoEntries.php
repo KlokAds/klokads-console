@@ -83,7 +83,7 @@ class AutoEntries
 
             return $message;
         }
-        $this->rememberBankBalance($account, $p);
+        $this->rememberBankBalance($account, $p + ['at' => $message->received_at ?? now()]);
 
         $date = ($message->received_at ?? now())->toDateString();
         // UCB's "NPSB CHARGE" SMS says ৳8.70; the bank also takes 15% VAT on it (৳1.30) with no SMS: ৳10 in all.
@@ -441,8 +441,10 @@ class AutoEntries
     /** Keep what the bank says the balance is, to compare with ours. */
     private function rememberBankBalance(Account $account, array $p): void
     {
-        if (($p['balance'] ?? null) !== null) {
-            $account->update(['bank_balance' => $p['balance'], 'bank_balance_at' => now()]);
+        // Only a newer alert says what the bank has now (an older one read again must not undo it).
+        $at = $p['at'] ?? now();
+        if (($p['balance'] ?? null) !== null && (! $account->bank_balance_at || $account->bank_balance_at->lte($at))) {
+            $account->update(['bank_balance' => $p['balance'], 'bank_balance_at' => $at]);
         }
     }
 
