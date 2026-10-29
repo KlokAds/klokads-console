@@ -67,6 +67,13 @@ class AutoEntriesTest extends TestCase
                 ['provider' => 'rocket', 'direction' => 'out', 'amount' => 100000]],
             'upay app received' => ['Upay', 'Received Money. You have received Tk 700.00 from 01611000000. TrxID UPAY77AB12',
                 ['provider' => 'upay', 'direction' => 'in', 'amount' => 70000]],
+            // City Bank: the date comes first, the withdrawal has the NPSB fee in it, the balance before "Balance".
+            'city deposit' => ['CITYBANK', '29-Oct-2026 Tk. 1,00,000 Deposit Tk. 1,27,953 Balance A/C: 2583***0001',
+                ['provider' => 'city', 'direction' => 'in', 'amount' => 10000000, 'balance' => 12795300, 'last4' => '0001']],
+            'city npsb withdrawal' => ['CITYBANK', '29-Oct-2026 CITYTOUCH TXN Tk. 1,00,010 Withdrawal Tk. 27,943 Balance A/C: 2583***0001 NPSB Fee: Tk 10',
+                ['provider' => 'city', 'direction' => 'out', 'amount' => 10000000, 'fee' => 1000, 'balance' => 2794300]],
+            'city citytouch deposit' => ['CITYBANK', '27-Oct-2026 CITYTOUCH TXN Tk. 30,000 Deposit Tk. 67,963 Balance A/C: 2583***0001',
+                ['provider' => 'city', 'direction' => 'in', 'amount' => 3000000, 'balance' => 6796300]],
             'nsave card payment' => ['nSave', 'Card payment approved. 💳 Paid $19.00 at FACEBK* Z25JQBJSD4 with your card ending 6903',
                 ['provider' => 'nsave', 'direction' => 'out', 'amount' => 1900, 'currency' => 'USD', 'last4' => '6903']],
             'nsave notification' => ['nSave', 'You received $250.00 from Upwork. Your new balance is $1,240.10',

@@ -72,15 +72,21 @@ class TransactionParser
         if (! $direction || ! $amount) {
             return null;
         }
+        $provider = self::provider($s, $t);
+        $fee = self::fee($raw);
+        // City Bank: "Tk. 40,010 Withdrawal … NPSB Fee: Tk 10" — the amount already has the fee in it.
+        if ($provider === 'city' && $direction === 'out' && $fee > 0 && $fee < $amount) {
+            $amount -= $fee;
+        }
 
         return [
-            'provider' => self::provider($s, $t),
+            'provider' => $provider,
             'direction' => $direction,
             'amount' => $amount,
             'currency' => $currency,
             'counterparty' => self::counterparty($raw, $direction),
             'reference' => self::match('/\b(?:trx ?id|txn ?id|transaction id|ref(?:erence)?(?: no\.?)?)[\s:#.-]*([A-Z0-9]{6,})/i', $raw),
-            'fee' => self::fee($raw),
+            'fee' => $fee,
             'last4' => self::last4($raw),
             'balance' => self::balance($raw),
         ];
@@ -120,6 +126,8 @@ class TransactionParser
     private static function amount(string $raw): array
     {
         // USDT / USDC (Binance, RedotPay) count as US dollars; crypto amounts can have more decimals.
+        // A date is never the amount ("29-Oct-2026 Tk. 1,00,000" is not ৳2,026).
+        $raw = preg_replace('/\b\d{1,2}[-\/. ](?:[A-Za-z]{3,9}|\d{1,2})[-\/. ]\d{2,4}\b/u', ' ', $raw);
         $pattern = '/(?:(?<cur>tk\.?|bdt|৳|sgd|s\$|usdt|usdc|usd|us\$|\$)\s*(?<a>\d[\d,]*(?:\.\d{1,8})?))|(?:(?<b>\d[\d,]*(?:\.\d{1,8})?)\s*(?<cur2>tk|bdt|taka|sgd|usdt|usdc|usd))/iu';
         if (! preg_match($pattern, $raw, $m)) {
             return [0, ''];
@@ -182,7 +190,9 @@ class TransactionParser
     /** The balance an alert reports after the transaction, in cents. */
     private static function balance(string $raw): ?int
     {
-        $v = self::match('/\b(?:avl\.? bal(?:ance)?|available balance|current balance|new balance|balance|bal)[\s:.]*(?:is\s*)?(?:tk\.?|bdt|৳|sgd|s\$|usd|us\$|\$)?\s*(\d[\d,]*(?:\.\d{1,2})?)/iu', $raw);
+        $v = self::match('/\b(?:avl\.? bal(?:ance)?|available balance|current balance|new balance|balance|bal)[\s:.]*(?:is\s*)?(?:tk\.?|bdt|৳|sgd|s\$|usd|us\$|\$)?\s*(\d[\d,]*(?:\.\d{1,2})?)/iu', $raw)
+            // City Bank: "… Deposit Tk. 1,27,953 Balance A/C: …" — the balance comes before the word.
+            ?? self::match('/(?:tk\.?|bdt|৳)\s*(\d[\d,]*(?:\.\d{1,2})?)\s*balance\b/iu', $raw);
 
         return $v !== null ? (int) round(((float) str_replace(',', '', $v)) * 100) : null;
     }
