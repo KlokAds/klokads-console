@@ -82,6 +82,15 @@ class PersonalAds
                 $this->watch($assignments, $account);
                 $this->watchBilling($assignments, $account);
             } catch (Throwable $e) {
+                // Meta shut us out of this account (access removed): tell me once a day, don't fill the log every 5 minutes.
+                if (str_contains($e->getMessage(), '(#200)') || str_contains($e->getMessage(), 'permission')) {
+                    $who = PersonalClient::whereIn('id', $list->pluck('personal_client_id'))->pluck('name')->implode(', ');
+                    $this->notify->once("ad-access:{$account}:".now()->toDateString(), 'billing', "⚠️ Can't read {$who}'s ad account",
+                        "Meta says its owner hasn't given access ({$account}). Its campaigns and spend stop updating until access is given again in Klok Pilot.",
+                        route('ad-clients.index'));
+
+                    continue;
+                }
                 report($e);
             }
         }
