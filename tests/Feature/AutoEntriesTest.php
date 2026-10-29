@@ -219,13 +219,15 @@ class AutoEntriesTest extends TestCase
         $sms('Your A/C (***6318) has been debited BDT 8.70 for NPSB CHARGE. Avl Bal: BDT 322.00 @ 12:17 PM. For query: 16419', '12:17:24');
         $sms('Your A/C (***6318) has been debited BDT 1,00,000.00 for I Banking NPSB Transfer Debit. Avl Bal: BDT 322.00 @ 12:17 PM. For query: 16419', '12:17:26');
 
-        $this->assertSame('added', $back->status, 'my own money back, not a payment');
+        $this->assertSame('ignored', $back->status, 'my own money back, not a payment');
         $this->assertSame('unpaid', $invoice->fresh()->status);
-        $this->assertSame('Reversal', MoneyTransaction::find($back->money_transaction_id)->counterparty);
+        // A reversal is no new money: the bounced transfer and its fee are gone; only the 12:17 ones are left.
+        $this->assertNull($back->money_transaction_id);
+        $this->assertSame([10000000, 1000], MoneyTransaction::orderByDesc('amount')->pluck('amount')->all());
         // The NPSB fee is ৳10 (৳8.70 + 15% VAT the bank sends no SMS for): the books say what the bank says.
         $this->assertSame(32200, Ledger::balance($ucb));
-        $this->assertSame([1000, 1000], MoneyTransaction::where('category', 'bank_fees')->pluck('amount')->all(), 'two ৳10 fees…');
-        $this->assertSame(1000, (int) MoneyTransaction::where('kind', 'income')->where('amount', 1000)->sum('amount'), '…and the first one back');
+        $this->assertSame([1000], MoneyTransaction::where('category', 'bank_fees')->pluck('amount')->all(), 'one ৳10 fee: the first was reversed');
+        $this->assertSame(0, MoneyTransaction::where('kind', 'income')->count(), 'no reversal is ever income');
     }
 
     public function test_a_small_gap_with_the_banks_balance_is_a_bank_charge_and_a_big_one_is_told(): void
@@ -244,5 +246,16 @@ class AutoEntriesTest extends TestCase
         // One tap: the books say what the bank says.
         $this->post("/money/accounts/{$big->id}/match-bank")->assertSessionHas('success');
         $this->assertSame(400000, Ledger::balance($big->fresh()));
+    }
+
+    public function test_a_reversal_with_no_debit_on_record_adds_nothing(): void
+    {
+        $nagad = Account::create(['name' => 'Nagad', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'nagad', 'last4' => '9304', 'currency' => 'BDT', 'opening_balance' => 50000]);
+
+        $m = app(AutoEntries::class)->ingest('app', 'Nagad', 'Reversal. Tk 500.00 has been reversed to your Nagad account. Balance Tk 500.00. TxnID 73REV12CD');
+
+        $this->assertSame('ignored', $m->status);
+        $this->assertSame(50000, Ledger::balance($nagad));
+        $this->assertSame(0, MoneyTransaction::count());
     }
 }

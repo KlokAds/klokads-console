@@ -92,6 +92,10 @@ class AutoEntries
             $p['counterparty'] = 'NPSB fee (incl. VAT)';
             $category ??= $p['direction'] === 'out' ? 'bank_fees' : null;
         }
+        // A reversal is no new money: the debit it undoes never happened. Take that entry away; add nothing.
+        if ($p['direction'] === 'in' && self::isReversal($message->body)) {
+            return $this->undoReversed($message, $account, $p, $date);
+        }
         if ($this->alreadyRecorded($account, $p, $date, $message->source)) {
             $message->update(['status' => 'ignored', 'account_id' => $account->id, 'note' => 'Already recorded']);
 
@@ -171,6 +175,33 @@ class AutoEntries
     public static function isVatLessCharge(Account $account, string $text): bool
     {
         return $account->provider === 'ucb' && (bool) preg_match('/\bnpsb charge\b/i', $text);
+    }
+
+    /**
+     * The bank reversed a debit: the auto entry for it (same account and amount, the last two days, the newest
+     * one not yet reversed) is removed — the balance is as if it never went out. No entry to undo: nothing to do.
+     */
+    private function undoReversed(InboxMessage $message, Account $account, array $p, string $date): InboxMessage
+    {
+        $day = CarbonImmutable::parse($date);
+        $original = InboxMessage::where('account_id', $account->id)->whereIn('status', ['added', 'matched'])->whereNotNull('money_transaction_id')
+            ->whereKeyNot($message->id)->orderByDesc('received_at')->orderByDesc('id')->get()
+            ->first(function (InboxMessage $m) use ($p, $day) {
+                $tx = MoneyTransaction::find($m->money_transaction_id);
+
+                return $tx && in_array($tx->kind, ['expense', 'transfer'], true) && $tx->amount === $p['amount']
+                    && $tx->occurred_on->between($day->subDays(2)->startOfDay(), $day->endOfDay());
+            });
+        if (! $original) {
+            $message->update(['status' => 'ignored', 'account_id' => $account->id, 'note' => 'Reversal — no debit on record to undo']);
+
+            return $message;
+        }
+        Ledger::delete(MoneyTransaction::find($original->money_transaction_id));
+        $original->update(['status' => 'ignored', 'money_transaction_id' => null, 'note' => 'Reversed by the bank — it never went out']);
+        $message->update(['status' => 'ignored', 'account_id' => $account->id, 'note' => 'Reversal — cancelled the '.Notify::money($p['amount'], $account->currency).' debit']);
+
+        return $message;
     }
 
     /** The same amount went out of this account in the last two days (this is it coming back). */
