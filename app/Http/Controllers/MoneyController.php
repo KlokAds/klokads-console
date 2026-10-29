@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Middleware\PersonalAccess;
 use App\Models\Account;
 use App\Models\MoneyTransaction;
+use App\Services\AutoEntries;
 use App\Support\Catalog;
 use App\Support\Ledger;
 use App\Support\PayeeMemory;
@@ -83,6 +84,15 @@ class MoneyController extends Controller
         Account::create($this->accountData($request));
 
         return back()->with('success', 'Account added.');
+    }
+
+    /** "Match bank": book the gap so the account says what the bank's latest alert said. */
+    public function matchBank(Request $request, Account $account): RedirectResponse
+    {
+        $account->scope === 'personal' && PersonalAccess::guard($request);
+        $tx = app(AutoEntries::class)->matchBank($account);
+
+        return back()->with('success', $tx ? 'Matched: '.$account->name.' now says what the bank says.' : 'Already the same as the bank.');
     }
 
     public function updateAccount(Request $request, Account $account): RedirectResponse

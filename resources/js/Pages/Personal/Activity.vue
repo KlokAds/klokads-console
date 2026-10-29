@@ -120,6 +120,7 @@ const digits = (a) => (a.last4 ? ` ••${a.last4}` : '');
 // What the bank's own latest alert said, when it differs from our books.
 const bankDiffers = (a) => a.bank_balance !== null && a.bank_balance !== undefined && a.bank_balance !== a.balance;
 const providerList = computed(() => Object.entries(props.providers[form.currency] ?? {}).map(([key, [name, kind]]) => ({ key, name, kind })));
+const matchBank = (a) => router.post(route('money.accounts.match-bank', a.id), {}, { preserveScroll: true, onSuccess: () => (sheet.value = false) });
 function openAccount(a = null) {
     editing.value = a;
     form.defaults(a
@@ -380,6 +381,15 @@ onMounted(() => {
                     <button type="button" class="icon-btn" @click="sheet = false"><Icon name="close" /></button>
                 </div>
                 <div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 pb-5 pt-2">
+                    <!-- The bank's own word differs from the books: one tap to match it -->
+                    <div v-if="editing && bankDiffers(editing)" class="flex items-center gap-3 rounded-2xl bg-amber-50 p-3.5 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:ring-amber-500/30">
+                        <span class="text-xl">⚖️</span>
+                        <div class="min-w-0 flex-1 text-sm">
+                            <div class="font-semibold text-ink-900">Bank says {{ cash(editing.bank_balance, editing.currency) }}</div>
+                            <div class="text-xs text-ink-600">Books say {{ cash(editing.balance, editing.currency) }} · {{ cash(Math.abs(editing.bank_balance - editing.balance), editing.currency) }} {{ editing.bank_balance > editing.balance ? 'less' : 'more' }}</div>
+                        </div>
+                        <button type="button" class="btn-primary btn-sm shrink-0" @click="matchBank(editing)">Match bank</button>
+                    </div>
                     <div>
                         <div class="label">Belongs to</div>
                         <Segmented v-model="form.scope" :options="[{ value: 'personal', label: '👤 Personal' }, { value: 'business', label: '💼 Business' }]" block />

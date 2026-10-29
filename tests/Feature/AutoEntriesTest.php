@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Account;
+use App\Models\AppNotification;
 use App\Models\InboxMessage;
 use App\Models\MoneyTransaction;
 use App\Models\PersonalClient;
@@ -199,5 +200,49 @@ class AutoEntriesTest extends TestCase
         $rules = InboxRules::save(['senders' => [['name' => 'bKash', 'type' => 'sms'], ['name' => 'bKash', 'type' => 'app'], ['name' => 'bkash', 'type' => 'app']]]);
 
         $this->assertSame([['bKash', 'sms'], ['bKash', 'app']], array_map(fn ($s) => [$s['name'], $s['type']], $rules['senders']));
+    }
+
+    public function test_a_failed_transfer_coming_back_is_not_a_clients_payment_and_ucb_matches_its_statement(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $ucb = Account::create(['name' => 'UCB', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'ucb', 'last4' => '6318', 'currency' => 'BDT', 'opening_balance' => 10033200]);
+        $client = PersonalClient::create(['name' => 'Tasfia Engineering']);
+        $invoice = app(PersonalInvoicing::class)->create($client, [['description' => 'Work', 'qty' => 1, 'rate' => 10000000]], CarbonImmutable::today(), null);
+        $auto = app(AutoEntries::class);
+        $sms = fn (string $text, string $at) => $auto->ingest('sms', 'UCB', $text, CarbonImmutable::parse("2026-10-29 {$at}", 'Asia/Dhaka'));
+
+        // 29 Oct: ৳1,00,000 by NPSB, it bounced and came back, then it went again (UCB's own SMS, in order).
+        $sms('Your A/C (***6318) has been debited BDT 1,00,000.00 for I Banking NPSB Transfer Debit. Avl Bal: BDT 322.00 @ 12:02 PM. For query: 16419', '12:02:11');
+        $sms('Your A/C (***6318) has been debited BDT 8.70 for NPSB CHARGE. Avl Bal: BDT 322.00 @ 12:02 PM. For query: 16419', '12:02:22');
+        $sms('Your A/C (***6318) has been credited (reversed) BDT 8.70 for NPSB CHARGE. Avl Bal: BDT 1,00,332.00 @ 12:02 PM. For query: 16419', '12:02:30');
+        $back = $sms('Your A/C (***6318) has been credited (reversed) BDT 1,00,000.00 for I Banking NPSB Transfer Debit. Avl Bal: BDT 1,00,332.00 @ 12:02 PM. For query: 16419', '12:02:37');
+        $sms('Your A/C (***6318) has been debited BDT 8.70 for NPSB CHARGE. Avl Bal: BDT 322.00 @ 12:17 PM. For query: 16419', '12:17:24');
+        $sms('Your A/C (***6318) has been debited BDT 1,00,000.00 for I Banking NPSB Transfer Debit. Avl Bal: BDT 322.00 @ 12:17 PM. For query: 16419', '12:17:26');
+
+        $this->assertSame('added', $back->status, 'my own money back, not a payment');
+        $this->assertSame('unpaid', $invoice->fresh()->status);
+        $this->assertSame('Reversal', MoneyTransaction::find($back->money_transaction_id)->counterparty);
+        // The NPSB fee is ৳10 (৳8.70 + 15% VAT the bank sends no SMS for): the books say what the bank says.
+        $this->assertSame(32200, Ledger::balance($ucb));
+        $this->assertSame([1000, 1000], MoneyTransaction::where('category', 'bank_fees')->pluck('amount')->all(), 'two ৳10 fees…');
+        $this->assertSame(1000, (int) MoneyTransaction::where('kind', 'income')->where('amount', 1000)->sum('amount'), '…and the first one back');
+    }
+
+    public function test_a_small_gap_with_the_banks_balance_is_a_bank_charge_and_a_big_one_is_told(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $small = Account::create(['name' => 'City Bank', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'city', 'last4' => '0001', 'currency' => 'BDT', 'opening_balance' => 100000, 'bank_balance' => 98850, 'bank_balance_at' => now()->subMinutes(20)]);
+        $big = Account::create(['name' => 'Midland', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'other', 'last4' => '2093', 'currency' => 'BDT', 'opening_balance' => 500000, 'bank_balance' => 400000, 'bank_balance_at' => now()->subMinutes(20)]);
+
+        $this->assertSame(1, app(AutoEntries::class)->reconcile());
+        $this->assertSame(98850, Ledger::balance($small->fresh()));
+        $this->assertSame(500000, Ledger::balance($big->fresh()), 'a big gap is never guessed');
+        $this->assertSame(1, AppNotification::where('title', 'like', '⚖️ Midland%')->count());
+        app(AutoEntries::class)->reconcile();
+        $this->assertSame(1, AppNotification::where('title', 'like', '⚖️ Midland%')->count(), 'told once');
+
+        // One tap: the books say what the bank says.
+        $this->post("/money/accounts/{$big->id}/match-bank")->assertSessionHas('success');
+        $this->assertSame(400000, Ledger::balance($big->fresh()));
     }
 }

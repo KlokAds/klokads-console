@@ -86,6 +86,12 @@ class AutoEntries
         $this->rememberBankBalance($account, $p);
 
         $date = ($message->received_at ?? now())->toDateString();
+        // UCB's "NPSB CHARGE" SMS says ৳8.70; the bank also takes 15% VAT on it (৳1.30) with no SMS: ৳10 in all.
+        if (self::isVatLessCharge($account, $message->body)) {
+            $p['amount'] = (int) round($p['amount'] * 1.15, -2);
+            $p['counterparty'] = 'NPSB fee (incl. VAT)';
+            $category ??= $p['direction'] === 'out' ? 'bank_fees' : null;
+        }
         if ($this->alreadyRecorded($account, $p, $date, $message->source)) {
             $message->update(['status' => 'ignored', 'account_id' => $account->id, 'note' => 'Already recorded']);
 
@@ -94,7 +100,9 @@ class AutoEntries
 
         try {
             // Money in that pays one of my invoices: record it against the invoice.
-            if ($p['direction'] === 'in' && ! $category && ($invoice = $this->invoiceFor($p, $message->body, $account))) {
+            // Never my own money coming back (a reversal, or the same amount that just left this account).
+            if ($p['direction'] === 'in' && ! $category && ! self::isReversal($message->body) && ! $this->justLeft($account, $p['amount'], $date)
+                && ($invoice = $this->invoiceFor($p, $message->body, $account))) {
                 $payment = $this->invoicing->recordPayment($invoice, min($p['amount'], $invoice->due()), $date, $p['provider'] ?? 'other', $p['reference'], $account->id, $message->source);
                 $message->update(['status' => 'matched', 'account_id' => $account->id, 'personal_invoice_id' => $invoice->id, 'money_transaction_id' => $payment->money_transaction_id, 'note' => "Paid {$invoice->number}"]);
 
@@ -125,7 +133,7 @@ class AutoEntries
             // Cashback and reversals: say what they are.
             if ($p['direction'] === 'in' && ! $p['counterparty']) {
                 $p['counterparty'] = match (true) {
-                    (bool) preg_match('/\brevers(?:al|ed)\b/i', $message->body) => 'Reversal',
+                    self::isReversal($message->body) => 'Reversal',
                     (bool) preg_match('/\bcashback\b/i', $message->body) => 'Cashback',
                     default => null,
                 };
@@ -152,6 +160,76 @@ class AutoEntries
         }
 
         return $message;
+    }
+
+    public static function isReversal(string $text): bool
+    {
+        return (bool) preg_match('/\brevers(?:al|ed)\b/i', $text);
+    }
+
+    /** A bank charge whose VAT the bank takes without its own SMS (UCB's NPSB charge). */
+    public static function isVatLessCharge(Account $account, string $text): bool
+    {
+        return $account->provider === 'ucb' && (bool) preg_match('/\bnpsb charge\b/i', $text);
+    }
+
+    /** The same amount went out of this account in the last two days (this is it coming back). */
+    private function justLeft(Account $account, int $amount, string $date): bool
+    {
+        $day = CarbonImmutable::parse($date);
+
+        return MoneyTransaction::where('account_id', $account->id)->whereIn('kind', ['expense', 'transfer'])->where('amount', $amount)
+            ->whereBetween('occurred_on', [$day->subDays(2)->toDateString(), $day->toDateString()])->exists();
+    }
+
+    /**
+     * The books against the bank's own word (the balance in its latest SMS), once the alerts have settled:
+     * a small gap (a fee or VAT with no SMS) is booked as a bank charge; a bigger one is told to me once.
+     */
+    public function reconcile(?CarbonImmutable $now = null): int
+    {
+        $now ??= CarbonImmutable::now();
+        $fixed = 0;
+        foreach (Account::where('archived', false)->whereNotNull('bank_balance')->whereBetween('bank_balance_at', [$now->subDays(3), $now->subMinutes(10)])->get() as $account) {
+            // Something booked after the bank's word: that word is old now.
+            if (MoneyTransaction::where(fn ($q) => $q->where('account_id', $account->id)->orWhere('to_account_id', $account->id))->where('created_at', '>', $account->bank_balance_at)->exists()) {
+                continue;
+            }
+            $gap = $account->bank_balance - Ledger::balance($account);
+            if ($gap === 0) {
+                continue;
+            }
+            if (abs($gap) <= self::SMALL_GAP) {
+                $this->matchBank($account, 'Bank charge / VAT (no SMS)');
+                $fixed++;
+
+                continue;
+            }
+            $this->notify->once("bank-gap:{$account->id}:{$account->bank_balance_at->timestamp}", 'info',
+                '⚖️ '.$account->name.($account->last4 ? " ••{$account->last4}" : '').' is '.Notify::money(abs($gap), $account->currency).($gap < 0 ? ' more' : ' less').' than the bank says',
+                'Bank says '.Notify::money($account->bank_balance, $account->currency).', books say '.Notify::money(Ledger::balance($account), $account->currency).'. Tap to check — or match it in one tap.',
+                route('personal.activity', ['account' => $account->id]));
+        }
+
+        return $fixed;
+    }
+
+    /** Gaps up to this (cents) are a fee or VAT the bank sent no SMS for. */
+    public const SMALL_GAP = 2000;
+
+    /** Book the difference so the books say what the bank says. */
+    public function matchBank(Account $account, string $why = 'Matched to the bank\'s balance'): ?MoneyTransaction
+    {
+        $gap = (int) $account->bank_balance - Ledger::balance($account);
+        if ($account->bank_balance === null || $gap === 0) {
+            return null;
+        }
+
+        return Ledger::save([
+            'kind' => $gap > 0 ? 'income' : 'expense', 'account_id' => $account->id, 'amount' => abs($gap),
+            'category' => $gap > 0 ? 'other_income' : ($account->scope === 'business' || abs($gap) <= self::SMALL_GAP ? 'bank_fees' : 'other'),
+            'counterparty' => $account->name, 'description' => $why, 'occurred_on' => now()->toDateString(),
+        ]);
     }
 
     public static function isMeta(string $text): bool

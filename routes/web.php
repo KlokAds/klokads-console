@@ -253,6 +253,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/money/{transaction}', [MoneyController::class, 'destroy'])->name('money.destroy');
     Route::post('/money/accounts', [MoneyController::class, 'storeAccount'])->name('money.accounts.store');
     Route::put('/money/accounts/{account}', [MoneyController::class, 'updateAccount'])->name('money.accounts.update');
+    Route::post('/money/accounts/{account}/match-bank', [MoneyController::class, 'matchBank'])->name('money.accounts.match-bank');
     Route::delete('/money/accounts/{account}', [MoneyController::class, 'destroyAccount'])->name('money.accounts.destroy');
 
     Route::get('/payouts', [PayoutController::class, 'index'])->name('payouts.index');
