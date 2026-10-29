@@ -210,6 +210,7 @@ class MoneyController extends Controller
             'guide' => ['nullable', 'string', 'max:4000'],
             'purpose' => ['nullable', Rule::in(['spending', 'savings'])],
             'opening_balance' => ['nullable', 'numeric'],
+            'business_share' => ['nullable', 'numeric', 'min:0'],
             'opening_rate' => ['nullable', 'numeric', 'gt:0'],
             'notes' => ['nullable', 'string', 'max:500'],
             'archived' => ['boolean'],
@@ -217,6 +218,7 @@ class MoneyController extends Controller
 
         $data['currency'] = strtoupper($data['currency']);
         $data['opening_balance'] = $this->toCents($data['opening_balance'] ?? 0);
+        $data['business_share'] = $this->toCents($data['business_share'] ?? 0);
         foreach (['in', 'out'] as $side) {
             $data["{$side}_fee_pct"] = (float) ($data["{$side}_fee_pct"] ?? 0);
             $data["{$side}_fee_fixed"] = $this->toCents($data["{$side}_fee_fixed"] ?? 0);

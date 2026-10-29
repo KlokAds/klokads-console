@@ -112,7 +112,7 @@ const filterChips = computed(() => live.value.map((a) => ({ id: a.id, name: a.na
 
 const sheet = ref(false);
 const editing = ref(null);
-const blankAccount = () => ({ name: '', scope: 'personal', kind: 'bank', currency: props.currencies[0], provider: '', last4: '', app_profile: 'main', in_fee_pct: '', in_fee_fixed: '', out_fee_pct: '', out_fee_fixed: '', purpose: 'spending', opening_balance: '', notes: '', guide: '', archived: false });
+const blankAccount = () => ({ name: '', scope: 'personal', kind: 'bank', currency: props.currencies[0], provider: '', last4: '', app_profile: 'main', in_fee_pct: '', in_fee_fixed: '', out_fee_pct: '', out_fee_fixed: '', purpose: 'spending', opening_balance: '', business_share: '', notes: '', guide: '', archived: false });
 const form = useForm(blankAccount());
 const isMfs = computed(() => props.mfs.includes(form.provider));
 const isForeign = computed(() => form.currency !== props.currencies[0]);
@@ -124,7 +124,7 @@ const matchBank = (a) => router.post(route('money.accounts.match-bank', a.id), {
 function openAccount(a = null) {
     editing.value = a;
     form.defaults(a
-        ? { ...blankAccount(), scope: a.scope ?? 'personal', name: a.name, kind: a.kind, currency: a.currency, provider: a.provider ?? '', last4: a.last4 ?? '', app_profile: a.app_profile ?? 'main', in_fee_pct: a.in_fee_pct || '', in_fee_fixed: a.in_fee_fixed ? String(a.in_fee_fixed / 100) : '', out_fee_pct: a.out_fee_pct || '', out_fee_fixed: a.out_fee_fixed ? String(a.out_fee_fixed / 100) : '', purpose: a.purpose ?? 'spending', opening_balance: a.opening_balance ? String(a.opening_balance / 100) : '', notes: a.notes ?? '', guide: a.guide ?? '', archived: !!a.archived }
+        ? { ...blankAccount(), scope: a.scope ?? 'personal', name: a.name, kind: a.kind, currency: a.currency, provider: a.provider ?? '', last4: a.last4 ?? '', app_profile: a.app_profile ?? 'main', in_fee_pct: a.in_fee_pct || '', in_fee_fixed: a.in_fee_fixed ? String(a.in_fee_fixed / 100) : '', out_fee_pct: a.out_fee_pct || '', out_fee_fixed: a.out_fee_fixed ? String(a.out_fee_fixed / 100) : '', purpose: a.purpose ?? 'spending', opening_balance: a.opening_balance ? String(a.opening_balance / 100) : '', business_share: a.business_share ? String(a.business_share / 100) : '', notes: a.notes ?? '', guide: a.guide ?? '', archived: !!a.archived }
         : blankAccount());
     form.reset();
     form.clearErrors();
@@ -150,7 +150,7 @@ async function removeAccount() {
     const ok = await confirmDialog({ title: `Remove ${a.name}?`, message: 'If it has entries it is archived and its history kept.', confirmLabel: 'Remove', tone: 'danger' });
     if (ok) router.delete(route('money.accounts.destroy', a.id), { preserveScroll: true, onSuccess: () => (sheet.value = false) });
 }
-const restore = (a) => router.put(route('money.accounts.update', a.id), { ...a, opening_balance: a.opening_balance / 100, archived: false }, { preserveScroll: true });
+const restore = (a) => router.put(route('money.accounts.update', a.id), { ...a, opening_balance: a.opening_balance / 100, business_share: (a.business_share ?? 0) / 100, archived: false }, { preserveScroll: true });
 
 // Business accounts: their money is the business's, never in my personal totals.
 const businessTotals = computed(() => {
@@ -304,6 +304,7 @@ onMounted(() => {
                         <span class="text-right">
                             <span class="block text-[15px] font-bold tabular-nums" :class="a.balance < 0 ? 'text-rose-600' : 'text-ink-900'">{{ cash(a.balance, a.currency) }}</span>
                             <span v-if="bankDiffers(a)" class="block text-[11px] font-semibold text-amber-600" :title="`Latest ${a.name} alert`">bank says {{ cash(a.bank_balance, a.currency) }}</span>
+                            <span v-if="a.business_share" class="block text-[11px] font-semibold text-violet-600">💼 {{ cash(a.business_share, a.currency) }} is business</span>
                         </span>
                     </button>
                     <p v-if="!g.list.length" class="px-3 pb-3 text-sm text-ink-500">No {{ g.c }} account yet.</p>
@@ -455,6 +456,11 @@ onMounted(() => {
                         <label class="label" for="acc-open">Balance when you started tracking</label>
                         <input id="acc-open" v-model="form.opening_balance" class="input font-semibold tabular-nums" inputmode="decimal" placeholder="0" />
                         <div v-if="form.errors.opening_balance" class="error">{{ form.errors.opening_balance }}</div>
+                    </div>
+                    <div v-if="form.scope === 'personal'">
+                        <label class="label" for="acc-biz">Business money kept in it</label>
+                        <input id="acc-biz" v-model="form.business_share" class="input font-semibold tabular-nums" inputmode="decimal" placeholder="0" />
+                        <p class="mt-1 text-[11px] text-ink-500">It stays in this balance (that is what the wallet really has) — shown as "💼 business" so you know it isn't yours to spend.</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 border-t border-line px-6 py-4">

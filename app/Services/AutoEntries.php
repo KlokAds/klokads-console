@@ -29,7 +29,7 @@ class AutoEntries
     private const GUESS = [
         'food' => ['fairprice', 'ntuc', 'cold storage', 'giant', 'sheng siong', 'shwapno', 'meena bazar', 'agora', 'unimart', 'foodpanda', 'grabfood', 'restaurant', 'cafe', 'kfc', 'mcdonald'],
         'transport' => ['grab', 'gojek', 'comfort', 'uber', 'pathao', 'obhai', 'simplygo', 'ez-link', 'mrt', 'smrt', 'fuel', 'petrol', 'shell', 'esso'],
-        'bills' => ['singtel', 'starhub', 'm1 ', 'circles', 'sp group', 'desco', 'dpdc', 'titas', 'wasa', 'grameenphone', 'robi', 'banglalink', 'recharge', 'internet'],
+        'bills' => ['singtel', 'starhub', 'm1 ', 'circles', 'sp group', 'desco', 'dpdc', 'titas', 'wasa', 'grameenphone', 'robi', 'banglalink', 'teletalk', 'airtel', 'btcl', 'bangladesh telecommunications', 'recharge', 'internet'],
         'shopping' => ['shopee', 'lazada', 'daraz', 'amazon', 'uniqlo', 'aarong'],
         'health' => ['pharmacy', 'guardian', 'watsons', 'clinic', 'hospital', 'lazz'],
         'entertainment' => ['netflix', 'spotify', 'youtube', 'cinema', 'gv ', 'shaw'],
@@ -200,7 +200,7 @@ class AutoEntries
                 continue;
             }
             if (abs($gap) <= self::SMALL_GAP) {
-                $this->matchBank($account, 'Bank charge / VAT (no SMS)');
+                $this->matchBank($account, $account->kind === 'wallet' ? 'No SMS for it (a recharge or fee)' : 'Bank charge / VAT (no SMS)');
                 $fixed++;
 
                 continue;

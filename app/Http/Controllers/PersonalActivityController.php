@@ -68,7 +68,7 @@ class PersonalActivityController extends Controller
             'month' => $month,
             'period' => ['key' => $period, 'from' => $start->toDateString(), 'to' => $end->toDateString()],
             'accounts' => $all->where('kind', '!=', 'investment')->values()->map(fn (Account $a) => [
-                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'app_profile', 'in_fee_pct', 'in_fee_fixed', 'out_fee_pct', 'out_fee_fixed', 'opening_balance', 'notes', 'guide', 'bank_balance', 'archived', 'scope'),
+                ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4', 'app_profile', 'in_fee_pct', 'in_fee_fixed', 'out_fee_pct', 'out_fee_fixed', 'opening_balance', 'business_share', 'notes', 'guide', 'bank_balance', 'archived', 'scope'),
                 'currency' => strtoupper($a->currency),
                 'balance' => Ledger::balance($a),
                 'bank_balance_at' => $a->bank_balance_at?->toIso8601String(),
