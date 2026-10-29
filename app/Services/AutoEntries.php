@@ -105,7 +105,7 @@ class AutoEntries
         try {
             // Money in that pays one of my invoices: record it against the invoice.
             // Never my own money coming back (a reversal, or the same amount that just left this account).
-            if ($p['direction'] === 'in' && ! $category && ! self::isReversal($message->body) && ! $this->justLeft($account, $p['amount'], $date)
+            if ($p['direction'] === 'in' && ! $category && ! self::isReversal($message->body) && ! $this->justLeft($account, $p['amount'], $date) && ! $this->fromMyOtherAccount($account, $p['amount'], $date)
                 && ($invoice = $this->invoiceFor($p, $message->body, $account))) {
                 $payment = $this->invoicing->recordPayment($invoice, min($p['amount'], $invoice->due()), $date, $p['provider'] ?? 'other', $p['reference'], $account->id, $message->source);
                 $message->update(['status' => 'matched', 'account_id' => $account->id, 'personal_invoice_id' => $invoice->id, 'money_transaction_id' => $payment->money_transaction_id, 'note' => "Paid {$invoice->number}"]);
@@ -202,6 +202,16 @@ class AutoEntries
         $message->update(['status' => 'ignored', 'account_id' => $account->id, 'note' => 'Reversal — cancelled the '.Notify::money($p['amount'], $account->currency).' debit']);
 
         return $message;
+    }
+
+    /** The same amount just left another of my accounts (UCB → City): my own money moving, never a client paying. */
+    private function fromMyOtherAccount(Account $account, int $amount, string $date): bool
+    {
+        $day = CarbonImmutable::parse($date);
+
+        return MoneyTransaction::where('account_id', '!=', $account->id)->where('kind', 'expense')->whereNull('to_account_id')->where('amount', $amount)
+            ->where('description', 'like', 'Auto ·%')->whereHas('account', fn ($q) => $q->where('currency', $account->currency))
+            ->whereBetween('occurred_on', [$day->subDay()->toDateString(), $day->addDay()->toDateString()])->exists();
     }
 
     /** The same amount went out of this account in the last two days (this is it coming back). */

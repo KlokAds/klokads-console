@@ -265,4 +265,21 @@ class AutoEntriesTest extends TestCase
         $this->assertSame(50000, Ledger::balance($nagad));
         $this->assertSame(0, MoneyTransaction::count());
     }
+
+    public function test_my_money_moving_between_my_banks_is_a_transfer_not_a_clients_payment(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $ucb = Account::create(['name' => 'UCB', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'ucb', 'last4' => '6318', 'currency' => 'BDT', 'opening_balance' => 10033200]);
+        $city = Account::create(['name' => 'City Bank', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'city', 'last4' => '0001', 'currency' => 'BDT', 'opening_balance' => 2795300]);
+        $invoice = app(PersonalInvoicing::class)->create(PersonalClient::create(['name' => 'Tasfia Engineering']), [['description' => 'Work', 'qty' => 1, 'rate' => 10000000]], CarbonImmutable::today(), null);
+        $auto = app(AutoEntries::class);
+
+        $auto->ingest('sms', 'UCB', 'Your A/C (***6318) has been debited BDT 1,00,000.00 for I Banking NPSB Transfer Debit. Avl Bal: BDT 332.00 @ 12:17 PM. For query: 16419');
+        $in = $auto->ingest('sms', 'CITYBANK', '29-Oct-2026 Tk. 1,00,000 Deposit Tk. 1,27,953 Balance A/C: 2583***0001');
+
+        $this->assertSame('unpaid', $invoice->fresh()->status);
+        $this->assertSame('transfer', MoneyTransaction::find($in->fresh()->money_transaction_id)->kind);
+        $this->assertSame(12795300, Ledger::balance($city));
+        $this->assertSame(33200, Ledger::balance($ucb));
+    }
 }
