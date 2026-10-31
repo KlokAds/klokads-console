@@ -56,8 +56,10 @@ object Forwarder {
 
     /** Is this SMS sender switched on? */
     fun senderAllowed(context: Context, sender: String): Boolean {
+        // A phone number only when I put that number on the list myself (Islami Bank texts from 01844-242613).
         if (!fromBankOrWallet(sender)) {
-            return false
+            val number = sender.filter { it.isDigit() }.takeLast(10)
+            return list(context, "flutter.inbox.senders").any { val listed = it.filter { c -> c.isDigit() }; listed.length >= 10 && listed.takeLast(10) == number }
         }
         if (!flutter(context).getBoolean("flutter.inbox.whitelist", true)) {
             return true

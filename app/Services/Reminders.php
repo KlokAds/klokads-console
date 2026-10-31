@@ -61,7 +61,7 @@ class Reminders
 
         // Bills: overdue, due today, due in the next 3 days — not paid this month.
         $paid = MoneyTransaction::whereNotNull('bill_id')
-            ->whereBetween('occurred_on', [$local->startOfMonth()->toDateString(), $local->endOfMonth()->toDateString()])
+            ->whereBetween('occurred_on', [$local->startOfMonth()->toDateString(), $local->endOfMonth()->toDateString().' 23:59:59'])
             ->pluck('bill_id')->all();
         $bills = Bill::with('account:id,currency')->where('active', true)->whereNotIn('id', $paid)->orderBy('day')->get();
         $day = $local->day;
@@ -183,7 +183,7 @@ class Reminders
         }
 
         $spent = MoneyTransaction::with('account:id,currency,scope')->where('kind', 'expense')
-            ->whereBetween('occurred_on', [$local->startOfMonth()->toDateString(), $local->endOfMonth()->toDateString()])
+            ->whereBetween('occurred_on', [$local->startOfMonth()->toDateString(), $local->endOfMonth()->toDateString().' 23:59:59'])
             ->get()->filter(fn ($t) => $t->account?->scope === 'personal')
             ->groupBy(fn ($t) => strtoupper($t->account->currency).'|'.$t->category)
             ->map(fn ($list) => (int) $list->sum('amount'));

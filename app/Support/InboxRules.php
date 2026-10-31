@@ -18,7 +18,7 @@ class InboxRules
         ['name' => 'BRAC BANK', 'type' => 'sms'], ['name' => 'DBBL', 'type' => 'sms'], ['name' => 'EBL', 'type' => 'sms'],
         ['name' => 'IBBL', 'type' => 'sms'], ['name' => 'MTB', 'type' => 'sms'], ['name' => 'PRIME BANK', 'type' => 'sms'],
         ['name' => 'AB BANK', 'type' => 'sms'], ['name' => 'BANK ASIA', 'type' => 'sms'], ['name' => 'StanChart', 'type' => 'sms'],
-        ['name' => 'Cellfin', 'type' => 'sms'], ['name' => 'nSave', 'type' => 'app'], ['name' => 'Rizon', 'type' => 'app'],
+        ['name' => 'Cellfin', 'type' => 'sms'], ['name' => '01844242613', 'type' => 'sms'], // Islami Bank & CellFin text from this number ['name' => 'nSave', 'type' => 'app'], ['name' => 'Rizon', 'type' => 'app'],
         ['name' => 'Elevate Pay', 'type' => 'app'], ['name' => 'WorldFirst', 'type' => 'app'], ['name' => 'Airwallex', 'type' => 'app'],
         ['name' => 'Payoneer', 'type' => 'app'], ['name' => 'RedotPay', 'type' => 'app'], ['name' => 'Binance', 'type' => 'app'],
         // The mobile wallets' own apps too (bKash, Nagad, Rocket, Upay): their notifications, like their SMS.

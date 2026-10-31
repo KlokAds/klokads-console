@@ -74,6 +74,11 @@ class AutoEntriesTest extends TestCase
                 ['provider' => 'city', 'direction' => 'out', 'amount' => 10000000, 'fee' => 1000, 'balance' => 2794300]],
             'city citytouch deposit' => ['CITYBANK', '27-Oct-2026 CITYTOUCH TXN Tk. 30,000 Deposit Tk. 67,963 Balance A/C: 2583***0001',
                 ['provider' => 'city', 'direction' => 'in', 'amount' => 3000000, 'balance' => 6796300]],
+            // Islami Bank and CellFin text from an ordinary number (01844-242613).
+            'islami atm credit' => ['+8801844242613', 'Dear Customer ATM Tk 2000 has been credited to A/C279**00240307 Balance Tk.2003.7 Islami Bank Help:8331090,16259',
+                ['provider' => 'islami', 'direction' => 'in', 'amount' => 200000, 'last4' => '0307', 'balance' => 200370]],
+            'cellfin send money' => ['+8801844242613', 'CellFin Send Money bKash Successful. From: 20502797800006814 bKash Wallet: 01711962283 Amount: 5000.00',
+                ['direction' => 'out', 'amount' => 500000, 'currency' => 'BDT', 'last4' => '6814']],
             'nsave card payment' => ['nSave', 'Card payment approved. 💳 Paid $19.00 at FACEBK* Z25JQBJSD4 with your card ending 6903',
                 ['provider' => 'nsave', 'direction' => 'out', 'amount' => 1900, 'currency' => 'USD', 'last4' => '6903']],
             'nsave notification' => ['nSave', 'You received $250.00 from Upwork. Your new balance is $1,240.10',

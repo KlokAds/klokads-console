@@ -130,6 +130,11 @@ class TransactionParser
         $raw = preg_replace('/\b\d{1,2}[-\/. ](?:[A-Za-z]{3,9}|\d{1,2})[-\/. ]\d{2,4}\b/u', ' ', $raw);
         $pattern = '/(?:(?<cur>tk\.?|bdt|৳|sgd|s\$|usdt|usdc|usd|us\$|\$)\s*(?<a>\d[\d,]*(?:\.\d{1,8})?))|(?:(?<b>\d[\d,]*(?:\.\d{1,8})?)\s*(?<cur2>tk|bdt|taka|sgd|usdt|usdc|usd))/iu';
         if (! preg_match($pattern, $raw, $m)) {
+            // CellFin: "Amount: 5000.00" — no currency written; it is taka.
+            if (preg_match('/\bamount\s*:\s*(\d[\d,]*(?:\.\d{1,2})?)/iu', $raw, $a)) {
+                return [(int) round(((float) str_replace(',', '', $a[1])) * 100), 'BDT'];
+            }
+
             return [0, ''];
         }
 
@@ -180,6 +185,10 @@ class TransactionParser
     /** My account's last digits: "A/C ***1234", "Acct no. 123XXXX4567", "card ending 1234". */
     private static function last4(string $raw): ?string
     {
+        // CellFin: "From: 20502797800006814" — my Islami account it was sent from.
+        if (stripos($raw, 'cellfin') !== false && preg_match('/\bfrom\s*:\s*(\d{8,})\b/i', $raw, $c)) {
+            return substr($c[1], -4);
+        }
         if (! preg_match('/(?:a\/c|acct?|account|card)(?: no\.?| number)?(?: ending(?: in)?)?[\s:#.(-]*([0-9xX*•.]*[xX*•][0-9xX*•.]*?\d{3,4}|\d{4,})\b/iu', $raw, $m)) {
             return null;
         }

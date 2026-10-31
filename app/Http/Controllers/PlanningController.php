@@ -98,7 +98,7 @@ class PlanningController extends Controller
 
         $on = isset($data['occurred_on']) ? now()->parse($data['occurred_on']) : now();
         $already = MoneyTransaction::where('bill_id', $bill->id)
-            ->whereBetween('occurred_on', [$on->copy()->startOfMonth()->toDateString(), $on->copy()->endOfMonth()->toDateString()])
+            ->whereBetween('occurred_on', [$on->copy()->startOfMonth()->toDateString(), $on->copy()->endOfMonth()->toDateString().' 23:59:59'])
             ->exists();
 
         if ($already) {

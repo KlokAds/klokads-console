@@ -43,7 +43,7 @@ class MoneyController extends Controller
 
         $transactions = MoneyTransaction::with('account:id,name,currency,scope', 'toAccount:id,name,currency,scope,purpose')
             ->where(fn ($q) => $q->whereIn('account_id', $ids)->orWhereIn('to_account_id', $ids))
-            ->whereBetween('occurred_on', [$start->toDateString(), $start->endOfMonth()->toDateString()])
+            ->whereBetween('occurred_on', [$start->toDateString(), $start->endOfMonth()->toDateString().' 23:59:59'])
             ->latest('occurred_on')->latest('id')
             ->get();
 
