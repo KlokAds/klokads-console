@@ -282,7 +282,7 @@ router.on('navigate', () => {
         <!-- Main -->
         <div :class="{ 'lg:pl-[260px]': !appShell }">
             <!-- In the app: a slim app bar (logo, title, search) -->
-            <header v-if="appShell" class="sticky top-0 z-20 border-b border-line/60 bg-canvas/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+            <header v-if="appShell" class="sticky top-0 z-20 border-b border-line/60 bg-canvas/80 backdrop-blur-xl">
                 <div class="flex h-[60px] items-center gap-2.5 px-4">
                     <Link :href="route('dashboard')" class="shrink-0"><ApplicationLogo :size="30" /></Link>
                     <div class="min-w-0 flex-1">
