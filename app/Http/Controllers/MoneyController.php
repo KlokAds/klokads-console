@@ -202,6 +202,7 @@ class MoneyController extends Controller
             'currency' => ['required', 'alpha', 'size:3', Rule::when($request->input('scope') === 'personal', [Rule::in(array_merge(Catalog::PERSONAL_CURRENCIES, array_map('strtolower', Catalog::PERSONAL_CURRENCIES)))])],
             'provider' => ['nullable', 'string', 'max:40'],
             'last4' => ['nullable', 'digits:4'],
+            'match_digits' => ['nullable', 'string', 'max:120', 'regex:/^[\d\s,]*$/'],
             'app_profile' => ['nullable', Rule::in(['main', 'clone'])],
             'in_fee_pct' => ['nullable', 'numeric', 'min:0', 'max:50'],
             'in_fee_fixed' => ['nullable', 'numeric', 'min:0'],
@@ -217,6 +218,9 @@ class MoneyController extends Controller
         ], ['currency.in' => 'Personal accounts are BDT, SGD or USD.']);
 
         $data['currency'] = strtoupper($data['currency']);
+        // "6903, 5372" → "6903,5372": the last 4 of each card / number.
+        $data['match_digits'] = collect(preg_split('/[\s,]+/', (string) ($data['match_digits'] ?? '')))->filter(fn ($d) => strlen($d) >= 4)
+            ->map(fn ($d) => substr($d, -4))->unique()->implode(',') ?: null;
         $data['opening_balance'] = $this->toCents($data['opening_balance'] ?? 0);
         $data['business_share'] = $this->toCents($data['business_share'] ?? 0);
         foreach (['in', 'out'] as $side) {

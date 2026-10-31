@@ -18,7 +18,8 @@ class InboxRules
         ['name' => 'BRAC BANK', 'type' => 'sms'], ['name' => 'DBBL', 'type' => 'sms'], ['name' => 'EBL', 'type' => 'sms'],
         ['name' => 'IBBL', 'type' => 'sms'], ['name' => 'MTB', 'type' => 'sms'], ['name' => 'PRIME BANK', 'type' => 'sms'],
         ['name' => 'AB BANK', 'type' => 'sms'], ['name' => 'BANK ASIA', 'type' => 'sms'], ['name' => 'StanChart', 'type' => 'sms'],
-        ['name' => 'Cellfin', 'type' => 'sms'], ['name' => '01844242613', 'type' => 'sms'], // Islami Bank & CellFin text from this number ['name' => 'nSave', 'type' => 'app'], ['name' => 'Rizon', 'type' => 'app'],
+        ['name' => 'Cellfin', 'type' => 'sms'], ['name' => '01844242613', 'type' => 'sms'], // Islami Bank & CellFin text from this number
+        ['name' => 'nSave', 'type' => 'app'], ['name' => 'Rizon', 'type' => 'app'],
         ['name' => 'Elevate Pay', 'type' => 'app'], ['name' => 'WorldFirst', 'type' => 'app'], ['name' => 'Airwallex', 'type' => 'app'],
         ['name' => 'Payoneer', 'type' => 'app'], ['name' => 'RedotPay', 'type' => 'app'], ['name' => 'Binance', 'type' => 'app'],
         // The mobile wallets' own apps too (bKash, Nagad, Rocket, Upay): their notifications, like their SMS.
@@ -67,6 +68,51 @@ class InboxRules
         }
 
         return self::all();
+    }
+
+    /**
+     * Is this sender on my list? 'on' (book it), 'off' (I blocked it) or null (never seen: I decide).
+     * A phone number matches on its last 10 digits; a name when it contains the listed name.
+     */
+    public static function trust(string $source, ?string $sender): ?string
+    {
+        $type = $source === 'app' ? 'app' : 'sms';
+        $from = self::normalise((string) $sender);
+        $number = self::number((string) $sender);
+        $found = null;
+        foreach (self::all()['senders'] as $s) {
+            if (($s['type'] ?? 'sms') !== $type) {
+                continue;
+            }
+            $listed = self::normalise($s['name']);
+            $hit = $number && self::number($s['name']) ? $number === self::number($s['name']) : ($listed !== '' && $from !== '' && str_contains($from, $listed));
+            if ($hit) {
+                // One switched-on entry is enough (bKash on, an old "bKash Offers" off).
+                if ($s['on'] ?? true) {
+                    return 'on';
+                }
+                $found = 'off';
+            }
+        }
+
+        return $found;
+    }
+
+    /** Puts a sender on the list, switched on (trust) or off (block). */
+    public static function remember(string $source, string $sender, bool $on): void
+    {
+        $type = $source === 'app' ? 'app' : 'sms';
+        $senders = array_values(array_filter(self::all()['senders'], fn ($s) => ! (($s['type'] ?? 'sms') === $type && self::normalise($s['name']) === self::normalise($sender))));
+        $senders[] = ['name' => $sender, 'type' => $type, 'on' => $on];
+        self::save(['senders' => $senders]);
+    }
+
+    /** +8801844-242613 → 1844242613 (a phone number's last 10 digits), null for a name or short code. */
+    private static function number(string $sender): ?string
+    {
+        $digits = preg_replace('/\D/', '', $sender);
+
+        return strlen($digits) >= 10 && preg_match('/^[\d\s+()-]+$/', $sender) ? substr($digits, -10) : null;
     }
 
     public static function normalise(string $name): string

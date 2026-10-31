@@ -45,7 +45,7 @@ class InboxController extends Controller
         };
         // Which copy of a wallet app (the phone's App Clone) the notification came from.
         $profile = $request->input('profile') === 'clone' ? 'clone' : 'main';
-        $message = $this->entries->ingest($source, $pick(['from', 'sender', 'phone', 'address', 'number', 'app', 'data.from']), (string) $text, null, $profile);
+        $message = $this->entries->ingest($source, $pick(['from', 'sender', 'phone', 'address', 'number', 'app', 'data.from']), (string) $text, null, $profile, fromPhone: true);
 
         return response()->json(['ok' => true, 'status' => $message->status, 'note' => $message->note, 'account' => $message->account?->name]);
     }
@@ -135,6 +135,18 @@ class InboxController extends Controller
         }
 
         return back()->with($message->status === 'review' ? 'error' : 'success', $message->status === 'review' ? ($message->note ?: 'Could not add it.') : 'Added.');
+    }
+
+    /** A new sender: trust it (its messages are booked from now on) or block it. */
+    public function sender(Request $request, InboxMessage $message): RedirectResponse
+    {
+        abort_unless($message->sender && ($message->parsed['new_sender'] ?? false), 422);
+        $trust = $request->boolean('trust');
+        $n = $this->entries->decideSender($message, $trust);
+
+        return back()->with('success', $trust
+            ? "{$message->sender} is trusted — {$n} message".($n === 1 ? '' : 's').' booked, and every next one is booked on its own.'
+            : "{$message->sender} is blocked — its messages are never booked.");
     }
 
     public function ignore(InboxMessage $message): RedirectResponse

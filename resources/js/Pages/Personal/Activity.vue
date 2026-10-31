@@ -112,7 +112,7 @@ const filterChips = computed(() => live.value.map((a) => ({ id: a.id, name: a.na
 
 const sheet = ref(false);
 const editing = ref(null);
-const blankAccount = () => ({ name: '', scope: 'personal', kind: 'bank', currency: props.currencies[0], provider: '', last4: '', app_profile: 'main', in_fee_pct: '', in_fee_fixed: '', out_fee_pct: '', out_fee_fixed: '', purpose: 'spending', opening_balance: '', business_share: '', notes: '', guide: '', archived: false });
+const blankAccount = () => ({ name: '', scope: 'personal', kind: 'bank', currency: props.currencies[0], provider: '', last4: '', match_digits: '', app_profile: 'main', in_fee_pct: '', in_fee_fixed: '', out_fee_pct: '', out_fee_fixed: '', purpose: 'spending', opening_balance: '', business_share: '', notes: '', guide: '', archived: false });
 const form = useForm(blankAccount());
 const isMfs = computed(() => props.mfs.includes(form.provider));
 const isForeign = computed(() => form.currency !== props.currencies[0]);
@@ -124,7 +124,7 @@ const matchBank = (a) => router.post(route('money.accounts.match-bank', a.id), {
 function openAccount(a = null) {
     editing.value = a;
     form.defaults(a
-        ? { ...blankAccount(), scope: a.scope ?? 'personal', name: a.name, kind: a.kind, currency: a.currency, provider: a.provider ?? '', last4: a.last4 ?? '', app_profile: a.app_profile ?? 'main', in_fee_pct: a.in_fee_pct || '', in_fee_fixed: a.in_fee_fixed ? String(a.in_fee_fixed / 100) : '', out_fee_pct: a.out_fee_pct || '', out_fee_fixed: a.out_fee_fixed ? String(a.out_fee_fixed / 100) : '', purpose: a.purpose ?? 'spending', opening_balance: a.opening_balance ? String(a.opening_balance / 100) : '', business_share: a.business_share ? String(a.business_share / 100) : '', notes: a.notes ?? '', guide: a.guide ?? '', archived: !!a.archived }
+        ? { ...blankAccount(), scope: a.scope ?? 'personal', name: a.name, kind: a.kind, currency: a.currency, provider: a.provider ?? '', last4: a.last4 ?? '', match_digits: a.match_digits ?? '', app_profile: a.app_profile ?? 'main', in_fee_pct: a.in_fee_pct || '', in_fee_fixed: a.in_fee_fixed ? String(a.in_fee_fixed / 100) : '', out_fee_pct: a.out_fee_pct || '', out_fee_fixed: a.out_fee_fixed ? String(a.out_fee_fixed / 100) : '', purpose: a.purpose ?? 'spending', opening_balance: a.opening_balance ? String(a.opening_balance / 100) : '', business_share: a.business_share ? String(a.business_share / 100) : '', notes: a.notes ?? '', guide: a.guide ?? '', archived: !!a.archived }
         : blankAccount());
     form.reset();
     form.clearErrors();
@@ -299,7 +299,7 @@ onMounted(() => {
                         <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-extrabold" :class="a.purpose === 'savings' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'">{{ a.name.slice(0, 1) }}</span>
                         <span class="min-w-0 flex-1">
                             <span class="block truncate text-[15px] font-semibold text-ink-900">{{ a.name }}<span class="font-normal text-ink-400">{{ digits(a) }}</span></span>
-                            <span class="block truncate text-xs text-ink-500">{{ a.purpose === 'savings' ? 'Savings' : 'Spending' }} · {{ kinds.find((k) => k.value === a.kind)?.label.split(' (')[0] }}<template v-if="a.app_profile === 'clone'"> · App Clone</template><template v-if="!a.last4 && a.kind !== 'cash'"> · <span class="text-amber-600">add last 4 digits</span></template></span>
+                            <span class="block truncate text-xs text-ink-500">{{ a.purpose === 'savings' ? 'Savings' : 'Spending' }} · {{ kinds.find((k) => k.value === a.kind)?.label.split(' (')[0] }}<template v-if="a.app_profile === 'clone'"> · App Clone</template><template v-if="!a.last4 && !a.match_digits && a.kind !== 'cash'"> · <span class="text-amber-600">add last 4 digits</span></template></span>
                         </span>
                         <span class="text-right">
                             <span class="block text-[15px] font-bold tabular-nums" :class="a.balance < 0 ? 'text-rose-600' : 'text-ink-900'">{{ cash(a.balance, a.currency) }}</span>
@@ -329,7 +329,7 @@ onMounted(() => {
                         <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 text-sm font-extrabold text-indigo-700">{{ a.name.slice(0, 1) }}</span>
                         <span class="min-w-0 flex-1">
                             <span class="block truncate text-[15px] font-semibold text-ink-900">{{ a.name }}<span class="font-normal text-ink-400">{{ digits(a) }}</span></span>
-                            <span class="block truncate text-xs text-ink-500">{{ a.currency }} · {{ kinds.find((k) => k.value === a.kind)?.label.split(' (')[0] }}<template v-if="!a.last4 && a.kind !== 'cash'"> · <span class="text-amber-600">add last 4 digits</span></template></span>
+                            <span class="block truncate text-xs text-ink-500">{{ a.currency }} · {{ kinds.find((k) => k.value === a.kind)?.label.split(' (')[0] }}<template v-if="!a.last4 && !a.match_digits && a.kind !== 'cash'"> · <span class="text-amber-600">add last 4 digits</span></template></span>
                         </span>
                         <span class="text-right">
                             <span class="block text-[15px] font-bold tabular-nums" :class="a.balance < 0 ? 'text-rose-600' : 'text-ink-900'">{{ cash(a.balance, a.currency) }}</span>
@@ -421,6 +421,12 @@ onMounted(() => {
                         </div>
                     </div>
                     <p v-if="form.kind !== 'cash'" class="-mt-3 text-[11px] text-ink-500">{{ isMfs ? 'Last 4 of the mobile number on this wallet.' : 'Last 4 of the account or card number.' }} Bank messages are matched to this account by these digits.</p>
+                    <div v-if="form.kind !== 'cash'">
+                        <label class="label" for="acc-more">Other cards / numbers <span class="font-normal text-ink-400">(last 4, optional)</span></label>
+                        <input id="acc-more" v-model="form.match_digits" class="input tabular-nums" inputmode="numeric" placeholder="e.g. 6903, 5372" />
+                        <p class="mt-1 text-[11px] text-ink-500">A message or app notification that shows one of these (like "card ending 6903") is booked here too.</p>
+                        <div v-if="form.errors.match_digits" class="error">{{ form.errors.match_digits }}</div>
+                    </div>
                     <div v-if="form.scope === 'personal'">
                         <div class="label">Used for</div>
                         <Segmented v-model="form.purpose" :options="[{ value: 'spending', label: '💳 Spending' }, { value: 'savings', label: '🐷 Savings' }]" block />

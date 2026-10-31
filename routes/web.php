@@ -193,6 +193,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/personal/invoice-profile', [PersonalInvoiceController::class, 'saveProfile'])->middleware('personal')->name('personal.invoices.profile');
     Route::get('/personal/inbox', [InboxController::class, 'index'])->middleware('personal')->name('personal.inbox.index');
     Route::post('/personal/inbox/{message}/add', [InboxController::class, 'add'])->middleware('personal')->name('personal.inbox.add');
+    Route::post('/personal/inbox/{message}/sender', [InboxController::class, 'sender'])->middleware('personal')->name('personal.inbox.sender');
     Route::post('/personal/inbox/{message}/ignore', [InboxController::class, 'ignore'])->middleware('personal')->name('personal.inbox.ignore');
     Route::post('/personal/inbox/{message}/undo', [InboxController::class, 'undo'])->middleware('personal')->name('personal.inbox.undo');
     Route::post('/personal/inbox-imap', [InboxController::class, 'saveImap'])->middleware('personal')->name('personal.inbox.imap');

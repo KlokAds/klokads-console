@@ -48,7 +48,11 @@ class AutoEntries
     }
 
     /** Store an alert once and turn it into an entry if possible. */
-    public function ingest(string $source, ?string $sender, string $body, ?CarbonImmutable $receivedAt = null, string $profile = 'main'): InboxMessage
+    /**
+     * @param  bool  $fromPhone  sent by the phone, which now forwards every message about money: only
+     *                           senders on my list are booked; a new one waits for me to trust or block it.
+     */
+    public function ingest(string $source, ?string $sender, string $body, ?CarbonImmutable $receivedAt = null, string $profile = 'main', bool $fromPhone = false): InboxMessage
     {
         $body = trim(mb_substr($body, 0, 5000));
         $parsed = InboxRules::ignored($body) ? null : TransactionParser::parse($sender, $body);
@@ -63,12 +67,57 @@ class AutoEntries
             return $existing;
         }
 
+        $trust = $fromPhone && in_array($source, ['sms', 'app'], true) ? InboxRules::trust($source, $sender) : 'on';
+        if ($parsed && $trust === null) {
+            $parsed['new_sender'] = true;
+        }
+
         $message = InboxMessage::create([
             'source' => $source, 'sender' => $sender ? mb_substr($sender, 0, 190) : null, 'body' => $body, 'hash' => $hash,
             'received_at' => $receivedAt ?? now(), 'parsed' => $parsed, 'status' => $parsed ? 'new' : 'skipped',
         ]);
 
+        if ($parsed && $trust === 'off') {
+            $message->update(['status' => 'ignored', 'note' => 'Blocked sender']);
+
+            return $message;
+        }
+        if ($parsed && $trust === null) {
+            return $this->holdNewSender($message);
+        }
+
         return $parsed ? $this->process($message) : $message;
+    }
+
+    /** From a sender not on my list yet: kept, not booked, and I'm asked once whether to trust it. */
+    private function holdNewSender(InboxMessage $message): InboxMessage
+    {
+        $p = $message->parsed;
+        $message->update(['status' => 'review', 'note' => 'New sender — not on my list yet']);
+        $this->notify->once('new-sender:'.$message->source.':'.InboxRules::normalise((string) $message->sender), 'info',
+            '🆕 New sender: '.($message->sender ?: $message->source),
+            ($p['direction'] === 'in' ? 'Money in ' : 'Money out ').Notify::money($p['amount'], $p['currency']).'. It is not on my sender list, so nothing was booked. Tap and choose Trust (this and every next one is booked on its own) or Block.',
+            route('personal.inbox.index'));
+
+        return $message;
+    }
+
+    /** I trusted (or blocked) a new sender: every message of it that waited is booked (or ignored). */
+    public function decideSender(InboxMessage $message, bool $trust): int
+    {
+        InboxRules::remember($message->source, (string) $message->sender, $trust);
+        $waiting = InboxMessage::where('status', 'review')->where('source', $message->source)->where('sender', $message->sender)->get()
+            ->filter(fn (InboxMessage $m) => $m->parsed['new_sender'] ?? false);
+        foreach ($waiting as $m) {
+            $parsed = $m->parsed;
+            unset($parsed['new_sender']);
+            $m->update(['parsed' => $parsed, 'note' => null] + ($trust ? [] : ['status' => 'ignored', 'note' => 'Blocked sender']));
+            if ($trust) {
+                $this->process($m->fresh());
+            }
+        }
+
+        return $waiting->count();
     }
 
     public function process(InboxMessage $message, ?int $accountId = null, ?string $category = null): InboxMessage
@@ -316,7 +365,9 @@ class AutoEntries
         $digits = $p['last4'] ?? null;
 
         if ($digits) {
-            $byLast4 = $live->filter(fn ($a) => $a->last4 && str_ends_with($a->last4, $digits) && (! $p['provider'] || in_array($a->provider, [null, '', 'other'], true) || $a->provider === $p['provider']));
+            // Its own last 4, or one of the other numbers I gave it (each card of a wallet, a second account number).
+            $mine = fn (Account $a) => ($a->last4 && str_ends_with($a->last4, $digits)) || in_array($digits, array_filter(explode(',', (string) $a->match_digits)), true);
+            $byLast4 = $live->filter(fn ($a) => $mine($a) && (! $p['provider'] || in_array($a->provider, [null, '', 'other'], true) || $a->provider === $p['provider']));
             if ($byLast4->count() === 1) {
                 return $byLast4->first();
             }

@@ -22,9 +22,10 @@ import java.util.concurrent.TimeUnit
 /**
  * Bank / wallet messages to the server, done natively so it works with the app closed.
  *
- * Only what I allowed leaves the phone: SMS from the senders switched on in the app (or, with
- * that check off, any bank-like sender — never a person's number), notifications from the
- * wallet apps switched on, and never a message with an ignore word (codes, PINs). Every one
+ * What leaves the phone: SMS from the senders switched on in the app, notifications from the
+ * wallet apps switched on, and — from any other sender or app — a message that shows an amount
+ * of money. The server books only senders on my list and asks me to trust or block a new one.
+ * Never a message with an ignore word (codes, PINs). Every one
  * is kept in a history on the phone with its state — waiting, sent (and what the server made
  * of it), failed — and is sent by WorkManager until the server has it.
  */
@@ -53,6 +54,9 @@ object Forwarder {
 
     private fun list(context: Context, key: String): List<String> =
         (flutter(context).getString(key, null) ?: "").split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+
+    /** Goes to the server: a sender on my list, or any message that shows an amount (the server sorts it out). */
+    fun forwards(context: Context, sender: String, text: String): Boolean = senderAllowed(context, sender) || looksLikeMoney(text)
 
     /** Is this SMS sender switched on? */
     fun senderAllowed(context: Context, sender: String): Boolean {
@@ -152,7 +156,7 @@ object Forwarder {
                 val from = cursor.getString(0) ?: continue
                 val text = cursor.getString(1) ?: continue
                 val at = cursor.getLong(2)
-                if (from + at !in known && senderAllowed(context, from) && enqueue(context, "sms", from, text, at)) {
+                if (from + at !in known && forwards(context, from, text) && enqueue(context, "sms", from, text, at)) {
                     added++
                 }
             }
@@ -296,7 +300,7 @@ class SmsReceiver : BroadcastReceiver() {
         }
         var queued = false
         for ((from, text) in bySender) {
-            if (Forwarder.senderAllowed(context, from)) {
+            if (Forwarder.forwards(context, from, text.toString())) {
                 queued = Forwarder.enqueue(context, "sms", from, text.toString(), at) || queued
             }
         }

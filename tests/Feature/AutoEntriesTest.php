@@ -207,6 +207,57 @@ class AutoEntriesTest extends TestCase
         $this->assertSame(2105, $booked->fresh()->amount);
     }
 
+    public function test_a_new_sender_from_the_phone_waits_until_i_trust_it_then_books_on_its_own(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $islami = Account::create(['name' => 'Islami Bank', 'scope' => 'business', 'kind' => 'bank', 'provider' => 'islami', 'last4' => '0307', 'currency' => 'BDT']);
+        $token = AutoEntries::token();
+        $sms = fn (string $text) => $this->postJson("/inbox/sms/{$token}", ['from' => '+8801999000111', 'text' => $text])->assertOk();
+
+        $sms('Dear Customer ATM Tk 2000 has been credited to A/C279**00240307 Balance Tk.2003.7 Islami Bank');
+        $held = InboxMessage::sole();
+        $this->assertSame(['review', true], [$held->status, $held->parsed['new_sender']]);
+        $this->assertSame(0, MoneyTransaction::count());
+        $this->assertSame(1, AppNotification::where('title', 'like', '%New sender%')->count());
+
+        $this->post("/personal/inbox/{$held->id}/sender", ['trust' => true])->assertRedirect();
+        $this->assertSame('added', $held->fresh()->status);
+        $this->assertSame(200000, Ledger::balance($islami));
+        $this->assertSame('on', InboxRules::trust('sms', '01999-000111'));
+
+        // The next one is booked straight away.
+        $sms('Dear Customer Tk 500 has been debited from A/C279**00240307 Balance Tk.1503.7 Islami Bank');
+        $this->assertSame(150000, Ledger::balance($islami));
+    }
+
+    public function test_a_blocked_sender_is_never_booked(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        Account::create(['name' => 'bKash', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'currency' => 'BDT']);
+        $token = AutoEntries::token();
+        // A friend's text that reads like a bKash alert.
+        $this->postJson("/inbox/sms/{$token}", ['from' => '01711222333', 'text' => 'bKash Send Money Tk 500 successful'])->assertOk();
+        $held = InboxMessage::sole();
+
+        $this->post("/personal/inbox/{$held->id}/sender", ['trust' => false])->assertRedirect();
+        $this->assertSame('ignored', $held->fresh()->status);
+        $this->postJson("/inbox/sms/{$token}", ['from' => '+8801711222333', 'text' => 'bKash Send Money Tk 700 successful'])->assertOk();
+        $this->assertSame('ignored', InboxMessage::latest('id')->first()->status);
+        $this->assertSame(0, MoneyTransaction::count());
+    }
+
+    public function test_a_card_listed_on_an_account_books_its_notifications_there(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $main = Account::create(['name' => 'nSave Main', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'nsave', 'currency' => 'USD']);
+        $copy = Account::create(['name' => 'nSave Copy', 'scope' => 'business', 'kind' => 'wallet', 'provider' => 'nsave', 'currency' => 'USD', 'match_digits' => '6903,1188']);
+
+        // Sent from the main app copy, but the card is nSave Copy's.
+        app(AutoEntries::class)->ingest('app', 'nSave', 'Card payment approved. 💳 Paid $12.00 at NETFLIX with your card ending 1188', CarbonImmutable::parse('2026-10-31 15:00'));
+        $this->assertSame(-1200, Ledger::balance($copy));
+        $this->assertSame(0, Ledger::balance($main));
+    }
+
     public function test_a_wallet_can_be_an_sms_sender_and_an_app_at_once(): void
     {
         $rules = InboxRules::save(['senders' => [['name' => 'bKash', 'type' => 'sms'], ['name' => 'bKash', 'type' => 'app'], ['name' => 'bkash', 'type' => 'app']]]);

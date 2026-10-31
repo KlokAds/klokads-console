@@ -33,6 +33,7 @@ const accountOptions = (m) => props.accounts.filter((a) => !m.parsed || a.curren
 const categoryOptions = (m) => [{ value: '', label: 'Auto category', icon: '✨' }, ...props.categories[m.parsed.direction === 'in' ? 'income' : 'expense'].map((c) => ({ ...c, icon: cat(c.value)[0] }))];
 const add = (m) => router.post(route('personal.inbox.add', m.id), pick(m), { preserveScroll: true });
 const ignore = (m) => router.post(route('personal.inbox.ignore', m.id), {}, { preserveScroll: true });
+const decide = (m, trust) => router.post(route('personal.inbox.sender', m.id), { trust }, { preserveScroll: true });
 const undo = (m) => router.post(route('personal.inbox.undo', m.id), {}, { preserveScroll: true });
 
 // Email mailbox
@@ -220,7 +221,15 @@ const appStatus = computed(() => {
                         </div>
                     </div>
 
-                    <div v-if="m.status === 'review' && m.parsed" class="mt-3 flex flex-wrap items-center gap-2">
+                    <div v-if="m.status === 'review' && m.parsed?.new_sender" class="mt-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                        <div class="text-xs font-semibold text-amber-800">{{ m.sender }} is not on my sender list, so nothing was booked.</div>
+                        <div class="mt-0.5 text-xs text-amber-700">Trust it and this message, and every next one from it, is booked on its own. Block it and its messages are never booked.</div>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <button class="btn-primary btn-sm" @click="decide(m, true)">Trust {{ m.sender }}</button>
+                            <button class="btn-ghost btn-sm" @click="decide(m, false)">Block</button>
+                        </div>
+                    </div>
+                    <div v-else-if="m.status === 'review' && m.parsed" class="mt-3 flex flex-wrap items-center gap-2">
                         <Select v-model="pick(m).account_id" :options="accountOptions(m)" placeholder="Account…" size="sm" class="min-w-[170px]" />
                         <Select v-model="pick(m).category" :options="categoryOptions(m)" size="sm" class="min-w-[160px]" />
                         <button class="btn-primary btn-sm" :disabled="!pick(m).account_id" @click="add(m)">Add</button>

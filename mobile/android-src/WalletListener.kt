@@ -115,7 +115,9 @@ class WalletListener : NotificationListenerService() {
             sbn.packageName
         }
         val key = Forwarder.normalise(sbn.packageName + label)
-        if (watched().none { key.contains(it) }) {
+        val isWatched = watched().any { key.contains(it) }
+        // Android's own and ongoing ones (music, downloads) are never about a payment.
+        if (!isWatched && (sbn.isOngoing || sbn.packageName == "android" || sbn.packageName.startsWith("com.android.systemui"))) {
             return
         }
 
@@ -123,7 +125,8 @@ class WalletListener : NotificationListenerService() {
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val text = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString() ?: ""
         val message = listOf(title, text).filter { it.isNotBlank() }.joinToString(". ")
-        if (message.isBlank()) {
+        // Any other app only when it shows an amount: the server books it once I trust that app.
+        if (message.isBlank() || (!isWatched && !Forwarder.looksLikeMoney(message))) {
             return
         }
 
