@@ -608,6 +608,44 @@ class StripeService
      */
     public function createInvoice(Client $client, array $items, array $opts): Invoice
     {
+        [$lines, $fields] = $this->invoiceDraft($client, $items, $opts);
+
+        return $this->newInvoice($client, $lines, $fields);
+    }
+
+    /**
+     * An open invoice of ours, changed before the client paid it: new lines and totals, and any
+     * card payment already started for the old amount is cancelled (the pay page makes a new one).
+     */
+    public function updateInvoice(Invoice $invoice, Client $client, array $items, array $opts): Invoice
+    {
+        if ($invoice->stripe_invoice_id || $invoice->status !== 'open') {
+            throw new RuntimeException('Only an open invoice that is not paid yet can be changed.');
+        }
+        $this->refreshInvoice($invoice);
+        if ($invoice->status !== 'open') {
+            throw new RuntimeException('The client has just paid this invoice — it can no longer be changed.');
+        }
+        $this->cancelPaymentIntent($invoice);
+
+        [$lines, $fields] = $this->invoiceDraft($client, $items, $opts);
+        [$subtotal, $tax] = $this->totals($lines);
+        $invoice->update(array_fill_keys(self::BUDGET_FIELDS, null) + $fields + [
+            'client_id' => $client->id,
+            'lines' => $lines,
+            'subtotal' => $subtotal,
+            'tax_amount' => $tax,
+            'total' => $subtotal + $tax,
+            'amount_remaining' => $subtotal + $tax - $invoice->amount_paid,
+            'stripe_payment_intent_id' => null,
+        ]);
+
+        return $invoice;
+    }
+
+    /** @return array{0: array<int, array{description: string, amount: int, quantity: int}>, 1: array<string, mixed>} lines and invoice columns */
+    private function invoiceDraft(Client $client, array $items, array $opts): array
+    {
         if (! empty($opts['budget'])) {
             $items = self::budgetItems($opts['budget'], $opts['budget_label'] ?? 'Ads budget');
         }
@@ -628,7 +666,7 @@ class StripeService
             ];
         })->values()->all();
 
-        return $this->newInvoice($client, $lines, self::budgetColumns($opts['budget'] ?? null) + [
+        return [$lines, self::budgetColumns($opts['budget'] ?? null) + [
             'currency' => strtolower($opts['currency'] ?? $this->currencyFor($client)),
             'description' => isset($opts['memo']) ? mb_substr((string) $opts['memo'], 0, 250) : null,
             'service' => $opts['service'] ?? null,
@@ -640,7 +678,7 @@ class StripeService
             ),
             'template' => $opts['template'] ?? Business::templateFor($opts['service'] ?? null),
             'details' => $opts['details'] ?? null,
-        ]);
+        ]];
     }
 
     /**

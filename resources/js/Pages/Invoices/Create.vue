@@ -11,7 +11,8 @@ import { priced } from '@/pricing';
 import { Head, Link, usePage, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
-const props = defineProps({ clients: Array, services: Array, templates: Array, templateFor: Object, units: Array, currency: String, clientId: Number, lastDetails: { type: Object, default: () => ({}) } });
+const props = defineProps({ clients: Array, services: Array, templates: Array, templateFor: Object, units: Array, currency: String, clientId: Number, lastDetails: { type: Object, default: () => ({}) }, invoice: { type: Object, default: null } });
+const editing = !!props.invoice;
 
 const form = useForm({
     client_id: props.clientId ?? '',
@@ -30,6 +31,8 @@ const form = useForm({
     period_end: '',
     campaigns: [],
     statement_descriptor: '',
+    // Editing: the invoice as it is now (not emailed again unless asked).
+    ...(props.invoice ? { ...props.invoice, send: false } : {}),
 });
 
 const clientOptions = computed(() => props.clients.map((c) => ({ value: c.id, label: clientName(c) })));
@@ -58,7 +61,7 @@ function useLastCampaigns() {
 watch(
     () => form.client_id,
     () => {
-        if (last.value && !form.campaigns.length && !form.ad_account_id) useLastCampaigns();
+        if (!editing && last.value && !form.campaigns.length && !form.ad_account_id) useLastCampaigns();
     },
     { immediate: true },
 );
@@ -111,14 +114,14 @@ function setService(value) {
 </script>
 
 <template>
-    <Head title="New invoice" />
+    <Head :title="editing ? `Edit ${invoice.number}` : 'New invoice'" />
 
-    <AuthenticatedLayout title="New invoice" subtitle="Created and sent through your Stripe account">
+    <AuthenticatedLayout :title="editing ? `Edit ${invoice.number}` : 'New invoice'" :subtitle="editing ? 'Change it before the client pays — the pay link shows the new amount' : 'Our own invoice — the client pays by card on its pay link'">
         <template #actions>
             <Link :href="route('invoices.index')" class="btn-ghost hidden sm:inline-flex">Cancel</Link>
         </template>
 
-        <form class="grid gap-6 xl:grid-cols-12" @submit.prevent="form.post(route('invoices.store'))">
+        <form class="grid gap-6 xl:grid-cols-12" @submit.prevent="editing ? form.put(route('invoices.update', invoice.id)) : form.post(route('invoices.store'))">
             <div class="space-y-5 xl:col-span-7">
                 <div class="card">
                     <div class="card-head"><div class="card-title">Bill to</div></div>
@@ -308,7 +311,7 @@ function setService(value) {
                         </label>
                         <button class="btn-primary w-full py-3" :disabled="form.processing || !total">
                             <Icon :name="form.send ? 'send' : 'invoice'" :size="16" />
-                            {{ form.processing ? 'Creating in Stripe…' : form.send ? 'Create & send invoice' : 'Create invoice' }}
+                            {{ form.processing ? 'Saving…' : editing ? (form.send ? 'Save & send again' : 'Save changes') : form.send ? 'Create & send invoice' : 'Create invoice' }}
                         </button>
                         <p class="flex items-start gap-2 text-xs text-ink-500">
                             <Icon name="shield" :size="14" class="mt-0.5 text-emerald-500" />

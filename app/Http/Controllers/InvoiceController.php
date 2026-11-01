@@ -46,16 +46,21 @@ class InvoiceController extends Controller
 
     public function create(Request $request, StripeService $stripe): Response
     {
-        return Inertia::render('Invoices/Create', [
+        return Inertia::render('Invoices/Create', $this->formProps($stripe) + ['clientId' => $request->integer('client_id') ?: null]);
+    }
+
+    /** @return array<string, mixed> */
+    private function formProps(StripeService $stripe): array
+    {
+        return [
             'clients' => Client::orderBy('name')->get(['id', 'name', 'company', 'email', 'commission_rate']),
             'services' => Catalog::options(Catalog::SERVICES),
             'templates' => Catalog::options(Catalog::TEMPLATES),
             'templateFor' => collect(Catalog::DEFAULT_TEMPLATE_FOR)->map(fn ($t, $service) => Business::templateFor($service)),
             'units' => Catalog::UNITS,
             'currency' => $stripe->currency(),
-            'clientId' => $request->integer('client_id') ?: null,
             'lastDetails' => $this->lastDetailsByClient(),
-        ]);
+        ];
     }
 
     /**
@@ -82,6 +87,87 @@ class InvoiceController extends Controller
     }
 
     public function store(Request $request, StripeService $stripe): RedirectResponse
+    {
+        [$client, $items, $data] = $this->input($request);
+
+        return $this->stripeAction(
+            function () use ($stripe, $data, $items, $client, $request) {
+                $invoice = $stripe->createInvoice($client, $items, $data);
+
+                if ($request->boolean('send')) {
+                    try {
+                        app(InvoiceMailer::class)->sendInvoice($invoice);
+                    } catch (Throwable $e) {
+                        return redirect()->route('invoices.index')->with('error', 'Invoice created, but the email failed: '.$e->getMessage());
+                    }
+                }
+
+                return redirect()->route('invoices.index');
+            },
+            $request->boolean('send') ? 'Invoice created and emailed to the client.' : 'Invoice created — copy the link to share it.'
+        );
+    }
+
+    /** An open invoice of ours, opened in the same form to change it before the client pays. */
+    public function edit(Invoice $invoice, StripeService $stripe): Response|RedirectResponse
+    {
+        if ($invoice->stripe_invoice_id || $invoice->status !== 'open' || $invoice->collection_method === 'charge_automatically') {
+            return redirect()->route('invoices.index')->with('error', 'Only an open invoice that is not paid yet can be changed.');
+        }
+
+        return Inertia::render('Invoices/Create', $this->formProps($stripe) + [
+            'clientId' => $invoice->client_id,
+            'invoice' => [
+                'id' => $invoice->id,
+                'number' => $invoice->number,
+                'client_id' => $invoice->client_id,
+                'service' => $invoice->service,
+                'memo' => $invoice->description,
+                'days_until_due' => $invoice->due_at ? max(0, (int) ceil(now()->startOfDay()->diffInDays($invoice->due_at->copy()->startOfDay(), false))) : 7,
+                // A commission-only or ad-budget invoice opens priced the same way; anything else as its lines.
+                'billing' => $invoice->client_spend !== null ? 'commission' : ($invoice->net_amount !== null ? 'budget' : 'standard'),
+                'budget_amount' => $invoice->client_spend !== null ? $invoice->client_spend / 100 : ($invoice->net_amount !== null ? $invoice->net_amount / 100 : ''),
+                'commission_rate' => $invoice->commission_rate ?? 20,
+                'pass_fees' => $invoice->net_amount === null || (int) $invoice->processing_fee > 0,
+                'items' => collect($invoice->lines ?? [])->map(fn ($l) => ['description' => $l['description'], 'amount' => $l['amount'] / 100, 'quantity' => 1, 'unit' => ''])->values()->all(),
+                'template' => $invoice->template,
+                'statement_descriptor' => $invoice->statement_descriptor ?? '',
+                'ad_account_id' => $invoice->details['ad_account_id'] ?? '',
+                'period_start' => $invoice->details['period_start'] ?? '',
+                'period_end' => $invoice->details['period_end'] ?? '',
+                'campaigns' => collect($invoice->details['campaigns'] ?? [])->map(fn ($c) => ['name' => $c['name'], 'detail' => $c['detail'] ?? '', 'quantity' => $c['quantity'] ?? '', 'unit' => $c['unit'] ?? 'Impressions', 'amount' => ($c['amount'] ?? 0) / 100])->values()->all(),
+            ],
+        ]);
+    }
+
+    public function update(Request $request, Invoice $invoice, StripeService $stripe): RedirectResponse
+    {
+        [$client, $items, $data] = $this->input($request);
+
+        return $this->stripeAction(
+            function () use ($stripe, $invoice, $data, $items, $client, $request) {
+                $stripe->updateInvoice($invoice, $client, $items, $data);
+
+                if ($request->boolean('send')) {
+                    try {
+                        app(InvoiceMailer::class)->sendInvoice($invoice->fresh());
+                    } catch (Throwable $e) {
+                        return redirect()->route('invoices.index')->with('error', 'Invoice saved, but the email failed: '.$e->getMessage());
+                    }
+                }
+
+                return redirect()->route('invoices.index');
+            },
+            "{$invoice->number} updated — the pay link shows the new amount."
+        );
+    }
+
+    /**
+     * The invoice form, checked: its client, line items (fixed price) and options.
+     *
+     * @return array{0: Client, 1: array<int, array<string, mixed>>, 2: array<string, mixed>}
+     */
+    private function input(Request $request): array
     {
         // Ad budget and commission only are priced from one amount; fixed price uses line items.
         $priced = in_array($request->input('billing'), ['budget', 'commission'], true);
@@ -134,22 +220,7 @@ class InvoiceController extends Controller
         $data['budget'] = $this->budgetFromRequest($request, $this->toCents($data['budget_amount'] ?? 0), $client);
         $data['budget_label'] = (Catalog::SERVICES[$data['service'] ?? ''] ?? 'Ads').' budget';
 
-        return $this->stripeAction(
-            function () use ($stripe, $data, $items, $client, $request) {
-                $invoice = $stripe->createInvoice($client, $items, $data);
-
-                if ($request->boolean('send')) {
-                    try {
-                        app(InvoiceMailer::class)->sendInvoice($invoice);
-                    } catch (Throwable $e) {
-                        return redirect()->route('invoices.index')->with('error', 'Invoice created, but the email failed: '.$e->getMessage());
-                    }
-                }
-
-                return redirect()->route('invoices.index');
-            },
-            $request->boolean('send') ? 'Invoice created and emailed to the client.' : 'Invoice created — copy the link to share it.'
-        );
+        return [$client, $items, $data];
     }
 
     public function send(Invoice $invoice, InvoiceMailer $mailer): RedirectResponse

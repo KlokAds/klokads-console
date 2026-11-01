@@ -127,6 +127,7 @@ const copyLink = (url) => navigator.clipboard?.writeText(url);
                                 <div class="flex items-center justify-end gap-1.5">
                                     <button v-if="inv.status === 'open' && inv.client" class="btn-primary btn-sm whitespace-nowrap" @click="act(inv, 'charge')"><Icon name="card" :size="14" /> Charge card</button>
                                     <CopyButton v-if="inv.status === 'open'" :text="inv.public_url" label="Pay link" class="btn-secondary btn-sm" />
+                                    <Link v-if="inv.status === 'open' && !inv.stripe_invoice_id && inv.collection_method !== 'charge_automatically'" :href="route('invoices.edit', inv.id)" class="btn-secondary btn-sm"><Icon name="pencil" :size="14" /> Edit</Link>
                                     <a :href="route('invoices.document', inv.id)" target="_blank" class="btn-secondary btn-sm"><Icon name="invoice" :size="14" /> {{ inv.status === 'paid' ? 'Receipt' : 'View' }}</a>
                                     <RowMenu>
                                         <a :href="route('invoices.document', { invoice: inv.id, download: 1 })" class="menu-item"><Icon name="download" :size="15" /> Download PDF</a>

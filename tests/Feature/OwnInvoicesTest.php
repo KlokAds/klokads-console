@@ -116,6 +116,36 @@ class OwnInvoicesTest extends TestCase
         $this->postJson(route('public.invoice.pay-saved', $invoice->publicToken()), ['payment_method' => 'pm_1'])->assertStatus(422);
     }
 
+    public function test_an_open_invoice_can_be_changed_before_it_is_paid(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $invoice = app(StripeService::class)->createInvoice($this->client, [['description' => 'SEO', 'amount' => 5000, 'quantity' => 1]], []);
+        $invoice->update(['stripe_payment_intent_id' => 'pi_old']);
+        $this->api['paymentIntents']->shouldReceive('retrieve')->andReturn(PaymentIntent::constructFrom(['id' => 'pi_old', 'status' => 'requires_payment_method', 'amount' => 5000]));
+        $this->api['paymentIntents']->shouldReceive('cancel')->once()->with('pi_old');
+
+        $this->get("/invoices/{$invoice->id}/edit")->assertOk()->assertInertia(fn ($page) => $page->component('Invoices/Create')
+            ->where('invoice.number', 'KA-0001')->where('invoice.billing', 'standard')->where('invoice.items.0.amount', 50));
+
+        $this->put("/invoices/{$invoice->id}", [
+            'client_id' => $this->client->id, 'days_until_due' => 10, 'billing' => 'standard', 'send' => false,
+            'items' => [['description' => 'SEO', 'amount' => 50, 'quantity' => 1], ['description' => 'Report', 'amount' => 20, 'quantity' => 1]],
+        ])->assertRedirect('/invoices')->assertSessionHas('success');
+
+        $invoice->refresh();
+        $this->assertSame(['KA-0001', 7000, 7000, null], [$invoice->number, $invoice->total, $invoice->amount_remaining, $invoice->stripe_payment_intent_id]);
+        $this->assertCount(2, $invoice->lines);
+    }
+
+    public function test_a_paid_invoice_cannot_be_changed(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $invoice = app(StripeService::class)->createInvoice($this->client, [['description' => 'SEO', 'amount' => 5000, 'quantity' => 1]], []);
+        app(StripeService::class)->markInvoicePaid($invoice);
+
+        $this->get("/invoices/{$invoice->id}/edit")->assertRedirect('/invoices');
+    }
+
     public function test_marking_our_invoice_paid_needs_no_stripe_invoice(): void
     {
         $invoice = app(StripeService::class)->createInvoice($this->client, [['description' => 'SEO', 'amount' => 5000, 'quantity' => 1]], []);
