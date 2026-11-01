@@ -9,6 +9,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use RuntimeException;
 use Stripe\Exception\ApiErrorException;
+use Stripe\Exception\ExceptionInterface;
 
 abstract class Controller
 {
@@ -66,7 +67,9 @@ abstract class Controller
     {
         try {
             $response = $action();
-        } catch (ApiErrorException|RuntimeException $e) {
+        } catch (ApiErrorException|RuntimeException|ExceptionInterface $e) {
+            report($e);
+
             return back()->with('error', 'Stripe: '.$e->getMessage())->withInput();
         }
 

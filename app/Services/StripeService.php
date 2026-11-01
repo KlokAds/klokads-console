@@ -250,7 +250,7 @@ class StripeService
             'confirm' => true,
             'description' => $description,
             'metadata' => ['klok_client_id' => $client->id, 'service' => $service ?? '', 'charged_from' => 'klokads-console'] + self::budgetMetadata($budget),
-        ] + ($descriptor ? ['statement_descriptor_suffix' => $descriptor] : []), ['expand' => ['latest_charge']]);
+        ] + ($descriptor ? ['statement_descriptor_suffix' => $descriptor] : []));
 
         if ($pi->status !== 'succeeded') {
             throw new RuntimeException('The card payment did not go through ('.str_replace('_', ' ', $pi->status).').');
@@ -323,7 +323,7 @@ class StripeService
             'description' => 'Invoice '.$invoice->number,
             'metadata' => ['klok_invoice_id' => $invoice->id, 'klok_client_id' => $invoice->client_id],
         ] + ($offSession ? ['off_session' => true] : ['return_url' => $invoice->publicUrl().'?paid=1'])
-          + ($invoice->statement_descriptor ? ['statement_descriptor_suffix' => $invoice->statement_descriptor] : []), ['expand' => ['latest_charge']]);
+          + ($invoice->statement_descriptor ? ['statement_descriptor_suffix' => $invoice->statement_descriptor] : []));
         $invoice->update(['stripe_payment_intent_id' => $pi->id]);
 
         return $pi;

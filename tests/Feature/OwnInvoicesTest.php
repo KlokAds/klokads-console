@@ -84,7 +84,7 @@ class OwnInvoicesTest extends TestCase
     public function test_charging_a_saved_card_makes_a_paid_invoice_only_when_the_card_went_through(): void
     {
         $this->api['paymentIntents']->shouldReceive('create')->once()
-            ->withArgs(fn ($p) => $p['amount'] === 15000 && $p['off_session'] && $p['payment_method'] === 'pm_1' && $p['statement_descriptor_suffix'] === 'META ADS '.strtoupper(now()->format('M')))
+            ->withArgs(fn ($p, ...$options) => $options === [] && $p['amount'] === 15000 && $p['off_session'] && $p['payment_method'] === 'pm_1' && $p['statement_descriptor_suffix'] === 'META ADS '.strtoupper(now()->format('M')))
             ->andReturn($this->succeeded(15000));
         $this->api['paymentIntents']->shouldReceive('update')->once();
 
@@ -97,7 +97,7 @@ class OwnInvoicesTest extends TestCase
     {
         $this->actingAs(User::factory()->create());
         $invoice = app(StripeService::class)->createInvoice($this->client, [['description' => 'SEO', 'amount' => 5000, 'quantity' => 1]], []);
-        $this->api['paymentIntents']->shouldReceive('create')->once()->withArgs(fn ($p) => $p['amount'] === 5000 && $p['off_session'])->andReturn($this->succeeded(5000));
+        $this->api['paymentIntents']->shouldReceive('create')->once()->withArgs(fn ($p, ...$options) => $options === [] && $p['amount'] === 5000 && $p['off_session'])->andReturn($this->succeeded(5000));
 
         $this->from('/invoices')->post("/invoices/{$invoice->id}/charge", ['payment_method' => 'pm_1'])->assertSessionHas('success');
 
@@ -107,7 +107,7 @@ class OwnInvoicesTest extends TestCase
     public function test_the_client_pays_with_their_saved_card_on_the_invoice_page(): void
     {
         $invoice = app(StripeService::class)->createInvoice($this->client, [['description' => 'SEO', 'amount' => 5000, 'quantity' => 1]], []);
-        $this->api['paymentIntents']->shouldReceive('create')->once()->withArgs(fn ($p) => ! isset($p['off_session']) && isset($p['return_url']))->andReturn($this->succeeded(5000));
+        $this->api['paymentIntents']->shouldReceive('create')->once()->withArgs(fn ($p, ...$options) => $options === [] && ! isset($p['off_session']) && isset($p['return_url']))->andReturn($this->succeeded(5000));
 
         $this->postJson(route('public.invoice.pay-saved', $invoice->publicToken()), ['payment_method' => 'pm_1'])->assertOk()->assertJson(['paid' => true]);
         $this->assertSame('paid', $invoice->fresh()->status);
