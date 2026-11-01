@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Stripe\Exception\SignatureVerificationException;
 use Stripe\Invoice;
+use Stripe\PaymentIntent;
 use Stripe\Payout;
 use Stripe\Subscription;
 use Stripe\Webhook;
@@ -15,7 +16,7 @@ use UnexpectedValueException;
 
 /**
  * Keeps the dashboard live. Events to enable in Stripe → Developers → Webhooks:
- * invoice.*, customer.subscription.*, charge.succeeded, charge.refunded, payout.*, balance.available
+ * invoice.*, customer.subscription.*, payment_intent.succeeded, charge.succeeded, charge.refunded, payout.*, balance.available
  */
 class StripeWebhookController extends Controller
 {
@@ -41,6 +42,9 @@ class StripeWebhookController extends Controller
             $stripe->upsertSubscription($object);
         } elseif (str_starts_with($type, 'payout.') && $object instanceof Payout) {
             $stripe->upsertPayout($object);
+        } elseif ($type === 'payment_intent.succeeded' && $object instanceof PaymentIntent) {
+            // Our own invoices are paid with a plain card payment (no Stripe invoice behind them).
+            $stripe->paymentSucceeded($object);
         }
 
         // Money moved: pull the latest balance transactions (fees, nets) and refresh the balance.

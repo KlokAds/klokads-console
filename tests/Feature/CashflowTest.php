@@ -200,14 +200,15 @@ class CashflowTest extends TestCase
         $this->actingAs($user)->get('/cashflow/export')->assertOk()->assertHeader('content-type', 'text/csv; charset=utf-8');
     }
 
-    public function test_creating_an_invoice_without_stripe_shows_an_error_instead_of_crashing(): void
+    public function test_an_invoice_is_ours_so_it_is_created_even_without_stripe(): void
     {
         $client = Client::create(['name' => 'Fi', 'email' => 'fi@example.sg']);
 
         $this->actingAs(User::factory()->create())->from('/invoices/create')->post('/invoices', [
             'client_id' => $client->id, 'days_until_due' => 7, 'send' => false,
             'items' => [['description' => 'Meta Ads', 'amount' => 500, 'quantity' => 1]],
-        ])->assertRedirect('/invoices/create')->assertSessionHas('error');
+        ])->assertRedirect('/invoices')->assertSessionHas('success');
+        $this->assertSame('KA-0001', Invoice::withoutGlobalScopes()->sole()->number);
     }
 
     public function test_admin_command_creates_a_verified_login(): void

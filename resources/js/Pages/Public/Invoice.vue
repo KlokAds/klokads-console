@@ -61,6 +61,36 @@ async function pay() {
     router.visit(returnUrl, { replace: true });
 }
 
+// A card the client saved with us: one tap pays (with the bank's 3-D Secure check when it asks).
+const savedPaying = ref(null);
+async function payWithSaved(card) {
+    if (savedPaying.value) return;
+    savedPaying.value = card.id;
+    payError.value = null;
+    const returnUrl = `${window.location.origin}${window.location.pathname}?paid=1`;
+    try {
+        const xsrf = decodeURIComponent(document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/)?.[1] ?? '');
+        const res = await fetch(route('public.invoice.pay-saved', props.token), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-XSRF-TOKEN': xsrf },
+            body: JSON.stringify({ payment_method: card.id }),
+        });
+        const out = await res.json();
+        if (!res.ok) throw new Error(out.error ?? 'The card payment did not go through.');
+        if (out.client_secret) {
+            const Stripe = await loadStripeJs();
+            stripe ??= Stripe(props.payment.publishable_key);
+            const { error } = await stripe.handleNextAction({ clientSecret: out.client_secret });
+            if (error) throw new Error(error.message);
+        }
+        router.visit(returnUrl, { replace: true });
+    } catch (e) {
+        payError.value = e.message;
+        savedPaying.value = null;
+    }
+}
+const cardLabel = (c) => `${c.brand.charAt(0).toUpperCase()}${c.brand.slice(1)} ···· ${c.last4}`;
+
 const pdfUrl = (type) => route('public.invoice.pdf', { token: props.token, type });
 </script>
 
@@ -157,6 +187,18 @@ const pdfUrl = (type) => route('public.invoice.pdf', { token: props.token, type 
                         <span class="flex items-center gap-1.5 text-xs text-ink-500"><Icon name="shield" :size="14" class="text-emerald-500" /> Secure · 256-bit encrypted</span>
                     </div>
                     <template v-if="canPay">
+                        <div v-if="payment.cards?.length" class="mb-4 space-y-2">
+                            <button v-for="c in payment.cards" :key="c.id" class="flex w-full items-center gap-3 rounded-xl bg-white px-4 py-3.5 text-left ring-1 ring-line transition hover:ring-brand-400 disabled:opacity-60"
+                                :disabled="!!savedPaying" @click="payWithSaved(c)">
+                                <Icon name="card" :size="18" class="text-brand-600" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block text-sm font-semibold text-ink-900">Pay {{ m(d.amount_due) }} with {{ cardLabel(c) }}</span>
+                                    <span class="block text-xs text-ink-500">Your saved card · expires {{ String(c.exp_month).padStart(2, '0') }}/{{ String(c.exp_year).slice(-2) }}</span>
+                                </span>
+                                <span class="text-sm font-semibold text-brand-700">{{ savedPaying === c.id ? 'Paying…' : 'Pay' }}</span>
+                            </button>
+                            <div class="pt-2 text-center text-xs text-ink-500">or pay with another card</div>
+                        </div>
                         <div class="min-h-[120px] rounded-xl bg-white p-4 ring-1 ring-line">
                             <!-- Stripe owns this box; keep Vue-rendered nodes out of it. -->
                             <div ref="mountEl"></div>

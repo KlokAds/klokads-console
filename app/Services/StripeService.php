@@ -14,11 +14,14 @@ use App\Support\Ledger;
 use App\Support\Pricing;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use RuntimeException;
 use Stripe\BalanceTransaction;
+use Stripe\PaymentIntent;
 use Stripe\StripeClient;
 use Stripe\Subscription;
+use Throwable;
 
 class StripeService
 {
@@ -222,60 +225,188 @@ class StripeService
     }
 
     /**
-     * Charge a saved card right away for any amount. Creates a finalized invoice so the
-     * charge has a number, a receipt and shows up in every total.
+     * Charge a saved card right away for any amount. The invoice is our own (its number, receipt
+     * and totals); Stripe only takes the card payment, so there is no Stripe Invoicing fee.
+     * It is created once the card went through: a declined card leaves no invoice behind.
      */
     public function chargeNow(Client $client, int $amount, string $description, ?string $service = null, ?string $paymentMethodId = null, ?array $budget = null, ?string $statementText = null): Invoice
     {
         $items = $budget
             ? self::budgetItems($budget, $description)
             : [['description' => $description, 'amount' => $amount, 'quantity' => 1]];
-        $stripe = $this->stripe();
-        $customer = $this->ensureCustomer($client);
-        $paymentMethodId ??= collect($this->paymentMethods($client))->firstWhere('is_default', true)['id'] ?? null;
-
-        if (! $paymentMethodId) {
-            throw new RuntimeException('This client has no saved card yet.');
-        }
-
+        $paymentMethodId ??= $this->defaultCard($client);
         $this->assertOwnsPaymentMethod($client, $paymentMethodId);
 
-        $invoice = $stripe->invoices->create([
-            'customer' => $customer,
-            'collection_method' => 'charge_automatically',
-            'auto_advance' => false,
-            'currency' => $this->currencyFor($client),
-            'description' => $description,
-            'pending_invoice_items_behavior' => 'exclude',
-            'metadata' => ['klok_client_id' => $client->id, 'service' => $service ?? '', 'charged_from' => 'klokads-console'] + self::budgetMetadata($budget),
-            'statement_descriptor' => self::cleanDescriptor($statementText) ?? self::descriptorFor($service, now()),
-        ] + $this->taxParams());
+        $lines = collect($items)->map(fn ($i) => ['description' => $i['description'], 'amount' => $i['amount'], 'quantity' => 1])->all();
+        [$subtotal, $tax] = $this->totals($lines);
+        $descriptor = self::cleanDescriptor($statementText) ?? self::descriptorFor($service, now());
 
-        foreach ($items as $item) {
-            $stripe->invoiceItems->create([
-                'customer' => $customer,
-                'invoice' => $invoice->id,
-                'currency' => $this->currencyFor($client),
-                'amount' => $item['amount'],
-                'description' => $item['description'],
-            ]);
+        $pi = $this->stripe()->paymentIntents->create([
+            'amount' => $subtotal + $tax,
+            'currency' => $this->currencyFor($client),
+            'customer' => $this->ensureCustomer($client),
+            'payment_method' => $paymentMethodId,
+            'off_session' => true,
+            'confirm' => true,
+            'description' => $description,
+            'metadata' => ['klok_client_id' => $client->id, 'service' => $service ?? '', 'charged_from' => 'klokads-console'] + self::budgetMetadata($budget),
+        ] + ($descriptor ? ['statement_descriptor_suffix' => $descriptor] : []), ['expand' => ['latest_charge']]);
+
+        if ($pi->status !== 'succeeded') {
+            throw new RuntimeException('The card payment did not go through ('.str_replace('_', ' ', $pi->status).').');
         }
 
-        $stripe->invoices->finalizeInvoice($invoice->id, ['auto_advance' => false]);
+        $invoice = $this->newInvoice($client, $lines, self::budgetColumns($budget) + [
+            'description' => mb_substr($description, 0, 250),
+            'service' => $service,
+            'collection_method' => 'charge_automatically',
+            'statement_descriptor' => $descriptor,
+        ]);
+        $this->stripe()->paymentIntents->update($pi->id, ['metadata' => ['klok_invoice_id' => $invoice->id]]);
 
-        return $this->upsertInvoice($stripe->invoices->pay($invoice->id, ['payment_method' => $paymentMethodId]));
+        return $this->settle($invoice, $pi);
     }
 
     /** Charge an open invoice to a saved card (the default when none is given). */
     public function chargeInvoice(Invoice $invoice, ?string $paymentMethodId = null): Invoice
     {
-        if ($paymentMethodId && $invoice->client) {
-            $this->assertOwnsPaymentMethod($invoice->client, $paymentMethodId);
+        if ($invoice->stripe_invoice_id) {
+            if ($paymentMethodId && $invoice->client) {
+                $this->assertOwnsPaymentMethod($invoice->client, $paymentMethodId);
+            }
+
+            return $this->upsertInvoice($this->stripe()->invoices->pay($invoice->stripe_invoice_id, $paymentMethodId ? ['payment_method' => $paymentMethodId] : []));
         }
 
-        $params = $paymentMethodId ? ['payment_method' => $paymentMethodId] : [];
+        $pi = $this->payWithCard($invoice, $paymentMethodId ?? $this->defaultCard($invoice->client), offSession: true);
+        if ($pi->status !== 'succeeded') {
+            throw new RuntimeException('The card payment did not go through ('.str_replace('_', ' ', $pi->status).').');
+        }
 
-        return $this->upsertInvoice($this->stripe()->invoices->pay($invoice->stripe_invoice_id, $params));
+        return $this->settle($invoice, $pi);
+    }
+
+    /**
+     * The client pays their own invoice with a card they saved (they press Pay on the invoice page).
+     *
+     * @return array{paid: bool, client_secret: ?string} client_secret when the bank wants a 3-D Secure check first
+     */
+    public function payWithSavedCard(Invoice $invoice, string $paymentMethodId): array
+    {
+        $pi = $this->payWithCard($invoice, $paymentMethodId, offSession: false);
+        if ($pi->status === 'succeeded') {
+            $this->settle($invoice, $pi);
+
+            return ['paid' => true, 'client_secret' => null];
+        }
+        if ($pi->status === 'requires_action') {
+            return ['paid' => false, 'client_secret' => $pi->client_secret];
+        }
+
+        throw new RuntimeException('The card payment did not go through. Try another card.');
+    }
+
+    private function payWithCard(Invoice $invoice, ?string $paymentMethodId, bool $offSession): PaymentIntent
+    {
+        abort_unless($invoice->status === 'open' && $invoice->client && ! $invoice->stripe_invoice_id, 422);
+        if (! $paymentMethodId) {
+            throw new RuntimeException('This client has no saved card yet.');
+        }
+        $this->assertOwnsPaymentMethod($invoice->client, $paymentMethodId);
+
+        $pi = $this->stripe()->paymentIntents->create([
+            'amount' => $invoice->amount_remaining,
+            'currency' => $invoice->currency,
+            'customer' => $this->ensureCustomer($invoice->client),
+            'payment_method' => $paymentMethodId,
+            'confirm' => true,
+            'description' => 'Invoice '.$invoice->number,
+            'metadata' => ['klok_invoice_id' => $invoice->id, 'klok_client_id' => $invoice->client_id],
+        ] + ($offSession ? ['off_session' => true] : ['return_url' => $invoice->publicUrl().'?paid=1'])
+          + ($invoice->statement_descriptor ? ['statement_descriptor_suffix' => $invoice->statement_descriptor] : []), ['expand' => ['latest_charge']]);
+        $invoice->update(['stripe_payment_intent_id' => $pi->id]);
+
+        return $pi;
+    }
+
+    private function defaultCard(?Client $client): string
+    {
+        $id = $client ? (collect($this->paymentMethods($client))->firstWhere('is_default', true)['id'] ?? null) : null;
+        if (! $id) {
+            throw new RuntimeException('This client has no saved card yet.');
+        }
+
+        return $id;
+    }
+
+    // ---------------------------------------------------------------- our own invoices
+
+    /** Next number of our own invoices: KA-0001, KA-0002… (per live / test mode). */
+    public static function nextNumber(): string
+    {
+        $prefix = preg_replace('/[^A-Z0-9]/', '', strtoupper((string) Setting::get('invoice_prefix', 'KA'))) ?: 'KA';
+        $last = Invoice::whereNull('stripe_invoice_id')->where('number', 'like', $prefix.'-%')->pluck('number')
+            ->map(fn ($n) => (int) substr($n, strlen($prefix) + 1))->max() ?? 0;
+
+        return $prefix.'-'.str_pad((string) ($last + 1), 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * @param  array<int, array{amount: int}>  $lines  line totals in cents
+     * @return array{0: int, 1: int} subtotal and GST (when it is switched on)
+     */
+    private function totals(array $lines): array
+    {
+        $subtotal = (int) array_sum(array_column($lines, 'amount'));
+
+        return [$subtotal, Business::gstEnabled() ? (int) round($subtotal * Business::gstRate() / 100) : 0];
+    }
+
+    /** @param  array<int, array{description: string, amount: int, quantity: int}>  $lines */
+    private function newInvoice(Client $client, array $lines, array $fields): Invoice
+    {
+        [$subtotal, $tax] = $this->totals($lines);
+
+        return DB::transaction(fn () => Invoice::create($fields + [
+            'client_id' => $client->id,
+            'number' => self::nextNumber(),
+            'currency' => $fields['currency'] ?? $this->currencyFor($client),
+            'subtotal' => $subtotal,
+            'tax_amount' => $tax,
+            'total' => $subtotal + $tax,
+            'amount_paid' => 0,
+            'amount_remaining' => $subtotal + $tax,
+            'status' => 'open',
+            'lines' => $lines,
+            'issued_at' => now(),
+        ]));
+    }
+
+    /** A card payment went through: the invoice is paid (and the receipt goes out). */
+    public function settle(Invoice $invoice, PaymentIntent $pi): Invoice
+    {
+        if ($pi->status !== 'succeeded' || $invoice->status === 'paid') {
+            return $invoice;
+        }
+        $before = clone $invoice;
+        $charge = $pi->latest_charge;
+        if ($charge && is_string($charge)) {
+            $charge = $this->stripe()->charges->retrieve($charge);
+        }
+        $card = $charge?->payment_method_details?->card;
+
+        $invoice->update([
+            'status' => 'paid',
+            'amount_paid' => $invoice->total,
+            'amount_remaining' => 0,
+            'paid_at' => now(),
+            'stripe_payment_intent_id' => $pi->id,
+            'paid_with' => $card ? ucfirst($card->brand).' ···· '.$card->last4 : ($charge?->payment_method_details?->type ?? null),
+            'charge_id' => $charge?->id,
+        ]);
+        app(InvoiceMailer::class)->afterSync($before, $invoice);
+
+        return $invoice;
     }
 
     private function assertOwnsPaymentMethod(Client $client, string $paymentMethodId): void
@@ -471,58 +602,45 @@ class StripeService
     /**
      * @param  array<int, array{description: string, amount: int, quantity: int}>  $items  amounts in cents
      */
+    /**
+     * An invoice of our own: numbered and kept here, paid on our invoice page by card (Stripe
+     * only takes the payment, so no Stripe Invoicing fee) or marked paid by bank transfer.
+     */
     public function createInvoice(Client $client, array $items, array $opts): Invoice
     {
-        $stripe = $this->stripe();
-        $currency = $opts['currency'] ?? $this->currency();
-
-        $invoice = $stripe->invoices->create([
-            'customer' => $this->ensureCustomer($client),
-            'auto_advance' => false,
-            'collection_method' => 'send_invoice',
-            'days_until_due' => $opts['days_until_due'] ?? 7,
-            'currency' => $currency,
-            'description' => $opts['memo'] ?? null,
-            'pending_invoice_items_behavior' => 'exclude',
-            'metadata' => ['klok_client_id' => $client->id, 'service' => $opts['service'] ?? ''] + self::budgetMetadata($opts['budget'] ?? null),
-            'statement_descriptor' => self::cleanDescriptor($opts['statement_descriptor'] ?? null) ?? self::descriptorFor(
-                $opts['service'] ?? null,
-                isset($opts['details']['period_start']) ? Carbon::parse($opts['details']['period_start']) : now(),
-            ),
-        ] + $this->taxParams());
-
         if (! empty($opts['budget'])) {
             $items = self::budgetItems($opts['budget'], $opts['budget_label'] ?? 'Ads budget');
         }
 
-        foreach ($items as $item) {
+        $lines = collect($items)->map(function ($item) {
             $qty = max(1, (int) $item['quantity']);
             $unit = $item['unit'] ?? null;
 
             // With a unit (Clicks, Impressions…) the quantity is usage and the amount is the line total.
-            $stripe->invoiceItems->create([
-                'customer' => $client->stripeCustomerId(),
-                'invoice' => $invoice->id,
-                'currency' => $currency,
-                'amount' => $unit ? $item['amount'] : $item['amount'] * $qty,
+            return [
                 'description' => match (true) {
                     (bool) $unit => "{$item['description']} — ".number_format($qty)." {$unit}",
                     $qty > 1 => "{$item['description']} × {$qty}",
                     default => $item['description'],
                 },
-            ]);
-        }
+                'amount' => $unit ? $item['amount'] : $item['amount'] * $qty,
+                'quantity' => 1,
+            ];
+        })->values()->all();
 
-        // auto_advance off: Stripe never emails the client; we send our own email.
-        $invoice = $stripe->invoices->finalizeInvoice($invoice->id, ['auto_advance' => false]);
-
-        $local = $this->upsertInvoice($invoice);
-        $local->update([
+        return $this->newInvoice($client, $lines, self::budgetColumns($opts['budget'] ?? null) + [
+            'currency' => strtolower($opts['currency'] ?? $this->currencyFor($client)),
+            'description' => isset($opts['memo']) ? mb_substr((string) $opts['memo'], 0, 250) : null,
+            'service' => $opts['service'] ?? null,
+            'collection_method' => 'send_invoice',
+            'due_at' => now()->addDays((int) ($opts['days_until_due'] ?? 7)),
+            'statement_descriptor' => self::cleanDescriptor($opts['statement_descriptor'] ?? null) ?? self::descriptorFor(
+                $opts['service'] ?? null,
+                isset($opts['details']['period_start']) ? Carbon::parse($opts['details']['period_start']) : now(),
+            ),
             'template' => $opts['template'] ?? Business::templateFor($opts['service'] ?? null),
             'details' => $opts['details'] ?? null,
         ]);
-
-        return $local;
     }
 
     /**
@@ -533,6 +651,9 @@ class StripeService
     {
         if ($invoice->status !== 'open') {
             return null;
+        }
+        if (! $invoice->stripe_invoice_id) {
+            return $this->invoicePaymentIntent($invoice)?->client_secret;
         }
 
         $si = $this->stripe()->invoices->retrieve($invoice->stripe_invoice_id, ['expand' => ['confirmation_secret']]);
@@ -547,7 +668,7 @@ class StripeService
      */
     public function paymentInfo(Invoice $invoice): array
     {
-        if ($invoice->paid_with || $invoice->status !== 'paid' || ! self::configured()) {
+        if ($invoice->paid_with || $invoice->status !== 'paid' || ! self::configured() || ! $invoice->stripe_invoice_id) {
             return ['paid_with' => $invoice->paid_with, 'charge_id' => $invoice->charge_id];
         }
 
@@ -569,22 +690,102 @@ class StripeService
         return $info;
     }
 
+    /**
+     * The card payment behind our own invoice's pay box: the open one is reused while its amount
+     * still fits, a new one made otherwise. Null (and the invoice settled) when it was paid already.
+     */
+    private function invoicePaymentIntent(Invoice $invoice): ?PaymentIntent
+    {
+        if ($invoice->stripe_payment_intent_id) {
+            $pi = $this->stripe()->paymentIntents->retrieve($invoice->stripe_payment_intent_id, ['expand' => ['latest_charge']]);
+            if ($pi->status === 'succeeded') {
+                $this->settle($invoice, $pi);
+
+                return null;
+            }
+            if (in_array($pi->status, ['requires_payment_method', 'requires_confirmation', 'requires_action'], true) && $pi->amount === $invoice->amount_remaining) {
+                return $pi;
+            }
+        }
+
+        $pi = $this->stripe()->paymentIntents->create([
+            'amount' => $invoice->amount_remaining,
+            'currency' => $invoice->currency,
+            'automatic_payment_methods' => ['enabled' => true],
+            'description' => 'Invoice '.$invoice->number,
+            'metadata' => ['klok_invoice_id' => $invoice->id, 'klok_client_id' => $invoice->client_id],
+        ] + ($invoice->client ? ['customer' => $this->ensureCustomer($invoice->client)] : [])
+          + ($invoice->statement_descriptor ? ['statement_descriptor_suffix' => $invoice->statement_descriptor] : []));
+        $invoice->update(['stripe_payment_intent_id' => $pi->id]);
+
+        return $pi;
+    }
+
+    /** No card payment can finish any more (voided, or paid another way). */
+    private function cancelPaymentIntent(Invoice $invoice): void
+    {
+        if (! $invoice->stripe_payment_intent_id) {
+            return;
+        }
+        try {
+            $this->stripe()->paymentIntents->cancel($invoice->stripe_payment_intent_id);
+        } catch (Throwable) {
+            // Already finished or cancelled.
+        }
+    }
+
     public function voidInvoice(Invoice $invoice): Invoice
     {
-        return $this->upsertInvoice($this->stripe()->invoices->voidInvoice($invoice->stripe_invoice_id));
+        if ($invoice->stripe_invoice_id) {
+            return $this->upsertInvoice($this->stripe()->invoices->voidInvoice($invoice->stripe_invoice_id));
+        }
+        $this->refreshInvoice($invoice);
+        if ($invoice->status === 'paid') {
+            throw new RuntimeException('The client has just paid this invoice — it can no longer be voided.');
+        }
+        $this->cancelPaymentIntent($invoice);
+        $invoice->update(['status' => 'void']);
+
+        return $invoice;
     }
 
     /** Client paid outside Stripe (bank transfer / PayNow). */
     public function markInvoicePaid(Invoice $invoice): Invoice
     {
-        return $this->upsertInvoice(
-            $this->stripe()->invoices->pay($invoice->stripe_invoice_id, ['paid_out_of_band' => true])
-        );
+        if ($invoice->stripe_invoice_id) {
+            return $this->upsertInvoice(
+                $this->stripe()->invoices->pay($invoice->stripe_invoice_id, ['paid_out_of_band' => true])
+            );
+        }
+        $this->cancelPaymentIntent($invoice);
+        $before = clone $invoice;
+        $invoice->update(['status' => 'paid', 'amount_paid' => $invoice->total, 'amount_remaining' => 0, 'paid_at' => now(), 'paid_with' => 'bank transfer']);
+        app(InvoiceMailer::class)->afterSync($before, $invoice);
+
+        return $invoice;
     }
 
     public function refreshInvoice(Invoice $invoice): Invoice
     {
+        if (! $invoice->stripe_invoice_id) {
+            if ($invoice->status === 'open' && $invoice->stripe_payment_intent_id) {
+                $this->settle($invoice, $this->stripe()->paymentIntents->retrieve($invoice->stripe_payment_intent_id, ['expand' => ['latest_charge']]));
+            }
+
+            return $invoice;
+        }
+
         return $this->upsertInvoice($this->stripe()->invoices->retrieve($invoice->stripe_invoice_id));
+    }
+
+    /** Stripe says a card payment went through: the invoice it pays (ours) is paid. */
+    public function paymentSucceeded(PaymentIntent $pi): void
+    {
+        $id = $pi->metadata['klok_invoice_id'] ?? null;
+        $invoice = $id ? Invoice::withoutGlobalScope('stripe_mode')->whereNull('stripe_invoice_id')->find($id) : null;
+        if ($invoice && $invoice->status === 'open') {
+            $this->settle($invoice, $this->stripe()->paymentIntents->retrieve($pi->id, ['expand' => ['latest_charge']]));
+        }
     }
 
     public function upsertInvoice(\Stripe\Invoice $si): Invoice

@@ -47,6 +47,12 @@ const confirmations = {
         confirmLabel: 'Mark as paid',
         tone: 'money',
     }),
+    charge: (inv) => ({
+        title: `Charge ${money(inv.amount_remaining, inv.currency)} now?`,
+        message: `${clientName(inv.client)}'s saved card is charged for ${inv.number}. The invoice is paid and the receipt goes out.`,
+        confirmLabel: 'Charge card',
+        tone: 'money',
+    }),
     void: (inv) => ({
         title: `Void ${inv.number}?`,
         message: 'The client will no longer be able to pay this invoice. This cannot be undone.',
@@ -67,7 +73,7 @@ const copyLink = (url) => navigator.clipboard?.writeText(url);
 <template>
     <Head title="Invoices" />
 
-    <AuthenticatedLayout title="Invoices" subtitle="One-off and recurring invoices, created and collected through Stripe">
+    <AuthenticatedLayout title="Invoices" subtitle="Our own invoices — the client pays by card on the pay link, or you charge their saved card">
         <template #actions>
             <Link :href="route('invoices.create')" class="btn-secondary hidden sm:inline-flex"><Icon name="plus" :size="16" /> New invoice</Link>
         </template>
@@ -119,6 +125,8 @@ const copyLink = (url) => navigator.clipboard?.writeText(url);
                             <td><StatusBadge :status="invoiceStatus(inv)" /></td>
                             <td>
                                 <div class="flex items-center justify-end gap-1.5">
+                                    <button v-if="inv.status === 'open' && inv.client" class="btn-primary btn-sm whitespace-nowrap" @click="act(inv, 'charge')"><Icon name="card" :size="14" /> Charge card</button>
+                                    <CopyButton v-if="inv.status === 'open'" :text="inv.public_url" label="Pay link" class="btn-secondary btn-sm" />
                                     <a :href="route('invoices.document', inv.id)" target="_blank" class="btn-secondary btn-sm"><Icon name="invoice" :size="14" /> {{ inv.status === 'paid' ? 'Receipt' : 'View' }}</a>
                                     <RowMenu>
                                         <a :href="route('invoices.document', { invoice: inv.id, download: 1 })" class="menu-item"><Icon name="download" :size="15" /> Download PDF</a>

@@ -47,6 +47,7 @@ class PersonalInvoicesTest extends TestCase
 
     public function test_invoice_totals_in_bdt_and_a_payment_lands_in_the_account(): void
     {
+        $this->travelTo('2026-10-28 12:00'); // "this month" is October
         $inv = $this->invoice();
         $this->assertSame('INV-0001', $inv->number);
         $this->assertSame(1750000, $inv->total);

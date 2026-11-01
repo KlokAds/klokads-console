@@ -81,6 +81,7 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('/pi/{token}/pdf', [PersonalInvoiceController::class, 'publicPdf'])->name('personal.invoice.public.pdf');
     Route::post('/pi/{token}/paid', [PersonalInvoiceController::class, 'report'])->middleware('throttle:6,1')->name('personal.invoice.public.report');
     Route::get('/i/{token}/pdf', [PublicInvoiceController::class, 'pdf'])->name('public.invoice.pdf');
+    Route::post('/i/{token}/pay-saved', [PublicInvoiceController::class, 'paySaved'])->middleware('throttle:6,1')->name('public.invoice.pay-saved');
 });
 
 Route::prefix('install')->name('install.')->group(function () {
