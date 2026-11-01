@@ -82,7 +82,7 @@ class DashboardController extends Controller
         foreach ($client->meta_campaigns ?? [] as $id => $k) {
             if (! $rows->has((string) $id) && ! in_array($k['status'] ?? null, ['ARCHIVED', 'DELETED'], true)) {
                 $rows[(string) $id] = ['id' => (string) $id, 'name' => $k['name'], 'status' => $k['status'] ?? null, 'daily_budget' => $k['daily_budget'] ?? null,
-                    'end' => $k['end'] ?? null, 'currency' => strtoupper($client->currency ?: 'SGD'), 'spend' => 0,
+                    'end' => $k['end'] ?? null, 'start' => $k['start'] ?? null, 'currency' => strtoupper($client->currency ?: 'SGD'), 'spend' => 0,
                     ...AdPerformance::present($k['objective'] ?? null, null, 0, 0, 0), 'impressions' => 0, 'clicks' => 0, 'ctr' => null];
             }
         }
@@ -109,6 +109,7 @@ class DashboardController extends Controller
 
         return [
             'client' => $client->only('id', 'name', 'company'),
+            'account' => $client->meta_ad_account_id,
             'currency' => $currency,
             'balance' => $status['balance'],
             'days_left' => $status['days_left'],

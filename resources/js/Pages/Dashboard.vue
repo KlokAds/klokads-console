@@ -93,7 +93,7 @@ const marginPct = (s) => (s.revenue ? Math.round((s.margin / s.revenue) * 100) :
                 <span class="text-xs text-ink-500">Pause, budget and end date change on Meta right away</span>
             </div>
             <div class="mt-2 grid gap-3 lg:grid-cols-2">
-                <CampaignCard v-for="c in adDesk.campaigns" :key="c.id" :campaign="c" :currency="adDesk.currency" :control-url="route('clients.campaigns.control', [adDesk.client.id, c.id])" />
+                <CampaignCard v-for="c in adDesk.campaigns" :key="c.id" :campaign="c" :currency="adDesk.currency" :account="adDesk.account" :control-url="route('clients.campaigns.control', [adDesk.client.id, c.id])" />
             </div>
             <EmptyState v-if="!adDesk.campaigns.length" compact icon="megaphone" title="No campaign spend in the last 7 days" text="Campaigns show here as soon as they spend." />
 
