@@ -316,33 +316,13 @@ class PersonalAds
         $now ??= CarbonImmutable::now();
         $this->sync();
         $local = $now->setTimezone(PersonalReminders::timezone());
+        // Each client's yesterday comes in its own morning report (AdDailyReport).
         if ($local->hour >= 9) {
-            $this->daily($local);
             $this->weekly($local);
             $this->bills($local);
         }
 
         return 1;
-    }
-
-    /** One note for all my ad clients: what yesterday cost and brought. */
-    public function daily(CarbonImmutable $local): void
-    {
-        $day = $local->startOfDay()->subDay();
-        $lines = PersonalClient::whereHas('adAssignments')->get()->map(function (PersonalClient $c) use ($day) {
-            $money = self::money($c, $day, $day);
-            if (! $money) {
-                return null;
-            }
-            $results = collect(self::table($c, $day, $day))->where('results', '>', 0)
-                ->map(fn ($r) => $r['results'].' '.$r['result_label'])->implode(', ');
-
-            return $c->name.': '.collect($money)->map(fn ($m, $cur) => Notify::money($m['spend'], $cur))->implode(' + ').($results ? " ({$results})" : '');
-        })->filter();
-        if ($lines->isEmpty()) {
-            return;
-        }
-        $this->notify->once('personal-ads-day:'.$day->toDateString(), 'billing', '📊 Client ads · '.$day->format('j M'), $lines->implode("\n"), route('ad-clients.index'));
     }
 
     /** Monday: each client's week, with their report link to forward. */
