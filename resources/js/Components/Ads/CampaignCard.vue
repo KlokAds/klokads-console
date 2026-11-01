@@ -4,7 +4,8 @@ import Modal from '@/Components/Modal.vue';
 import DatePicker from '@/Components/Ui/DatePicker.vue';
 import { confirmDialog } from '@/confirm';
 import { date, money } from '@/money';
-import { router } from '@inertiajs/vue3';
+import { adsManagerUrl, campaignState } from '@/campaign';
+import { Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 /**
@@ -12,42 +13,15 @@ import { computed, ref } from 'vue';
  * (results by its goal, cost each) and running it on Meta — pause / turn on, budget a day,
  * last day. `controlUrl` is where the change is posted; `account` opens it in Ads Manager.
  */
-const props = defineProps({ campaign: Object, controlUrl: String, currency: { type: String, default: null }, account: { type: String, default: null } });
+const props = defineProps({ campaign: Object, controlUrl: String, currency: { type: String, default: null }, account: { type: String, default: null }, detailUrl: { type: String, default: null } });
 
 const c = computed(() => props.campaign);
 const cur = () => c.value.currency || props.currency || 'USD';
 const m = (cents) => money(cents, cur());
 const today = new Date().toISOString().slice(0, 10);
-const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
-const adsManager = computed(() => (props.account
-    ? `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${props.account.replace(/^act_/, '')}&selected_campaign_ids=${c.value.id}`
-    : null));
-
-// What the campaign is doing now, in words, with what to do when it needs a hand.
-const state = computed(() => {
-    const s = c.value.status;
-    const tone = {
-        good: ['bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300', 'bg-emerald-500'],
-        info: ['bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300', 'bg-sky-500'],
-        warn: ['bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300', 'bg-amber-500'],
-        bad: ['bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300', 'bg-rose-500'],
-        off: ['bg-ink-100 text-ink-600', 'bg-ink-400'],
-    };
-    const make = (label, t, note = null) => ({ label, pill: tone[t][0], dot: tone[t][1], note, tone: t });
-    if (s === 'ACTIVE') {
-        if (c.value.end && c.value.end < today) return make('Ended', 'off', `Its last day was ${date(c.value.end)}. Set a new end date to run it again.`);
-        if (c.value.spend > 0) return make('Running', 'good');
-        if (c.value.start && c.value.start >= daysAgo(2)) return make('Just started', 'info', 'It started lately — spend and results show within a few hours.');
-        return make('On · not spending', 'warn', 'It is on but spent nothing in 7 days. Usually its ad set or ads are off, an ad is in review or rejected, or the payment method failed — check it in Ads Manager.');
-    }
-    if (s === 'DISAPPROVED') return make('Rejected', 'bad', 'Meta rejected an ad in it. Open Ads Manager to see why, fix the ad and send it for review again.');
-    if (s === 'WITH_ISSUES') return make('Has issues', 'warn', 'Meta flags a problem with it. Open Ads Manager to see what to fix.');
-    if (s === 'PENDING_REVIEW' || s === 'IN_PROCESS') return make('In review', 'info', 'Meta is reviewing its ads — usually done within 24 hours.');
-    if (s === 'ADSET_PAUSED') return make('Ad set paused', 'off');
-    if (s === 'ARCHIVED') return make('Archived', 'off');
-    return make(s ? 'Paused' : '—', 'off');
-});
+const adsManager = computed(() => adsManagerUrl(props.account, c.value.id));
+const state = computed(() => campaignState(c.value));
 const running = computed(() => c.value.status === 'ACTIVE');
 const hasNumbers = computed(() => c.value.spend > 0 || c.value.results > 0);
 
@@ -87,7 +61,7 @@ const costText = computed(() => (c.value.cost_per_result === null ? '—' : c.va
                     </span>
                     <span v-if="campaign.goal && campaign.goal !== 'Other'" class="rounded-full bg-ink-100 px-2.5 py-0.5 text-[11px] font-semibold text-ink-600">{{ campaign.goal }}</span>
                 </div>
-                <h4 class="mt-2 line-clamp-2 text-[15px] font-bold leading-snug text-ink-900" :title="campaign.name">{{ campaign.name }}</h4>
+                <component :is="detailUrl ? Link : 'h4'" :href="detailUrl" class="mt-2 line-clamp-2 block text-[15px] font-bold leading-snug text-ink-900" :class="detailUrl ? 'hover:text-brand-700' : ''" :title="campaign.name">{{ campaign.name }}</component>
             </div>
             <button v-if="campaign.status" class="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition disabled:opacity-60" :disabled="busy"
                 :class="running ? 'bg-ink-100 text-ink-700 hover:bg-rose-50 hover:text-rose-700' : 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700'"
@@ -119,7 +93,7 @@ const costText = computed(() => (c.value.cost_per_result === null ? '—' : c.va
             :class="state.tone === 'warn' || state.tone === 'bad' ? state.pill : 'bg-ink-50 text-ink-600'">
             <Icon :name="state.tone === 'warn' || state.tone === 'bad' ? 'alert' : 'clock'" :size="15" class="mt-px shrink-0" />
             <span class="min-w-0 flex-1">
-                {{ state.note || 'No spend in the last 7 days.' }}
+                {{ state.note || 'No spend in this period.' }}
                 <a v-if="adsManager && (state.tone === 'warn' || state.tone === 'bad')" :href="adsManager" target="_blank" rel="noopener" class="mt-1 inline-flex items-center gap-1 font-bold underline-offset-2 hover:underline">
                     Open in Ads Manager <Icon name="external" :size="12" />
                 </a>

@@ -19,7 +19,8 @@ const flow = computed(() => props.money ?? { entries: [] });
 const today = new Date().toISOString().slice(0, 10);
 const name = computed(() => props.client?.company || props.client?.name);
 
-const TABS = [{ key: 'overview', label: 'Overview', icon: 'home' }, { key: 'campaigns', label: 'Campaigns', icon: 'megaphone' }, { key: 'money', label: 'Money', icon: 'wallet' }];
+// Campaigns have their own page (Campaigns in the menu).
+const TABS = [{ key: 'overview', label: 'Overview', icon: 'home' }, { key: 'money', label: 'Money', icon: 'wallet' }];
 const tab = ref(TABS.some((t) => t.key === props.tab) ? props.tab : 'overview');
 watch(tab, (key) => {
     const url = new URL(window.location.href);
@@ -83,8 +84,11 @@ const KIND = { spend: '📊 Ads + fee', top_up: '💳 Top-up', manual: '✍️ A
             <div class="sticky top-0 z-10 -mx-1 mt-4 flex gap-1 overflow-x-auto px-1 py-2 backdrop-blur">
                 <button v-for="t in TABS" :key="t.key" class="flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition"
                     :class="tab === t.key ? 'bg-brand-600 text-white shadow-sm' : 'bg-surface text-ink-600 ring-1 ring-line hover:text-ink-900'" @click="tab = t.key">
-                    <Icon :name="t.icon" :size="15" /> {{ t.label }}<span v-if="t.key === 'campaigns' && running" class="rounded-full bg-white/25 px-1.5 text-[10px] font-extrabold">{{ running }}</span>
+                    <Icon :name="t.icon" :size="15" /> {{ t.label }}
                 </button>
+                <Link :href="route('campaigns')" class="flex shrink-0 items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm font-semibold text-ink-600 ring-1 ring-line transition hover:text-ink-900">
+                    <Icon name="megaphone" :size="15" /> Campaigns<span v-if="running" class="rounded-full bg-emerald-100 px-1.5 text-[10px] font-extrabold text-emerald-700">{{ running }}</span> <Icon name="arrow" :size="13" />
+                </Link>
             </div>
 
             <!-- Overview -->
@@ -97,7 +101,7 @@ const KIND = { spend: '📊 Ads + fee', top_up: '💳 Top-up', manual: '✍️ A
                             <div class="text-right"><div class="font-bold tabular-nums">{{ m(c.spend, c.currency) }}</div><div class="text-xs text-ink-500">{{ each(c) }} {{ c.per }}</div></div></div>
                     </Link>
                 </div>
-                <EmptyState v-if="!campaigns.some((x) => x.spend > 0)" compact icon="megaphone" title="No campaign spent in this period" text="See every campaign in Campaigns — turn one on from there." />
+                <EmptyState v-if="!campaigns.some((x) => x.spend > 0)" compact icon="megaphone" title="No campaign spent in this period" text="Every campaign is on the Campaigns page — turn one on from there." />
                 <div v-if="suggestions.length" class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm">
                     <div class="text-sm font-bold text-ink-900">This week</div>
                     <ul class="mt-2 space-y-1.5 text-sm text-ink-700"><li v-for="(s, i) in suggestions" :key="i">💡 {{ s.text }}</li></ul>
@@ -109,30 +113,6 @@ const KIND = { spend: '📊 Ads + fee', top_up: '💳 Top-up', manual: '✍️ A
                         <div class="mt-0.5 text-xs text-ink-500" :class="openTip === i ? 'whitespace-pre-line' : 'line-clamp-1'">{{ a.body }}</div>
                     </button>
                 </div>
-            </div>
-
-            <!-- Campaigns -->
-            <div v-if="tab === 'campaigns'" class="mt-3 space-y-5">
-                <section v-for="g in groups" :key="g.key">
-                    <h3 class="mb-2 px-1 text-sm font-bold text-ink-900">{{ g.label }} · {{ g.list.length }}</h3>
-                    <div class="space-y-2.5">
-                        <Link v-for="c in g.list" :key="c.id" :href="route('clients.campaigns.show', [client.id, c.id])" class="block rounded-3xl border border-line/70 bg-surface p-4 shadow-sm transition hover:border-brand-300">
-                            <div class="flex items-start gap-2">
-                                <span class="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold" :class="g.key === 'running' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-ink-50 text-ink-500'">{{ STATUS[c.status] ?? c.status ?? '—' }}</span>
-                                <span class="min-w-0 flex-1 truncate font-bold text-ink-900">{{ c.name }}</span>
-                                <Icon name="chevron" :size="15" class="mt-1 shrink-0 -rotate-90 text-ink-300" />
-                            </div>
-                            <div class="mt-1 text-xs text-ink-500">{{ c.goal }}<template v-if="c.daily_budget"> · {{ m(c.daily_budget, c.currency) }}/day</template><template v-if="c.end"> · {{ c.end < today ? 'ended' : 'ends' }} {{ date(c.end) }}</template><template v-else-if="c.last_spend"> · last spent {{ date(c.last_spend) }}</template></div>
-                            <div class="mt-3 grid grid-cols-4 gap-2 text-sm">
-                                <div><div class="text-[11px] text-ink-500">Spent</div><div class="font-bold tabular-nums">{{ m(c.spend, c.currency) }}</div></div>
-                                <div><div class="text-[11px] text-ink-500">Results</div><div class="font-bold tabular-nums">{{ c.results.toLocaleString() }}</div></div>
-                                <div><div class="text-[11px] text-ink-500">Each</div><div class="font-bold tabular-nums">{{ each(c) }}</div></div>
-                                <div><div class="text-[11px] text-ink-500">Clicks</div><div class="font-bold tabular-nums">{{ c.clicks.toLocaleString() }}</div></div>
-                            </div>
-                        </Link>
-                        <p v-if="!g.list.length" class="px-1 text-sm text-ink-500">None.</p>
-                    </div>
-                </section>
             </div>
 
             <!-- Money -->

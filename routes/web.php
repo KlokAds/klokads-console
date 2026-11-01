@@ -263,6 +263,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/payouts', [PayoutController::class, 'index'])->name('payouts.index');
     Route::get('/ad-money', [AdMoneyController::class, 'index'])->name('ad-money.index');
     Route::get('/ad-desk', [AdDeskController::class, 'index'])->name('ad-desk');
+    Route::get('/campaigns', [AdDeskController::class, 'campaignsPage'])->name('campaigns');
     Route::post('/clients/{client}/campaigns/{campaign}', [ClientCampaignController::class, 'control'])->name('clients.campaigns.control');
     Route::get('/clients/{client}/campaigns/{campaign}', [ClientCampaignController::class, 'show'])->name('clients.campaigns.show');
     Route::post('/statements', [StatementController::class, 'store'])->name('statements.store');

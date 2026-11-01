@@ -13,6 +13,7 @@ use App\Services\AdPerformance;
 use App\Services\Airwallex;
 use App\Services\PrepaidBalance;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,8 +24,12 @@ use Inertia\Response;
  */
 class AdDeskController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request): Response|RedirectResponse
     {
+        // Campaigns moved to their own page.
+        if ($request->query('tab') === 'campaigns') {
+            return redirect()->route('campaigns', $request->only('client'));
+        }
         $client = $request->filled('client') ? Client::findOrFail($request->integer('client')) : Airwallex::metaClient();
         if (! $client) {
             return Inertia::render('AdDesk/Index', ['client' => null]);
@@ -45,7 +50,7 @@ class AdDeskController extends Controller
         return Inertia::render('AdDesk/Index', [
             'client' => $client->only('id', 'name', 'company') + ['approve_charges' => $client->approve_charges, 'spend_billing' => $client->spend_billing],
             'currency' => $currency,
-            'tab' => in_array($request->query('tab'), ['overview', 'campaigns', 'money'], true) ? $request->query('tab') : 'overview',
+            'tab' => in_array($request->query('tab'), ['overview', 'money'], true) ? $request->query('tab') : 'overview',
             'range' => ['period' => in_array($period, ['last7', 'last30', 'lastmonth'], true) ? $period : 'month', 'label' => $start->format('j M').' – '.$end->format('j M Y')],
             'now' => [
                 'balance' => $status['balance'], 'days_left' => $status['days_left'], 'daily' => $status['daily'],
@@ -66,6 +71,34 @@ class AdDeskController extends Controller
         ]);
     }
 
+    /** Tasfia's campaigns on their own page: each with its numbers for the period, run on Meta from its card. */
+    public function campaignsPage(Request $request): Response
+    {
+        $client = $request->filled('client') ? Client::findOrFail($request->integer('client')) : Airwallex::metaClient();
+        if (! $client) {
+            return Inertia::render('AdDesk/Campaigns', ['client' => null]);
+        }
+        $today = CarbonImmutable::today();
+        $period = in_array($request->input('period'), ['today', 'last7', 'last30', 'month'], true) ? $request->input('period') : 'last7';
+        [$start, $end] = match ($period) {
+            'today' => [$today, $today],
+            'last30' => [$today->subDays(29), $today],
+            'month' => [$today->startOfMonth(), $today],
+            default => [$today->subDays(6), $today],
+        };
+
+        return Inertia::render('AdDesk/Campaigns', [
+            'client' => $client->only('id', 'name', 'company'),
+            'account' => $client->meta_ad_account_id,
+            'currency' => strtoupper($client->currency ?: 'SGD'),
+            'range' => ['period' => $period, 'label' => $start->format('j M').($start->eq($end) ? '' : ' – '.$end->format('j M'))],
+            'campaigns' => $this->campaigns($client, $start, $end),
+            'suggestions' => AdPerformance::suggestions($client),
+            'advice' => AdAdvice::forOwner($client->company ?: $client->name),
+            'syncedAt' => $client->spend_synced_at?->toIso8601String(),
+        ]);
+    }
+
     /** Every campaign: the period's numbers where it spent, and the quiet ones too (to switch on). */
     private function campaigns(Client $client, CarbonImmutable $start, CarbonImmutable $end): array
     {
@@ -74,7 +107,7 @@ class AdDeskController extends Controller
         foreach ($client->meta_campaigns ?? [] as $id => $k) {
             if (! $rows->has((string) $id) && ! in_array($k['status'] ?? null, ['ARCHIVED', 'DELETED'], true)) {
                 $rows[(string) $id] = ['id' => (string) $id, 'name' => $k['name'], 'status' => $k['status'] ?? null, 'daily_budget' => $k['daily_budget'] ?? null,
-                    'end' => $k['end'] ?? null, 'currency' => strtoupper($client->currency ?: 'SGD'), 'spend' => 0,
+                    'end' => $k['end'] ?? null, 'start' => $k['start'] ?? null, 'currency' => strtoupper($client->currency ?: 'SGD'), 'spend' => 0,
                     ...AdPerformance::present($k['objective'] ?? null, null, 0, 0, 0), 'impressions' => 0, 'clicks' => 0, 'ctr' => null];
             }
         }

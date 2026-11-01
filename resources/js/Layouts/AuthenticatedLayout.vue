@@ -29,7 +29,8 @@ const businessSections = [
         label: 'Overview',
         items: [
             { name: 'Dashboard', route: 'dashboard', match: 'dashboard', icon: 'home' },
-            { name: 'Ad desk', route: 'ad-desk', match: 'ad-desk', icon: 'megaphone' },
+            { name: 'Ad desk', route: 'ad-desk', match: 'ad-desk', icon: 'wallet' },
+            { name: 'Campaigns', route: 'campaigns', match: 'campaigns', icon: 'megaphone' },
             { name: 'Cashflow', route: 'cashflow.index', match: 'cashflow.*', icon: 'flow' },
             { name: 'Ad money', route: 'ad-money.index', match: 'ad-money.*', icon: 'chart' },
             { name: 'Payouts', route: 'payouts.index', match: 'payouts.*', icon: 'bank' },
@@ -56,7 +57,8 @@ const businessSections = [
 
 // Business tabs inside the phone app (a browser keeps the side menu).
 const businessBar = [
-    { name: 'Ad desk', route: 'ad-desk', match: ['ad-desk', 'clients.campaigns.*', 'charges.*'], icon: 'megaphone' },
+    { name: 'Ad desk', route: 'ad-desk', match: ['ad-desk', 'charges.*'], icon: 'wallet' },
+    { name: 'Campaigns', route: 'campaigns', match: ['campaigns', 'clients.campaigns.*'], icon: 'megaphone' },
     { name: 'Ad money', route: 'ad-money.index', match: ['ad-money.*', 'statements.*'], icon: 'chart' },
     { name: 'Home', route: 'dashboard', match: ['dashboard'], icon: 'home' },
     { name: 'Clients', route: 'clients.index', match: ['clients.index', 'clients.show'], icon: 'users' },
@@ -67,9 +69,10 @@ const onBar = (item) => item.match.some((m) => route().current(m));
 // (A phone's browser keeps the side menu.)
 const inApp = typeof navigator !== 'undefined' && navigator.userAgent.includes('KlokApp');
 const appShell = computed(() => inApp && mode.value === 'business');
-const appTabs = [businessBar[2], businessBar[0], null, businessBar[3]];
+const appTabs = [businessBar[3], businessBar[1], null, businessBar[0]];
 const sheet = ref(null); // 'create' | 'more'
 const moreTiles = [
+    { name: 'Clients', route: 'clients.index', match: 'clients.*', icon: 'users', tint: 'from-indigo-500 to-blue-500' },
     { name: 'Ad money', route: 'ad-money.index', match: 'ad-money.*', icon: 'chart', tint: 'from-violet-500 to-fuchsia-500' },
     { name: 'Cashflow', route: 'cashflow.index', match: 'cashflow.*', icon: 'flow', tint: 'from-sky-500 to-cyan-500' },
     { name: 'Payouts', route: 'payouts.index', match: 'payouts.*', icon: 'bank', tint: 'from-emerald-500 to-teal-500' },

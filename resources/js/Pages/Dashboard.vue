@@ -1,5 +1,4 @@
 <script setup>
-import CampaignCard from '@/Components/Ads/CampaignCard.vue';
 import Avatar from '@/Components/Avatar.vue';
 import DeltaChip from '@/Components/DeltaChip.vue';
 import EmptyState from '@/Components/EmptyState.vue';
@@ -88,14 +87,15 @@ const marginPct = (s) => (s.revenue ? Math.round((s.margin / s.revenue) * 100) :
                     <div><div class="text-[11px] font-semibold text-white/60">Meta charged this month</div><div class="mt-0.5 text-lg font-extrabold tabular-nums">{{ money(adDesk.meta_month, adDesk.currency) }}</div></div>
                 </div>
             </div>
-            <div class="mt-4 flex items-baseline justify-between">
-                <h3 class="text-sm font-bold text-ink-900">Campaigns · last 7 days</h3>
-                <span class="text-xs text-ink-500">Pause, budget and end date change on Meta right away</span>
-            </div>
-            <div class="mt-2 grid gap-3 lg:grid-cols-2">
-                <CampaignCard v-for="c in adDesk.campaigns" :key="c.id" :campaign="c" :currency="adDesk.currency" :account="adDesk.account" :control-url="route('clients.campaigns.control', [adDesk.client.id, c.id])" />
-            </div>
-            <EmptyState v-if="!adDesk.campaigns.length" compact icon="megaphone" title="No campaign spend in the last 7 days" text="Campaigns show here as soon as they spend." />
+            <!-- Campaigns live on their own page: here just how many run and what they spent -->
+            <Link :href="route('campaigns')" class="mt-3 flex items-center gap-3 rounded-2xl border border-line/70 bg-surface p-4 shadow-sm transition hover:border-brand-300">
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"><Icon name="megaphone" :size="18" /></span>
+                <span class="min-w-0 flex-1">
+                    <span class="block text-sm font-bold text-ink-900">Campaigns</span>
+                    <span class="block truncate text-xs text-ink-500">{{ adDesk.campaigns.filter((c) => c.status === 'ACTIVE' && c.spend > 0).length }} running · {{ money(adDesk.campaigns.reduce((a, c) => a + c.spend, 0), adDesk.currency) }} spent in 7 days · pause, budget and end date</span>
+                </span>
+                <Icon name="chevron" :size="16" class="shrink-0 -rotate-90 text-ink-400" />
+            </Link>
 
             <div v-if="adDesk.advice.length" class="mt-3 rounded-3xl border border-sky-200 bg-sky-50/60 p-4 shadow-sm dark:border-sky-500/30 dark:bg-sky-500/10">
                 <div class="text-sm font-bold text-ink-900">Meta says</div>

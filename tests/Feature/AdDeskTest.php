@@ -40,8 +40,11 @@ class AdDeskTest extends TestCase
         $this->post("/clients/{$client->id}/campaigns/99", ['action' => 'pause'])->assertNotFound();
 
         // The full ad desk, and each campaign in full (the same page as my own clients').
-        $this->get('/ad-desk?tab=campaigns')->assertInertia(fn ($page) => $page->component('AdDesk/Index')->where('tab', 'campaigns')
-            ->has('campaigns', 2)->where('spent.spend', 500));
+        $this->get('/ad-desk')->assertInertia(fn ($page) => $page->component('AdDesk/Index')->has('campaigns', 2)->where('spent.spend', 500));
+        // Campaigns have their own page now; the old tab link lands there.
+        $this->get('/ad-desk?tab=campaigns')->assertRedirect('/campaigns');
+        $this->get('/campaigns?period=last30')->assertInertia(fn ($page) => $page->component('AdDesk/Campaigns')->has('campaigns', 2)
+            ->where('range.period', 'last30')->where('account', $client->meta_ad_account_id));
         $this->get("/clients/{$client->id}/campaigns/11?period=all")->assertInertia(fn ($page) => $page->component('Personal/AdClients/Campaign')
             ->where('business', true)->where('campaign.name', 'Handyman Traffic')->where('totals.spend', 500)->where('totals.results', 40));
     }
