@@ -214,7 +214,7 @@ const showClosed = ref(false);
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line px-6 py-4">
                     <button type="button" class="btn-secondary" @click="sheet = false">Cancel</button>
-                    <button class="btn-primary" :disabled="form.processing">{{ editing ? 'Save' : 'Add investment' }}</button>
+                    <button class="btn-primary" :disabled="form.processing"><Icon :name="editing ? 'check' : 'plus'" :size="16" /> {{ editing ? 'Save' : 'Add investment' }}</button>
                 </div>
             </form>
         </Modal>
@@ -253,7 +253,7 @@ const showClosed = ref(false);
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line px-6 py-4">
                     <button type="button" class="btn-secondary" @click="mode = null">Cancel</button>
-                    <button class="btn-primary" :disabled="act.processing">Save</button>
+                    <button class="btn-primary" :disabled="act.processing"><Icon name="check" :size="16" /> Save</button>
                 </div>
             </form>
         </Modal>

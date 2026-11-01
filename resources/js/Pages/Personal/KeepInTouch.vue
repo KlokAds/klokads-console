@@ -141,10 +141,10 @@ onMounted(() => (highlight.value = Number(new URLSearchParams(window.location.se
                     </div>
                 </div>
                 <div class="flex items-center gap-2 border-t border-line px-6 py-4">
-                    <button v-if="editing" type="button" class="btn-ghost text-rose-600" @click="remove">Remove</button>
+                    <button v-if="editing" type="button" class="btn-ghost text-rose-600" @click="remove"><Icon name="trash" :size="16" /> Remove</button>
                     <div class="flex-1"></div>
                     <button type="button" class="btn-secondary" @click="sheet = false">Cancel</button>
-                    <button class="btn-primary" :disabled="form.processing">{{ editing ? 'Save' : 'Add' }}</button>
+                    <button class="btn-primary" :disabled="form.processing"><Icon :name="editing ? 'check' : 'plus'" :size="16" /> {{ editing ? 'Save' : 'Add' }}</button>
                 </div>
             </form>
         </Modal>

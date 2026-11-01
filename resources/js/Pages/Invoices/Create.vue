@@ -222,7 +222,7 @@ function setService(value) {
                                 <div class="mb-2 flex items-center justify-between">
                                     <span class="label mb-0">Campaigns (shown as a breakdown)</span>
                                     <span class="flex items-center gap-3">
-                                        <button v-if="last" type="button" class="btn-link text-xs" @click="useLastCampaigns">Use last invoice's campaigns</button>
+                                        <button v-if="last" type="button" class="inline-flex items-center gap-1 btn-link text-xs" @click="useLastCampaigns"><Icon name="copy" :size="14" /> Use last invoice's campaigns</button>
                                         <span v-if="form.campaigns.length" class="text-xs text-ink-500">Total {{ money(campaignTotal, currency) }}</span>
                                     </span>
                                 </div>

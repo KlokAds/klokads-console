@@ -114,7 +114,7 @@ onMounted(() => {
                 <p class="mt-1 text-[11px] text-ink-500">{{ form.date ? 'A reminder comes at that time — and again every 3 hours until you tap Done.' : 'No day: it stays on the list without a reminder.' }}</p>
                 <div class="mt-3 flex justify-end gap-2">
                     <button type="button" class="btn-ghost btn-sm" @click="cancel">Cancel</button>
-                    <button class="btn-primary btn-sm" :disabled="form.processing || !form.title.trim()">{{ editing ? 'Save' : 'Add task' }}</button>
+                    <button class="btn-primary btn-sm" :disabled="form.processing || !form.title.trim()"><Icon :name="editing ? 'check' : 'plus'" :size="14" /> {{ editing ? 'Save' : 'Add task' }}</button>
                 </div>
             </template>
         </form>

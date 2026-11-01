@@ -170,7 +170,7 @@ function submitCharge() {
                     <span v-if="c.is_default && defaultLocked" class="flex items-center gap-1.5 px-2 text-xs text-ink-500" title="Make another card the default first">
                         <Icon name="shield" :size="14" class="text-brand-500" /> Pays recurring plan
                     </span>
-                    <button v-else class="btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700" :disabled="busy === c.id" @click="remove(c)">Remove</button>
+                    <button v-else class="btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700" :disabled="busy === c.id" @click="remove(c)"><Icon name="trash" :size="14" /> Remove</button>
                 </div>
             </li>
             </ul>

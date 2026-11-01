@@ -368,7 +368,7 @@ if (wantsNew()) openTx();
                     </li>
                 </ul>
 
-                <div v-if="filtering && !filtered.length" class="px-6 py-8 text-sm text-ink-500">Nothing matches. <button class="btn-link" @click="q = fAccount = fKind = ''">Clear filters</button></div>
+                <div v-if="filtering && !filtered.length" class="px-6 py-8 text-sm text-ink-500">Nothing matches. <button class="inline-flex items-center gap-1 btn-link" @click="q = fAccount = fKind = ''"><Icon name="close" :size="14" /> Clear filters</button></div>
                 <ul v-if="filtered.length" class="divide-y divide-line/70">
                     <li v-for="t in filtered" :key="t.id" class="flex items-center gap-3 px-5 py-3 sm:px-6">
                         <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
@@ -474,7 +474,7 @@ if (wantsNew()) openTx();
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line bg-ink-50/60 px-6 py-4">
                     <button type="button" class="btn-secondary" @click="showTx = false">Cancel</button>
-                    <button class="btn-primary" :disabled="txForm.processing">{{ editingTx ? 'Save changes' : 'Save' }}</button>
+                    <button class="btn-primary" :disabled="txForm.processing"><Icon name="check" :size="16" /> {{ editingTx ? 'Save changes' : 'Save' }}</button>
                 </div>
             </form>
         </Modal>
@@ -551,7 +551,7 @@ if (wantsNew()) openTx();
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line bg-ink-50/60 px-6 py-4">
                     <button type="button" class="btn-secondary" @click="showAccount = false">Cancel</button>
-                    <button class="btn-primary" :disabled="accountForm.processing">{{ editingAccount ? 'Save changes' : 'Add account' }}</button>
+                    <button class="btn-primary" :disabled="accountForm.processing"><Icon :name="editingAccount ? 'check' : 'plus'" :size="16" /> {{ editingAccount ? 'Save changes' : 'Add account' }}</button>
                 </div>
             </form>
         </Modal>

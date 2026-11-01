@@ -88,7 +88,7 @@ function submit() {
 
             <div class="flex justify-end gap-2 border-t border-line bg-ink-50/60 px-6 py-4">
                 <button type="button" class="btn-secondary" @click="emit('close')">Cancel</button>
-                <button class="btn-primary" :disabled="form.processing">{{ form.processing ? 'Saving…' : client ? 'Save changes' : 'Add client' }}</button>
+                <button class="btn-primary" :disabled="form.processing"><Icon :name="client ? 'check' : 'plus'" :size="16" /> {{ form.processing ? 'Saving…' : client ? 'Save changes' : 'Add client' }}</button>
             </div>
         </form>
     </Modal>

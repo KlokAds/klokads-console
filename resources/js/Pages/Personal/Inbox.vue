@@ -128,7 +128,7 @@ const appStatus = computed(() => {
                 <div v-if="setup.imap.error" class="error">{{ setup.imap.error }}</div>
                 <div class="mt-3 flex items-center justify-between">
                     <span class="text-xs text-ink-500">Last checked: {{ setup.imap.checked_at ? date(setup.imap.checked_at, true) : 'never' }}</span>
-                    <button class="btn-primary btn-sm" :disabled="imap.processing">Save &amp; check</button>
+                    <button class="btn-primary btn-sm" :disabled="imap.processing"><Icon name="check" :size="14" /> Save &amp; check</button>
                 </div>
             </form>
 
@@ -139,7 +139,7 @@ const appStatus = computed(() => {
                         <div class="card-title">🛡️ Senders &amp; filters</div>
                         <p class="text-xs text-ink-500">Same list as in the phone app — change it in either place.</p>
                     </div>
-                    <button class="btn-primary btn-sm" :disabled="rulesForm.processing || !rulesForm.isDirty" @click="saveRules">Save</button>
+                    <button class="btn-primary btn-sm" :disabled="rulesForm.processing || !rulesForm.isDirty" @click="saveRules"><Icon name="check" :size="14" /> Save</button>
                 </div>
                 <div class="mt-4 flex items-center justify-between rounded-2xl bg-ink-50 px-4 py-3">
                     <div>
@@ -232,11 +232,11 @@ const appStatus = computed(() => {
                     <div v-else-if="m.status === 'review' && m.parsed" class="mt-3 flex flex-wrap items-center gap-2">
                         <Select v-model="pick(m).account_id" :options="accountOptions(m)" placeholder="Account…" size="sm" class="min-w-[170px]" />
                         <Select v-model="pick(m).category" :options="categoryOptions(m)" size="sm" class="min-w-[160px]" />
-                        <button class="btn-primary btn-sm" :disabled="!pick(m).account_id" @click="add(m)">Add</button>
+                        <button class="btn-primary btn-sm" :disabled="!pick(m).account_id" @click="add(m)"><Icon name="plus" :size="14" /> Add</button>
                         <button class="btn-ghost btn-sm" @click="ignore(m)">Ignore</button>
                     </div>
                     <div v-else-if="['added', 'matched'].includes(m.status)" class="mt-2">
-                        <button class="btn-link text-xs" @click="undo(m)">Undo</button>
+                        <button class="inline-flex items-center gap-1 btn-link text-xs" @click="undo(m)"><Icon name="repeat" :size="14" /> Undo</button>
                     </div>
                     <div v-else-if="m.status === 'review'" class="mt-2"><button class="btn-ghost btn-sm" @click="ignore(m)">Ignore</button></div>
                 </li>

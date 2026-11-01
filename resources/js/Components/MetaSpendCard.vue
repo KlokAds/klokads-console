@@ -103,7 +103,7 @@ const charge = () => chargeForm.post(route('clients.meta.charge', props.client.i
             <p class="text-sm text-ink-600">Paste the Meta <b>System User token</b> (same one Klok Pilot uses). It's encrypted and only used to read spend.</p>
             <input v-model="tokenForm.token" type="password" class="input font-mono" placeholder="EAAG…" autocomplete="off" />
             <div v-if="tokenForm.errors.token" class="error">{{ tokenForm.errors.token }}</div>
-            <button class="btn-primary btn-sm" :disabled="tokenForm.processing || tokenForm.token.length < 40">Connect Meta</button>
+            <button class="btn-primary btn-sm" :disabled="tokenForm.processing || tokenForm.token.length < 40"><Icon name="link" :size="14" /> Connect Meta</button>
         </form>
 
         <template v-else>
@@ -166,7 +166,7 @@ const charge = () => chargeForm.post(route('clients.meta.charge', props.client.i
                 </label>
                 <div class="flex justify-end gap-2 sm:col-span-2">
                     <button type="button" class="btn-secondary btn-sm" @click="showSettings = false">Cancel</button>
-                    <button class="btn-primary btn-sm" :disabled="form.processing">Save</button>
+                    <button class="btn-primary btn-sm" :disabled="form.processing"><Icon name="check" :size="14" /> Save</button>
                 </div>
             </form>
 
@@ -228,7 +228,7 @@ const charge = () => chargeForm.post(route('clients.meta.charge', props.client.i
                                 If charged now: {{ m(meta.unbilled) }} + {{ commissionRate }}% = <b class="text-ink-800">{{ m(nextCharge) }}</b> + card fee
                                 <template v-if="s.billed_until"> · billed up to {{ date(s.billed_until) }}</template>
                             </span>
-                            <button v-if="meta.unbilled" class="btn-link text-xs" @click="showCharge = true">Charge now</button>
+                            <button v-if="meta.unbilled" class="inline-flex items-center gap-1 btn-link text-xs" @click="showCharge = true"><Icon name="card" :size="14" /> Charge now</button>
                         </div>
                     </div>
                     <div class="mt-2 text-[11px] text-ink-400">{{ s.synced_at ? `Updated from Meta ${date(s.synced_at, true)}` : 'Not updated yet — tap Update' }} · refreshes every hour</div>
@@ -316,7 +316,7 @@ const charge = () => chargeForm.post(route('clients.meta.charge', props.client.i
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line bg-ink-50/60 px-6 py-4">
                     <button type="button" class="btn-secondary" @click="showAdjust = false">Cancel</button>
-                    <button class="btn-primary" :disabled="adjustForm.processing">Save</button>
+                    <button class="btn-primary" :disabled="adjustForm.processing"><Icon name="check" :size="16" /> Save</button>
                 </div>
             </form>
         </Modal>
@@ -340,7 +340,7 @@ const charge = () => chargeForm.post(route('clients.meta.charge', props.client.i
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line bg-ink-50/60 px-6 py-4">
                     <button type="button" class="btn-secondary" @click="showCharge = false">Cancel</button>
-                    <button class="btn-primary" :disabled="chargeForm.processing || !chargeForm.confirm">{{ chargeForm.processing ? 'Charging…' : 'Charge now' }}</button>
+                    <button class="btn-primary" :disabled="chargeForm.processing || !chargeForm.confirm"><Icon name="card" :size="16" /> {{ chargeForm.processing ? 'Charging…' : 'Charge now' }}</button>
                 </div>
             </form>
         </Modal>

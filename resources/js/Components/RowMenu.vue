@@ -11,9 +11,14 @@ const style = ref({});
 function toggle() {
     if (!open.value) {
         const r = button.value.getBoundingClientRect();
-        const below = window.innerHeight - r.bottom > 260;
+        const spaceBelow = window.innerHeight - r.bottom - 12;
+        const spaceAbove = r.top - 12;
+        const below = spaceBelow > 260 || spaceBelow >= spaceAbove;
+        // Sized to its longest item, kept 8px inside the screen, and scrolls when taller than the room it has.
         style.value = {
-            right: `${window.innerWidth - r.right}px`,
+            right: `${Math.max(8, window.innerWidth - r.right)}px`,
+            maxWidth: 'calc(100vw - 16px)',
+            maxHeight: `${Math.max(160, (below ? spaceBelow : spaceAbove) - 6)}px`,
             ...(below ? { top: `${r.bottom + 6}px` } : { bottom: `${window.innerHeight - r.top + 6}px` }),
         };
     }
@@ -39,7 +44,7 @@ onUnmounted(() => {
         <button ref="button" type="button" class="icon-btn border border-line bg-white shadow-sm" :class="{ 'bg-ink-50 text-ink-900': open }" @click="toggle">
             <Icon name="dots" :size="16" />
         </button>
-        <div v-if="open" class="menu fixed mt-0 w-56" :style="style" @click="open = false">
+        <div v-if="open" class="menu fixed mt-0 w-max min-w-[14rem] !overflow-y-auto" :style="style" @click="open = false">
             <slot />
         </div>
     </div>

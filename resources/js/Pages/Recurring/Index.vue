@@ -222,7 +222,7 @@ async function cancel(plan) {
                     <span class="text-sm text-ink-500"><template v-if="form.amount">≈ <b class="text-ink-800">{{ money(Math.round(form.amount * 100 * ({ week: 52 / 12, month: 1, year: 1 / 12 }[form.interval]) / (form.interval_count || 1)), currency) }}</b> / month {{ form.billing === 'budget' ? 'received' : form.billing === 'commission' ? 'client spend' : '' }}</template></span>
                     <div class="flex gap-2">
                         <button type="button" class="btn-secondary" @click="showForm = false">Cancel</button>
-                        <button class="btn-primary" :disabled="form.processing">{{ form.processing ? 'Creating…' : 'Create plan' }}</button>
+                        <button class="btn-primary" :disabled="form.processing"><Icon name="plus" :size="16" /> {{ form.processing ? 'Creating…' : 'Create plan' }}</button>
                     </div>
                 </div>
             </form>

@@ -299,7 +299,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
             <div v-if="myCard && totalDue" class="flex flex-wrap items-center gap-3 rounded-3xl bg-amber-50 p-4 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:ring-amber-500/30">
                 <Icon name="alert" :size="20" class="text-amber-600" />
                 <div class="min-w-0 flex-1 text-sm"><b class="text-ink-900">{{ m(totalDue, 'BDT') }} due</b> <span class="text-ink-600">on their ads bills.</span></div>
-                <button class="btn-primary btn-sm" @click="tab = 'money'; sheet = 'payment'">Record payment</button>
+                <button class="btn-primary btn-sm" @click="tab = 'money'; sheet = 'payment'"><Icon name="plus" :size="14" /> Record payment</button>
             </div>
             <div class="grid gap-3 sm:grid-cols-2">
                 <Link v-for="c in withSpend.slice(0, 4)" :key="c.id" :href="route('ad-clients.campaign', [client.id, c.id])" class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm transition hover:border-teal-300">
@@ -481,7 +481,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                     <div><label class="label">Settled up to (from my sheet)</label><DatePicker v-model="settings.billed_until" :max="today" clearable placeholder="Nothing settled" /></div>
                     <div class="flex items-center justify-between gap-3 rounded-2xl bg-ink-50 px-3 py-2.5"><span class="text-sm text-ink-700">Draft the bill on the 2nd</span><Toggle v-model="settings.ad_bill" label="Monthly bill" /></div>
                 </div>
-                <div class="mt-4 flex justify-end"><button class="btn-primary" :disabled="settings.processing || !settings.isDirty">Save</button></div>
+                <div class="mt-4 flex justify-end"><button class="btn-primary" :disabled="settings.processing || !settings.isDirty"><Icon name="check" :size="16" /> Save</button></div>
             </form>
 
             <section class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm sm:p-5">
@@ -506,7 +506,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                 </div>
                 <div class="mt-5 flex justify-end gap-2">
                     <button type="button" class="btn-secondary" @click="editing = null">Cancel</button>
-                    <button class="btn-primary" :disabled="editKind === 'budget' ? !budget : !endDay">Save on Meta</button>
+                    <button class="btn-primary" :disabled="editKind === 'budget' ? !budget : !endDay"><Icon name="check" :size="16" /> Save on Meta</button>
                 </div>
             </form>
         </Modal>
@@ -524,7 +524,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                     </div>
                     <div><label class="label">Note</label><input v-model="pay.note" class="input" placeholder="bKash TrxID, for which month…" /></div>
                 </div>
-                <div class="mt-5 flex justify-end gap-2"><button type="button" class="btn-secondary" @click="sheet = null">Cancel</button><button class="btn-primary" :disabled="pay.processing || !pay.amount">Save payment</button></div>
+                <div class="mt-5 flex justify-end gap-2"><button type="button" class="btn-secondary" @click="sheet = null">Cancel</button><button class="btn-primary" :disabled="pay.processing || !pay.amount"><Icon name="check" :size="16" /> Save payment</button></div>
             </form>
             <form v-else-if="sheet === 'charge'" class="p-6" @submit.prevent="addCharge">
                 <h2 class="text-lg font-bold text-ink-900">Meta charged my card</h2>
@@ -536,7 +536,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                         <div><label class="label">Note</label><input v-model="charge.note" class="input" placeholder="Optional" /></div>
                     </div>
                 </div>
-                <div class="mt-5 flex justify-end gap-2"><button type="button" class="btn-secondary" @click="sheet = null">Cancel</button><button class="btn-primary" :disabled="charge.processing || !charge.amount">Add charge</button></div>
+                <div class="mt-5 flex justify-end gap-2"><button type="button" class="btn-secondary" @click="sheet = null">Cancel</button><button class="btn-primary" :disabled="charge.processing || !charge.amount"><Icon name="plus" :size="16" /> Add charge</button></div>
             </form>
             <div v-else-if="sheet === 'bill'" class="p-6">
                 <h2 class="text-lg font-bold text-ink-900">Make the bill</h2>
@@ -579,7 +579,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                 </div>
                 <div class="mt-5 flex justify-end gap-2">
                     <button type="button" class="btn-secondary" @click="adding = false">Cancel</button>
-                    <button class="btn-primary" :disabled="add.processing || !add.account_id || (!add.whole && !add.campaigns.length)">Add</button>
+                    <button class="btn-primary" :disabled="add.processing || !add.account_id || (!add.whole && !add.campaigns.length)"><Icon name="plus" :size="16" /> Add</button>
                 </div>
             </form>
         </Modal>

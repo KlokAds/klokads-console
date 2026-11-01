@@ -216,7 +216,7 @@ if (wantsNew()) open();
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line bg-ink-50/60 px-6 py-4">
                     <button type="button" class="btn-secondary" @click="showForm = false">Cancel</button>
-                    <button class="btn-primary" :disabled="form.processing">Save</button>
+                    <button class="btn-primary" :disabled="form.processing"><Icon name="check" :size="16" /> Save</button>
                 </div>
             </form>
         </Modal>
@@ -249,7 +249,7 @@ if (wantsNew()) open();
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line bg-ink-50/60 px-6 py-4">
                     <button type="button" class="btn-secondary" @click="showPay = false">Cancel</button>
-                    <button class="btn-primary" :disabled="payForm.processing">Save</button>
+                    <button class="btn-primary" :disabled="payForm.processing"><Icon name="check" :size="16" /> Save</button>
                 </div>
             </form>
         </Modal>

@@ -60,7 +60,7 @@ const saveNote = (f) => noteForm.put(route('personal.followups.note', f.id), { p
                         <p v-if="f.note && editing !== f.id" class="mt-2 text-xs text-ink-600">📝 {{ f.note }}</p>
                         <form v-if="editing === f.id" class="mt-2 flex gap-2" @submit.prevent="saveNote(f)">
                             <input v-model="noteForm.note" class="input input-sm flex-1" placeholder="What is it about? e.g. invoice issue" autofocus />
-                            <button class="btn-primary btn-sm" :disabled="noteForm.processing">Save</button>
+                            <button class="btn-primary btn-sm" :disabled="noteForm.processing"><Icon name="check" :size="14" /> Save</button>
                         </form>
                     </div>
                 </div>

@@ -159,7 +159,7 @@ function payOut() {
 
                         <div class="flex items-center justify-between gap-3">
                             <span class="text-xs text-ink-500">Saved straight to your Stripe account.</span>
-                            <button class="btn-dark" :disabled="scheduleForm.processing || !scheduleChanged">{{ scheduleForm.processing ? 'Saving…' : 'Save schedule' }}</button>
+                            <button class="btn-dark" :disabled="scheduleForm.processing || !scheduleChanged"><Icon name="check" :size="16" /> {{ scheduleForm.processing ? 'Saving…' : 'Save schedule' }}</button>
                         </div>
                     </div>
                 </form>
@@ -228,7 +228,7 @@ function payOut() {
                         </div>
                     </div>
                     <div class="flex items-end">
-                        <button class="btn-primary w-full sm:w-auto" :disabled="bankForm.processing || !bankForm.isDirty">Save</button>
+                        <button class="btn-primary w-full sm:w-auto" :disabled="bankForm.processing || !bankForm.isDirty"><Icon name="check" :size="16" /> Save</button>
                     </div>
                 </form>
             </div>
@@ -240,7 +240,7 @@ function payOut() {
                         <div class="card-title">Airwallex</div>
                         <div class="card-sub">Payouts land here; Meta charges the card for the client's ads.</div>
                     </div>
-                    <Link v-if="!airwallex.connected" :href="route('settings.edit', { tab: 'money' })" class="btn-secondary btn-sm">Connect Airwallex</Link>
+                    <Link v-if="!airwallex.connected" :href="route('settings.edit', { tab: 'money' })" class="btn-secondary btn-sm"><Icon name="link" :size="14" /> Connect Airwallex</Link>
                     <div v-else class="flex min-w-0 flex-wrap items-center gap-2 text-sm">
                         <span v-for="(cents, cur) in airwallex.balances" :key="cur" class="rounded-full bg-ink-50 px-3 py-1 font-semibold tabular-nums text-ink-900">{{ money(cents, cur) }}</span>
                     </div>

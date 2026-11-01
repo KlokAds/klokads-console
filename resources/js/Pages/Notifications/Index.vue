@@ -179,7 +179,7 @@ const wokeHealthy = computed(() => props.cron.woke_at && Date.now() - new Date(p
                                 <TimePicker v-model="formFor(d).evening_at" :disabled="!formFor(d).evening" />
                                 <div class="col-span-2 flex items-center gap-2 sm:col-span-4">
                                     <Select v-model="formFor(d).timezone" :options="zones" size="sm" class="flex-1" placeholder="Time zone" />
-                                    <button class="btn-dark btn-sm" :disabled="formFor(d).processing || !formFor(d).isDirty">Save times</button>
+                                    <button class="btn-dark btn-sm" :disabled="formFor(d).processing || !formFor(d).isDirty"><Icon name="check" :size="14" /> Save times</button>
                                 </div>
                             </form>
                         </li>
@@ -223,8 +223,8 @@ const wokeHealthy = computed(() => props.cron.woke_at && Date.now() - new Date(p
                     </div>
                     <div v-for="e in [pinForm.errors.pin, pinForm.errors.password]" :key="e" class="error">{{ e }}</div>
                     <div class="mt-3 flex justify-between gap-2">
-                        <button v-if="hasPin" type="button" class="btn-ghost btn-sm text-rose-600" :disabled="!pinForm.password" @click="savePin(true)">Remove PIN</button>
-                        <button class="btn-primary btn-sm ml-auto" :disabled="pinForm.processing || pinForm.pin.length !== 6 || pinForm.pin !== pinForm.pin_confirmation">{{ hasPin ? 'Change PIN' : 'Set PIN' }}</button>
+                        <button v-if="hasPin" type="button" class="btn-ghost btn-sm text-rose-600" :disabled="!pinForm.password" @click="savePin(true)"><Icon name="trash" :size="14" /> Remove PIN</button>
+                        <button class="btn-primary btn-sm ml-auto" :disabled="pinForm.processing || pinForm.pin.length !== 6 || pinForm.pin !== pinForm.pin_confirmation"><Icon name="pencil" :size="14" /> {{ hasPin ? 'Change PIN' : 'Set PIN' }}</button>
                     </div>
                 </form>
 

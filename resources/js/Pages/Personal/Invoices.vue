@@ -299,7 +299,7 @@ if (wantsNew()) openInv();
                     </div>
                 </div>
             </div>
-            <div class="flex justify-end border-t border-line bg-ink-50/60 px-6 py-4"><button class="btn-primary" :disabled="profileForm.processing">Save</button></div>
+            <div class="flex justify-end border-t border-line bg-ink-50/60 px-6 py-4"><button class="btn-primary" :disabled="profileForm.processing"><Icon name="check" :size="16" /> Save</button></div>
         </form>
 
         <!-- Invoice editor -->
@@ -335,7 +335,7 @@ if (wantsNew()) openInv();
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line bg-ink-50/60 px-6 py-4">
                     <button type="button" class="btn-secondary" @click="showInv = false">Cancel</button>
-                    <button class="btn-primary" :disabled="invForm.processing">Save</button>
+                    <button class="btn-primary" :disabled="invForm.processing"><Icon name="check" :size="16" /> Save</button>
                 </div>
             </form>
         </Modal>
@@ -363,7 +363,7 @@ if (wantsNew()) openInv();
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line bg-ink-50/60 px-6 py-4">
                     <button type="button" class="btn-secondary" @click="showPay = false">Cancel</button>
-                    <button class="btn-primary" :disabled="payForm.processing">Save</button>
+                    <button class="btn-primary" :disabled="payForm.processing"><Icon name="check" :size="16" /> Save</button>
                 </div>
             </form>
         </Modal>
@@ -381,7 +381,7 @@ if (wantsNew()) openInv();
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line bg-ink-50/60 px-6 py-4">
                     <button type="button" class="btn-secondary" @click="showClient = false">Cancel</button>
-                    <button class="btn-primary" :disabled="clientForm.processing">Save</button>
+                    <button class="btn-primary" :disabled="clientForm.processing"><Icon name="check" :size="16" /> Save</button>
                 </div>
             </form>
         </Modal>
@@ -426,7 +426,7 @@ if (wantsNew()) openInv();
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line bg-ink-50/60 px-6 py-4">
                     <button type="button" class="btn-secondary" @click="showRec = false">Cancel</button>
-                    <button class="btn-primary" :disabled="recForm.processing">Save</button>
+                    <button class="btn-primary" :disabled="recForm.processing"><Icon name="check" :size="16" /> Save</button>
                 </div>
             </form>
         </Modal>

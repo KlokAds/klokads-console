@@ -79,7 +79,7 @@ const each = (row) => (row.cost_per_result === null ? '—' : row.cost_per_resul
                 <label class="label">Budget a day ({{ campaign.currency }})</label>
                 <div class="flex gap-2">
                     <input v-model="budget" type="number" step="0.01" min="1" class="input flex-1 font-bold tabular-nums" />
-                    <button class="btn-secondary" :disabled="busy || !budget">Change budget</button>
+                    <button class="btn-secondary" :disabled="busy || !budget"><Icon name="pencil" :size="16" /> Change budget</button>
                 </div>
             </form>
             <button class="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800 ring-1 ring-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:ring-teal-500/30" @click="extending = true">
@@ -136,7 +136,7 @@ const each = (row) => (row.cost_per_result === null ? '—' : row.cost_per_resul
                 <div class="mt-4"><DatePicker v-model="endDay" :min="today" /></div>
                 <div class="mt-5 flex justify-end gap-2">
                     <button type="button" class="btn-secondary" @click="extending = false">Cancel</button>
-                    <button class="btn-primary" :disabled="busy || !endDay">Save on Meta</button>
+                    <button class="btn-primary" :disabled="busy || !endDay"><Icon name="check" :size="16" /> Save on Meta</button>
                 </div>
             </form>
         </Modal>

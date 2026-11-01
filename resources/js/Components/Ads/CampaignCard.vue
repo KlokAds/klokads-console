@@ -79,7 +79,7 @@ const save = () => post(editing.value === 'budget' ? { action: 'budget', daily_b
                 </div>
                 <div class="mt-5 flex justify-end gap-2">
                     <button type="button" class="btn-secondary" @click="editing = null">Cancel</button>
-                    <button class="btn-primary" :disabled="busy || (editing === 'budget' ? !budget : !endDay)">Save on Meta</button>
+                    <button class="btn-primary" :disabled="busy || (editing === 'budget' ? !budget : !endDay)"><Icon name="check" :size="16" /> Save on Meta</button>
                 </div>
             </form>
         </Modal>

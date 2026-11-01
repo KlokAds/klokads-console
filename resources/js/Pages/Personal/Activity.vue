@@ -358,8 +358,8 @@ onMounted(() => {
                     <label class="label mt-4" for="guide-msg">Your message to them</label>
                     <textarea id="guide-msg" v-model="guideForm.message" rows="4" class="input" placeholder="Who to call, where the phone PIN is kept, which account to use first…"></textarea>
                     <div class="mt-3 flex flex-wrap justify-between gap-2">
-                        <button class="btn-ghost btn-sm" @click="newGuideLink">New link</button>
-                        <button class="btn-primary btn-sm" :disabled="guideForm.processing || !guideForm.isDirty" @click="saveGuide">Save message</button>
+                        <button class="btn-ghost btn-sm" @click="newGuideLink"><Icon name="plus" :size="14" /> New link</button>
+                        <button class="btn-primary btn-sm" :disabled="guideForm.processing || !guideForm.isDirty" @click="saveGuide"><Icon name="check" :size="14" /> Save message</button>
                     </div>
                     <p class="mt-3 text-[11px] text-ink-400">Each foreign account's withdraw steps are in its own settings — tap the account above.</p>
                 </section>
@@ -473,7 +473,7 @@ onMounted(() => {
                     <button v-if="editing" type="button" class="btn-ghost text-rose-600" @click="removeAccount"><Icon name="trash" :size="15" /> Remove</button>
                     <div class="flex-1"></div>
                     <button type="button" class="btn-secondary" @click="sheet = false">Cancel</button>
-                    <button class="btn-primary" :disabled="form.processing">{{ editing ? 'Save' : 'Add account' }}</button>
+                    <button class="btn-primary" :disabled="form.processing"><Icon :name="editing ? 'check' : 'plus'" :size="16" /> {{ editing ? 'Save' : 'Add account' }}</button>
                 </div>
             </form>
         </Modal>

@@ -234,8 +234,8 @@ async function removeBill() {
                             </li>
                         </ul>
                         <div class="mt-3 flex justify-between">
-                            <button v-if="e.month_id" class="text-xs font-semibold text-ink-500 hover:text-rose-600" @click="undoAssign(e)">Undo hand-out</button>
-                            <button class="text-xs font-semibold text-teal-700" @click="openEnvelope(e)">Edit envelope</button>
+                            <button v-if="e.month_id" class="inline-flex items-center gap-1 text-xs font-semibold text-ink-500 hover:text-rose-600" @click="undoAssign(e)"><Icon name="repeat" :size="13" /> Undo hand-out</button>
+                            <button class="inline-flex items-center gap-1 text-xs font-semibold text-teal-700" @click="openEnvelope(e)"><Icon name="pencil" :size="13" /> Edit envelope</button>
                         </div>
                     </div>
                 </article>
@@ -356,7 +356,7 @@ async function removeBill() {
                         </div>
                         <div class="mt-2 flex gap-2">
                             <input v-model="newPurpose" class="input flex-1" placeholder="Add a purpose, e.g. Bazar" @keydown.enter.prevent="addPurpose" />
-                            <button type="button" class="btn-secondary" @click="addPurpose">Add</button>
+                            <button type="button" class="btn-secondary" @click="addPurpose"><Icon name="plus" :size="16" /> Add</button>
                         </div>
                     </div>
                 </div>
@@ -364,7 +364,7 @@ async function removeBill() {
                     <button v-if="editingEnvelope" type="button" class="btn-ghost text-rose-600" @click="stopEnvelope">Stop</button>
                     <div class="flex-1"></div>
                     <button type="button" class="btn-secondary" @click="showEnvelope = false">Cancel</button>
-                    <button class="btn-primary" :disabled="envForm.processing">{{ editingEnvelope ? 'Save' : 'Add envelope' }}</button>
+                    <button class="btn-primary" :disabled="envForm.processing"><Icon :name="editingEnvelope ? 'check' : 'plus'" :size="16" /> {{ editingEnvelope ? 'Save' : 'Add envelope' }}</button>
                 </div>
             </form>
         </Modal>
@@ -416,7 +416,7 @@ async function removeBill() {
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line px-6 py-4">
                     <button type="button" class="btn-secondary" @click="showSpend = false">Cancel</button>
-                    <button class="btn-primary" :disabled="spendForm.processing">Save</button>
+                    <button class="btn-primary" :disabled="spendForm.processing"><Icon name="check" :size="16" /> Save</button>
                 </div>
             </form>
         </Modal>
@@ -458,7 +458,7 @@ async function removeBill() {
                     </template>
                     <div class="flex-1"></div>
                     <button type="button" class="btn-secondary" @click="showGoal = false">Cancel</button>
-                    <button class="btn-primary" :disabled="goalForm.processing">{{ editingGoal ? 'Save' : 'Add goal' }}</button>
+                    <button class="btn-primary" :disabled="goalForm.processing"><Icon :name="editingGoal ? 'check' : 'plus'" :size="16" /> {{ editingGoal ? 'Save' : 'Add goal' }}</button>
                 </div>
             </form>
         </Modal>
@@ -507,7 +507,7 @@ async function removeBill() {
                     <button v-if="editingBill" type="button" class="btn-ghost text-rose-600" @click="removeBill"><Icon name="trash" :size="15" /> Remove</button>
                     <div class="flex-1"></div>
                     <button type="button" class="btn-secondary" @click="showBill = false">Cancel</button>
-                    <button class="btn-primary" :disabled="billForm.processing">{{ editingBill ? 'Save' : 'Add bill' }}</button>
+                    <button class="btn-primary" :disabled="billForm.processing"><Icon :name="editingBill ? 'check' : 'plus'" :size="16" /> {{ editingBill ? 'Save' : 'Add bill' }}</button>
                 </div>
             </form>
         </Modal>

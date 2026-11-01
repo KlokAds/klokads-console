@@ -246,7 +246,7 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                     </div>
                     <div class="flex items-center justify-end gap-3 border-t border-line bg-ink-50/60 px-6 py-4">
                         <span v-if="businessForm.isDirty" class="text-xs font-medium text-amber-600">Unsaved changes</span>
-                        <button class="btn-primary" :disabled="businessForm.processing || !businessForm.isDirty">Save</button>
+                        <button class="btn-primary" :disabled="businessForm.processing || !businessForm.isDirty"><Icon name="check" :size="16" /> Save</button>
                     </div>
                 </form>
 
@@ -271,7 +271,7 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                         <div v-if="stripe.connected" class="flex flex-wrap gap-2">
                             <button class="btn-dark btn-sm" :disabled="syncing" @click="sync(false)"><Icon name="sync" :size="14" :class="{ 'animate-spin': syncing }" /> {{ syncing ? 'Syncing…' : 'Sync now' }}</button>
                             <button class="btn-secondary btn-sm" :disabled="syncing" title="Re-import the last 12 months" @click="sync(true)">Full re-sync</button>
-                            <button class="btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700" @click="disconnect">Disconnect</button>
+                            <button class="btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700" @click="disconnect"><Icon name="close" :size="14" /> Disconnect</button>
                         </div>
                     </div>
 
@@ -324,7 +324,7 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                         </div>
                         <div class="flex items-center justify-end gap-3 border-t border-line bg-ink-50/60 px-6 py-4">
                             <span v-if="stripeForm.isDirty" class="text-xs font-medium text-amber-600">Unsaved changes</span>
-                            <button class="btn-primary" :disabled="stripeForm.processing || !stripeForm.isDirty">{{ stripeForm.processing ? 'Checking with Stripe…' : 'Save keys' }}</button>
+                            <button class="btn-primary" :disabled="stripeForm.processing || !stripeForm.isDirty"><Icon name="check" :size="16" /> {{ stripeForm.processing ? 'Checking with Stripe…' : 'Save keys' }}</button>
                         </div>
                     </form>
                 </template>
@@ -386,7 +386,7 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                         </div>
                         <div class="flex items-center justify-end gap-3 border-t border-line bg-ink-50/60 px-6 py-4">
                             <span v-if="mailForm.isDirty" class="text-xs font-medium text-amber-600">Unsaved changes</span>
-                            <button class="btn-primary" :disabled="mailForm.processing || !mailForm.isDirty">Save</button>
+                            <button class="btn-primary" :disabled="mailForm.processing || !mailForm.isDirty"><Icon name="check" :size="16" /> Save</button>
                         </div>
                     </form>
 
@@ -421,7 +421,7 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                         </div>
                         <div class="flex items-center justify-end gap-3 border-t border-line bg-ink-50/60 px-6 py-4">
                             <span v-if="templateForm.isDirty" class="text-xs font-medium text-amber-600">Unsaved changes</span>
-                            <button class="btn-primary" :disabled="templateForm.processing || !templateForm.isDirty">Save</button>
+                            <button class="btn-primary" :disabled="templateForm.processing || !templateForm.isDirty"><Icon name="check" :size="16" /> Save</button>
                         </div>
                     </form>
 
@@ -453,7 +453,7 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                         </div>
                         <div class="flex items-center justify-end gap-3 border-t border-line bg-ink-50/60 px-6 py-4">
                             <span v-if="gstForm.isDirty" class="text-xs font-medium text-amber-600">Unsaved changes</span>
-                            <button class="btn-primary" :disabled="gstForm.processing || !gstForm.isDirty">Save</button>
+                            <button class="btn-primary" :disabled="gstForm.processing || !gstForm.isDirty"><Icon name="check" :size="16" /> Save</button>
                         </div>
                     </form>
                 </template>
@@ -492,7 +492,7 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                     </div>
                     <div class="flex items-center justify-end gap-3 border-t border-line px-6 py-4">
                         <span v-if="pricingForm.isDirty" class="text-xs font-medium text-amber-600">Unsaved changes</span>
-                        <button class="btn-primary" :disabled="pricingForm.processing || !pricingForm.isDirty">Save</button>
+                        <button class="btn-primary" :disabled="pricingForm.processing || !pricingForm.isDirty"><Icon name="check" :size="16" /> Save</button>
                     </div>
                 </form>
 
@@ -539,9 +539,9 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                             </div>
                         </div>
                         <div class="flex items-center justify-between gap-3 border-t border-line bg-ink-50/60 px-6 py-4">
-                            <button v-if="flow.airwallex" type="button" class="btn-ghost text-rose-600" @click="disconnectAirwallex">Disconnect</button>
+                            <button v-if="flow.airwallex" type="button" class="btn-ghost text-rose-600" @click="disconnectAirwallex"><Icon name="close" :size="16" /> Disconnect</button>
                             <span v-else></span>
-                            <button class="btn-primary" :disabled="airwallexForm.processing || !airwallexForm.client_id">{{ flow.airwallex ? 'Save' : 'Connect' }}</button>
+                            <button class="btn-primary" :disabled="airwallexForm.processing || !airwallexForm.client_id"><Icon :name="flow.airwallex ? 'check' : 'link'" :size="16" /> {{ flow.airwallex ? 'Save' : 'Connect' }}</button>
                         </div>
                     </form>
                 </template>
@@ -576,7 +576,7 @@ const current = computed(() => tabs.value.find((t) => t.key === tab.value));
                             <span class="text-xs text-ink-500">Max {{ descriptors.max }} characters — card statements allow 22 in total.</span>
                             <span class="flex items-center gap-3">
                                 <span v-if="descriptorForm.isDirty" class="text-xs font-medium text-amber-600">Unsaved changes</span>
-                                <button class="btn-primary" :disabled="descriptorForm.processing || !descriptorForm.isDirty">Save</button>
+                                <button class="btn-primary" :disabled="descriptorForm.processing || !descriptorForm.isDirty"><Icon name="check" :size="16" /> Save</button>
                             </span>
                         </div>
                     </form>

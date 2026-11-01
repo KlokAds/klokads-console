@@ -145,7 +145,7 @@ const categoryTotals = computed(() =>
                     <Select v-model="f.category" :options="categoryFilter" size="sm" class="w-44" @change="apply" />
                     <Select v-model="f.client_id" :options="clientFilter" size="sm" class="w-44" @change="apply" />
                     <DatePicker v-model="f.month" month clearable size="sm" placeholder="Any month" class="w-40" @change="apply" />
-                    <button v-if="f.category || f.client_id || f.month" class="btn-ghost btn-sm" @click="clear">Clear</button>
+                    <button v-if="f.category || f.client_id || f.month" class="btn-ghost btn-sm" @click="clear"><Icon name="close" :size="14" /> Clear</button>
                 </div>
                 <button class="btn-dark btn-sm" @click="open()"><Icon name="plus" :size="14" /> Add expense</button>
             </div>
@@ -252,7 +252,7 @@ const categoryTotals = computed(() =>
                 </div>
                 <div class="flex justify-end gap-2 border-t border-line bg-ink-50/60 px-6 py-4">
                     <button type="button" class="btn-secondary" @click="showForm = false">Cancel</button>
-                    <button class="btn-primary" :disabled="form.processing">{{ editing ? 'Save changes' : 'Add expense' }}</button>
+                    <button class="btn-primary" :disabled="form.processing"><Icon :name="editing ? 'check' : 'plus'" :size="16" /> {{ editing ? 'Save changes' : 'Add expense' }}</button>
                 </div>
             </form>
         </Modal>

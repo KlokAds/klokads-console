@@ -398,7 +398,7 @@ onUnmounted(() => {
                             <button v-if="editing" type="button" class="icon-btn h-12 w-12 hover:text-rose-600" title="Delete" @click="remove"><Icon name="trash" /></button>
                             <button v-else type="button" class="btn-secondary h-12" :disabled="!canSave || saving" @click="save(true)">+ Another</button>
                             <button type="button" class="btn h-12 flex-1 bg-gradient-to-r from-teal-500 to-brand-600 text-base text-white shadow-lg shadow-teal-500/20 hover:brightness-110" :disabled="!canSave || saving" @click="save()">
-                                {{ saving ? 'Saving…' : editing ? 'Save changes' : 'Save' }}
+                                <Icon name="check" :size="16" /> {{ saving ? 'Saving…' : editing ? 'Save changes' : 'Save' }}
                             </button>
                         </div>
                     </div>
