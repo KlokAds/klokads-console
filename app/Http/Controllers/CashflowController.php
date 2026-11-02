@@ -117,6 +117,8 @@ class CashflowController extends Controller
                     'fee' => 0,
                     'net' => -$e->amount,
                     'currency' => strtolower(Setting::get('currency', 'sgd')),
+                    // Paid in another currency (dollars from nSave…): that amount, the value above.
+                    'original' => $e->original_amount ? ['amount' => -$e->original_amount, 'currency' => $e->original_currency] : null,
                     'status' => null,
                     'reference' => $e->reference,
                 ]);

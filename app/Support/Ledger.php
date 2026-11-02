@@ -39,6 +39,9 @@ class Ledger
         return $account->opening_balance + $in + $moved - $out;
     }
 
+    /** Wallets whose money is spent with their card. */
+    private const CARD_WALLETS = ['nsave', 'redotpay', 'rizon', 'elevatepay', 'payoneer', 'airwallex', 'wise', 'youtrip', 'revolut'];
+
     /** Reporting currency per 1 unit of the account's currency: what filling it actually cost. */
     public static function rate(Account $account, ?int $exceptId = null): ?float
     {
@@ -68,7 +71,8 @@ class Ledger
             }
         }
 
-        return $units > 0 ? $value / $units : ($account->opening_rate ?: null);
+        // Nothing says what these units cost (dollars that came in as dollars): today's market rate.
+        return $units > 0 ? $value / $units : ($account->opening_rate ?: MarketRate::get($account->currency, self::base()));
     }
 
     /** Value of some of the account's money in the reporting currency (cents). */
@@ -135,6 +139,12 @@ class Ledger
         $business = $tx->account->scope === 'business';
         $foreign = ! self::isBase($tx->account);
         $feeValue = $tx->fee > 0 ? self::value($tx->account, $tx->fee, $tx->id) : 0;
+        // How it was paid, from the account: a card or a card wallet (nSave, RedotPay…), cash, else a bank.
+        $via = match (true) {
+            $tx->account->kind === 'cash' => 'cash',
+            $tx->account->kind === 'card', in_array($tx->account->provider, self::CARD_WALLETS, true) => 'card',
+            default => 'bank',
+        };
 
         // The spend itself (fee booked separately below).
         $spend = $business && $tx->kind === 'expense' ? [
@@ -144,7 +154,7 @@ class Ledger
             'amount' => $tx->base_amount - $feeValue,
             'original_amount' => $foreign ? $tx->amount : null,
             'original_currency' => $foreign ? strtolower($tx->account->currency) : null,
-            'paid_via' => 'bank_transfer',
+            'paid_via' => $via,
             'reference' => "Money #{$tx->id} · {$tx->account->name}",
             'spent_on' => $tx->occurred_on,
         ] : null;
@@ -161,7 +171,7 @@ class Ledger
             'amount' => $feeValue,
             'original_amount' => $foreign ? $tx->fee : null,
             'original_currency' => $foreign ? strtolower($tx->account->currency) : null,
-            'paid_via' => 'bank_transfer',
+            'paid_via' => $via,
             'reference' => "Money #{$tx->id} · fee",
             'spent_on' => $tx->occurred_on,
         ] : null;

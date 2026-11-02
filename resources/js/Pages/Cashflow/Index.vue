@@ -104,7 +104,10 @@ const days = computed(() => {
                                     <span v-else class="text-ink-300">—</span>
                                 </td>
                                 <td class="text-xs text-ink-500">{{ e.method ? methodLabel(e.method) : '—' }}</td>
-                                <td class="num">{{ m(e.amount) }}</td>
+                                <td class="num">
+                                    <template v-if="e.original">{{ money(e.original.amount, e.original.currency) }}<div class="text-[11px] font-normal text-ink-400">≈ {{ m(e.amount) }}</div></template>
+                                    <template v-else>{{ m(e.amount) }}</template>
+                                </td>
                                 <td class="num text-ink-500">{{ e.fee ? `−${m(e.fee)}` : '—' }}</td>
                                 <td class="num font-semibold" :class="e.net < 0 ? (e.category?.startsWith('payout') ? 'text-sky-700' : 'text-rose-600') : 'text-emerald-600'">{{ e.net > 0 ? '+' : '' }}{{ m(e.net) }}</td>
                             </tr>

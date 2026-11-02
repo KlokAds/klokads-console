@@ -78,7 +78,7 @@ export function wantsNew() {
 export function methodLabel(method) {
     if (!method) return 'Other';
     const [type, brand] = method.split(':');
-    const names = { card: 'Card', paynow: 'PayNow', grabpay: 'GrabPay', alipay: 'Alipay', wechat_pay: 'WeChat Pay', link: 'Link', customer_balance: 'Bank transfer', us_bank_account: 'US bank', bank: 'Bank transfer', stripe: 'Stripe balance', cash: 'Cash' };
+    const names = { card: 'Card', paynow: 'PayNow', grabpay: 'GrabPay', alipay: 'Alipay', wechat_pay: 'WeChat Pay', link: 'Link', customer_balance: 'Bank transfer', us_bank_account: 'US bank', bank: 'Bank transfer', bank_transfer: 'Bank transfer', stripe: 'Stripe balance', cash: 'Cash' };
     const brands = { visa: 'Visa', mastercard: 'Mastercard', amex: 'Amex', unionpay: 'UnionPay', jcb: 'JCB', discover: 'Discover' };
     return (names[type] ?? type) + (brand ? ` · ${brands[brand] ?? brand}` : '');
 }
