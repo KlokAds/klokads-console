@@ -170,6 +170,17 @@ class AutoEntries
                 return $message;
             }
 
+            // Cash from an ATM is my money moved to cash in hand, not spending.
+            if ($p['direction'] === 'out' && ! $category && preg_match('/\batm\b/i', $message->body)
+                && ($cash = Account::where('archived', false)->where('kind', 'cash')->where('scope', $account->scope)->whereRaw('upper(currency) = ?', [strtoupper($account->currency)])->first())) {
+                $tx = Ledger::save(['kind' => 'transfer', 'account_id' => $account->id, 'to_account_id' => $cash->id, 'amount' => $p['amount'], 'fee' => $p['fee'] ?? 0,
+                    'description' => 'Auto · ATM cash'.($p['reference'] ? " · {$p['reference']}" : ''), 'occurred_on' => $date]);
+                $message->update(['status' => 'added', 'account_id' => $account->id, 'money_transaction_id' => $tx->id, 'note' => "ATM cash → {$cash->name}"]);
+                $this->tellEntry($account, $p, "→ {$cash->name}", $tx->id);
+
+                return $message;
+            }
+
             // Meta took it from my card (FACEBK*): ad spend — business "Meta Ads", personal "Client ads".
             // The same charge already booked from Meta's own log (a client's charge) is matched, not added twice.
             if ($p['direction'] === 'out' && self::isMeta($message->body)) {

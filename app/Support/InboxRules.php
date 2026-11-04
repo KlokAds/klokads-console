@@ -26,6 +26,9 @@ class InboxRules
         ['name' => 'bKash', 'type' => 'app'], ['name' => 'Nagad', 'type' => 'app'], ['name' => 'Rocket', 'type' => 'app'], ['name' => 'Upay', 'type' => 'app'],
     ];
 
+    /** App notifications that are never a transaction of mine (normalised names). */
+    public const NEVER_APPS = ['messages', 'messaging', 'message', 'messageplus', 'sms', 'samsungmessages', 'klokagency', 'klokads', 'klokone', 'mhbot', 'metaads', 'metaadsmanager', 'adsmanager', 'metabusinesssuite', 'facebook'];
+
     public const DEFAULT_IGNORE = ['otp', 'one time password', 'verification code', 'verification number', 'security code', 'your code is',
         'login code', 'access code', 'auth code', 'confirmation code', 'use code', 'pin'];
 
@@ -77,6 +80,10 @@ class InboxRules
     public static function trust(string $source, ?string $sender): ?string
     {
         $type = $source === 'app' ? 'app' : 'sms';
+        // The SMS app's own notification repeats an SMS already sent; my own apps and Meta's report reports, not money.
+        if ($type === 'app' && in_array(self::normalise((string) $sender), self::NEVER_APPS, true)) {
+            return 'off';
+        }
         $from = self::normalise((string) $sender);
         $number = self::number((string) $sender);
         $found = null;

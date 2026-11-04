@@ -129,6 +129,8 @@ class TransactionParser
         // A date is never the amount ("29-Oct-2026 Tk. 1,00,000" is not ৳2,026).
         $raw = preg_replace('/\b\d{1,2}[-\/. ](?:[A-Za-z]{3,9}|\d{1,2})[-\/. ]\d{2,4}\b/u', ' ', $raw);
         $pattern = '/(?:(?<cur>tk\.?|bdt|৳|sgd|s\$|usdt|usdc|usd|us\$|\$)\s*(?<a>\d[\d,]*(?:\.\d{1,8})?))|(?:(?<b>\d[\d,]*(?:\.\d{1,8})?)\s*(?<cur2>tk|bdt|taka|sgd|usdt|usdc|usd))/iu';
+        // An account number is never the amount ("Account: 20502797800006814 Tk2,000.00").
+        $raw = preg_replace('/\d{11,}/', ' ', $raw);
         if (! preg_match($pattern, $raw, $m)) {
             // CellFin: "Amount: 5000.00" — no currency written; it is taka.
             if (preg_match('/\bamount\s*:\s*(\d[\d,]*(?:\.\d{1,2})?)/iu', $raw, $a)) {
@@ -138,8 +140,8 @@ class TransactionParser
             return [0, ''];
         }
 
-        $cur = mb_strtolower($m['cur'] ?: ($m['cur2'] ?? ''));
-        $num = $m['a'] !== '' ? $m['a'] : ($m['b'] ?? '');
+        $cur = mb_strtolower(($m['cur'] ?? '') ?: ($m['cur2'] ?? ''));
+        $num = ($m['a'] ?? '') !== '' ? $m['a'] : ($m['b'] ?? '');
         $currency = match (true) {
             in_array($cur, ['tk', 'tk.', 'bdt', '৳', 'taka'], true) => 'BDT',
             in_array($cur, ['sgd', 's$'], true) => 'SGD',

@@ -77,6 +77,8 @@ class AutoEntriesTest extends TestCase
             // Islami Bank and CellFin text from an ordinary number (01844-242613).
             'islami atm credit' => ['+8801844242613', 'Dear Customer ATM Tk 2000 has been credited to A/C279**00240307 Balance Tk.2003.7 Islami Bank Help:8331090,16259',
                 ['provider' => 'islami', 'direction' => 'in', 'amount' => 200000, 'last4' => '0307', 'balance' => 200370]],
+            'cellfin atm (account number is not the amount)' => ['+8801844242613', 'CellFin Account: 20502797800006814 Tk2,000.00 withdrawn from ATM',
+                ['direction' => 'out', 'amount' => 200000, 'currency' => 'BDT', 'last4' => '6814']],
             'cellfin send money' => ['+8801844242613', 'CellFin Send Money bKash Successful. From: 20502797800006814 bKash Wallet: 01711962283 Amount: 5000.00',
                 ['direction' => 'out', 'amount' => 500000, 'currency' => 'BDT', 'last4' => '6814']],
             'nsave card payment' => ['nSave', 'Card payment approved. 💳 Paid $19.00 at FACEBK* Z25JQBJSD4 with your card ending 6903',
@@ -228,6 +230,29 @@ class AutoEntriesTest extends TestCase
         // The next one is booked straight away.
         $sms('Dear Customer Tk 500 has been debited from A/C279**00240307 Balance Tk.1503.7 Islami Bank');
         $this->assertSame(150000, Ledger::balance($islami));
+    }
+
+    public function test_atm_cash_moves_to_cash_in_hand(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $islami = Account::create(['name' => 'Islami Bank', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'islami', 'last4' => '6814', 'currency' => 'BDT', 'opening_balance' => 370339]);
+        $cash = Account::create(['name' => 'Cash in hand', 'scope' => 'personal', 'kind' => 'cash', 'currency' => 'BDT']);
+
+        app(AutoEntries::class)->ingest('sms', '+8801844242613', 'CellFin Account: 20502797800006814 Tk2,000.00 withdrawn from ATM');
+
+        $this->assertSame([170339, 200000], [Ledger::balance($islami), Ledger::balance($cash)]);
+        $this->assertSame('transfer', MoneyTransaction::sole()->kind);
+    }
+
+    public function test_the_sms_apps_own_notification_and_report_apps_are_never_booked(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $token = AutoEntries::token();
+        $this->postJson("/inbox/sms/{$token}", ['source' => 'app', 'from' => 'Messages', 'text' => 'UCB. Your A/C (***1603) has been credited BDT 6,715.00. Avl Bal: BDT 6,715.00'])->assertOk();
+        $this->postJson("/inbox/sms/{$token}", ['source' => 'app', 'from' => 'Klok Agency', 'text' => 'Campaign spend. GFFS — spent $1.68 today'])->assertOk();
+
+        $this->assertSame(['ignored', 'ignored'], InboxMessage::orderBy('id')->pluck('status')->all());
+        $this->assertSame(0, AppNotification::count());
     }
 
     public function test_a_blocked_sender_is_never_booked(): void
