@@ -15,7 +15,10 @@
 <head>
 <meta charset="utf-8">
 <style>
-    @page { margin: 0; }
+    /* The bottom 78pt of every page belongs to the sign-off, so lines never run under it. */
+    @page { margin: 34px 0 78px 0; }
+    @page :first { margin-top: 0; }
+    html { background: {{ $paper }}; }
     body { margin: 0; font-family: 'DejaVu Sans', Helvetica, sans-serif; color: {{ $navy }}; font-size: 10.5px; background: {{ $paper }}; }
     .serif { font-family: 'DejaVu Serif', Georgia, serif; }
     table { width: 100%; border-collapse: collapse; }
@@ -206,8 +209,11 @@
     <div class="wrap muted" style="padding-top:20px;line-height:1.6">{!! nl2br(e($invoice->note)) !!}</div>
 @endif
 
+{{-- The top margin of a continued page, in the paper colour --}}
+<div style="position:fixed;top:-34px;left:0;right:0;height:34px;background:{{ $paper }}"></div>
+
 {{-- Sign-off, at the foot of the page --}}
-<div style="position:fixed;bottom:0;left:0;right:0">
+<div style="position:fixed;bottom:-78px;left:0;right:0;height:78px;background:{{ $paper }}">
     <div class="wrap" style="padding-bottom:26px">
         <table style="border-top:0.6px solid {{ $line }}">
             <tr>
