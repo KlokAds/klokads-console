@@ -21,7 +21,11 @@ class WalletListener : NotificationListenerService() {
     }
     private var lastPoll = 0L
 
-    /** Android keeps this listener running, so it fetches the server's notifications every minute (not every 15). */
+    /**
+     * Android keeps this listener running: while the screen is on it fetches the server's notifications
+     * every 5 minutes. With the screen off it does nothing — the 15-minute fetch and the exact reminder
+     * alarm cover that, so the phone sleeps (and the battery lasts).
+     */
     override fun onListenerConnected() {
         ticker.removeCallbacks(tick)
         ticker.post(tick)
@@ -33,7 +37,8 @@ class WalletListener : NotificationListenerService() {
 
     private fun pollNow() {
         val now = System.currentTimeMillis()
-        if (now - lastPoll < 20_000) {
+        val screenOn = (getSystemService(POWER_SERVICE) as? android.os.PowerManager)?.isInteractive ?: true
+        if (!screenOn || now - lastPoll < POLL_EVERY_MS - 5_000) {
             return
         }
         lastPoll = now
@@ -53,7 +58,7 @@ class WalletListener : NotificationListenerService() {
         /** Words in a wallet app's package or name; set from the app (Settings), these by default. */
         val DEFAULT_APPS = listOf("nsave", "rizon", "elevatepay", "worldfirst", "airwallex", "payoneer", "redotpay", "binance")
         private const val SEEN = "klok_wallet_seen"
-        private const val POLL_EVERY_MS = 60_000L
+        private const val POLL_EVERY_MS = 300_000L
     }
 
     private fun watched(): List<String> =
@@ -94,8 +99,7 @@ class WalletListener : NotificationListenerService() {
         if (sbn.packageName == packageName) {
             return
         }
-        // The phone is awake (something just came in): a good moment to fetch ours too.
-        pollNow()
+        // Other apps' notifications (chats…) never wake the network: only a forwarded money message fetches ours (Forwarder).
         // A bank's email in Gmail (BRAC, Midland…): sent like its SMS — the server books it once.
         if (sbn.packageName == "com.google.android.gm") {
             fromGmail(sbn)
