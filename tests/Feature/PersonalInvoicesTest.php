@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Mail\PersonalInvoiceMail;
 use App\Models\Account;
+use App\Models\PersonalAdBill;
 use App\Models\PersonalClient;
 use App\Models\PersonalInvoice;
 use App\Models\PersonalRecurring;
@@ -84,6 +85,37 @@ class PersonalInvoicesTest extends TestCase
         $this->delete("/personal/invoices/{$new->id}/carry/{$old->id}")->assertSessionHas('success');
         $this->assertSame(['unpaid', 1750000, null], [$old->fresh()->status, $old->fresh()->due(), $old->fresh()->carried_into_id]);
         $this->assertSame(0, $new->fresh()->carried);
+    }
+
+    public function test_previous_dues_are_ticked_in_the_invoice_form(): void
+    {
+        $old = $this->invoice(); // ৳17,500 unpaid, by hand
+        $salary = app(PersonalInvoicing::class)->create($this->client, [['description' => 'Salary', 'qty' => 1, 'rate' => 100000]], CarbonImmutable::today(), null);
+        $salary->update(['personal_recurring_id' => PersonalRecurring::create(['personal_client_id' => $this->client->id, 'items' => [['description' => 'Salary', 'qty' => 1, 'rate' => 100000]],
+            'day' => 5, 'start_on' => '2026-10-05', 'lead_days' => 2, 'due_days' => 0, 'auto_send' => false, 'active' => true, 'next_on' => '2026-12-05'])->id]);
+        $ads = app(PersonalInvoicing::class)->create($this->client, [['description' => 'Ads', 'qty' => 1, 'rate' => 50000]], CarbonImmutable::today(), null);
+        PersonalAdBill::create(['personal_client_id' => $this->client->id, 'personal_invoice_id' => $ads->id, 'period_from' => '2026-10-01', 'period_to' => '2026-10-07', 'currency' => 'USD', 'spend' => 5000]);
+
+        // New invoice with the old one ticked: it goes in at once.
+        $this->post('/personal/invoices', [
+            'personal_client_id' => $this->client->id, 'issued_on' => today()->toDateString(), 'send' => false, 'carry' => [$old->id, $salary->id],
+            'items' => [['description' => 'Monthly work', 'qty' => 1, 'rate' => 5000]],
+        ])->assertSessionHasNoErrors();
+        $new = PersonalInvoice::latest('id')->first();
+        $this->assertSame([$new->id, $new->id], [$old->fresh()->carried_into_id, $salary->fresh()->carried_into_id]);
+        $this->assertSame(500000 + 1750000 + 100000, $new->fresh()->grand());
+
+        // An ads bill never joins one that holds a salary.
+        $this->put("/personal/invoices/{$new->id}", ['personal_client_id' => $this->client->id, 'issued_on' => today()->toDateString(), 'carry' => [$old->id, $salary->id, $ads->id],
+            'items' => [['description' => 'Monthly work', 'qty' => 1, 'rate' => 5000]]])->assertSessionHas('error');
+        $this->assertNull($ads->fresh()->carried_into_id);
+
+        // Unticked in the edit: back on its own.
+        $this->put("/personal/invoices/{$new->id}", ['personal_client_id' => $this->client->id, 'issued_on' => today()->toDateString(), 'carry' => [$salary->id],
+            'items' => [['description' => 'Monthly work', 'qty' => 1, 'rate' => 5000]]])->assertSessionHasNoErrors();
+        $this->assertSame(['unpaid', null], [$old->fresh()->status, $old->fresh()->carried_into_id]);
+        $this->assertSame(500000 + 100000, $new->fresh()->grand());
+        $this->get('/personal/invoices')->assertInertia(fn ($page) => $page->where('invoices.0.carried_ids', [$salary->id]));
     }
 
     public function test_lines_billed_once_show_their_period_instead_of_qty_and_rate(): void

@@ -12,7 +12,7 @@ import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { date, money, wantsNew } from '@/money';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
     invoices: Array,
@@ -47,7 +47,7 @@ const accountOptions = (currency) => [
 const showInv = ref(false);
 const editingInv = ref(null);
 const blankItem = () => ({ description: '', qty: 1, rate: '' });
-const invForm = useForm({ personal_client_id: '', items: [blankItem()], issued_on: today(), due_on: plusDays(7), note: '', send: true });
+const invForm = useForm({ personal_client_id: '', items: [blankItem()], issued_on: today(), due_on: plusDays(7), note: '', send: true, carry: [] });
 const invTotal = computed(() => invForm.items.reduce((s, i) => s + Math.round((Number(i.qty) || 0) * (Number(i.rate) || 0) * 100), 0));
 const movedNote = ref(null);
 function openInv(inv = null) {
@@ -58,8 +58,8 @@ function openInv(inv = null) {
     }
     editingInv.value = inv;
     invForm.defaults(inv
-        ? { personal_client_id: inv.personal_client_id, items: inv.items.map((i) => ({ ...i, rate: (i.rate / 100).toString() })), issued_on: inv.issued_on, due_on: inv.due_on ?? '', note: inv.note ?? '', send: false }
-        : { personal_client_id: props.clients[0]?.id ?? '', items: [blankItem()], issued_on: today(), due_on: plusDays(7), note: '', send: true });
+        ? { personal_client_id: inv.personal_client_id, items: inv.items.map((i) => ({ ...i, rate: (i.rate / 100).toString() })), issued_on: inv.issued_on, due_on: inv.due_on ?? '', note: inv.note ?? '', send: false, carry: [...(inv.carried_ids || [])] }
+        : { personal_client_id: props.clients[0]?.id ?? '', items: [blankItem()], issued_on: today(), due_on: plusDays(7), note: '', send: true, carry: [] });
     invForm.reset();
     invForm.clearErrors();
     showInv.value = true;
@@ -70,6 +70,24 @@ onMounted(() => {
     const inv = id ? props.invoices.find((i) => i.id === id) : null;
     if (inv) openInv(inv);
 });
+// Previous dues: the client's other unpaid invoices (and the ones already in this one). Salary and ads never meet.
+const KIND = { ads: 'Ads bill', salary: 'Salary', other: 'Invoice' };
+const dueChoices = computed(() => props.invoices.filter((i) => i.personal_client_id === invForm.personal_client_id && i.id !== editingInv.value?.id
+    && ((['unpaid', 'partial'].includes(i.status) && !i.carried_into_id) || (editingInv.value && i.carried_into_id === editingInv.value.id))));
+const pickedKinds = computed(() => {
+    const kinds = dueChoices.value.filter((i) => invForm.carry.includes(i.id)).map((i) => i.kind);
+    if (editingInv.value) kinds.push(editingInv.value.kind);
+    return new Set(kinds.filter((k) => k !== 'other'));
+});
+const clashes = (i) => i.kind !== 'other' && !invForm.carry.includes(i.id) && [...pickedKinds.value].some((k) => k !== i.kind);
+const dueAmount = (i) => (i.carried_into_id ? i.total - i.paid : i.due);
+const carriedTotal = computed(() => dueChoices.value.filter((i) => invForm.carry.includes(i.id)).reduce((s, i) => s + dueAmount(i), 0));
+function toggleCarry(i) {
+    if (clashes(i)) return;
+    const at = invForm.carry.indexOf(i.id);
+    at === -1 ? invForm.carry.push(i.id) : invForm.carry.splice(at, 1);
+}
+watch(() => invForm.personal_client_id, (now, before) => { if (before !== undefined && now !== before && !editingInv.value) invForm.carry = []; });
 function saveInv() {
     const opts = { preserveScroll: true, onSuccess: () => (showInv.value = false) };
     editingInv.value ? invForm.put(route('personal.invoices.update', editingInv.value.id), opts) : invForm.post(route('personal.invoices.store'), opts);
@@ -358,7 +376,33 @@ if (wantsNew()) openInv();
                         </div>
                         <div class="flex items-center justify-between">
                             <button type="button" class="btn-secondary btn-sm" @click="invForm.items.push(blankItem())"><Icon name="plus" :size="14" /> Item</button>
-                            <span class="text-sm">Total <b class="tabular-nums">{{ T(invTotal) }}</b></span>
+                            <span class="text-sm">{{ invForm.carry.length ? 'This invoice' : 'Total' }} <b class="tabular-nums">{{ T(invTotal) }}</b></span>
+                        </div>
+                    </div>
+
+                    <!-- Previous dues: tick the client's unpaid invoices to bill them together -->
+                    <div v-if="dueChoices.length" class="col-span-2 rounded-2xl border border-line bg-ink-50/60 p-3 dark:bg-white/[0.03]">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="label !mb-0">Previous dues</span>
+                            <span class="text-[11px] text-ink-500">Salary with salary · ads with ads</span>
+                        </div>
+                        <div class="mt-2 space-y-1.5">
+                            <button v-for="i in dueChoices" :key="i.id" type="button" class="flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm transition"
+                                :class="invForm.carry.includes(i.id) ? 'border-teal-400 bg-teal-50 dark:border-teal-500/50 dark:bg-teal-500/10' : clashes(i) ? 'cursor-not-allowed border-line opacity-50' : 'border-line bg-surface hover:border-teal-300'"
+                                :title="clashes(i) ? 'Salary and ads bills stay apart' : ''" @click="toggleCarry(i)">
+                                <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2" :class="invForm.carry.includes(i.id) ? 'border-teal-600 bg-teal-600 text-white' : 'border-ink-300'">
+                                    <Icon v-if="invForm.carry.includes(i.id)" name="check" :size="13" />
+                                </span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="block font-semibold text-ink-900">{{ i.number }} <span class="ml-1 rounded-full px-2 py-0.5 text-[10px] font-bold" :class="i.kind === 'ads' ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300' : i.kind === 'salary' ? 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300' : 'bg-ink-100 text-ink-600'">{{ KIND[i.kind] }}</span></span>
+                                    <span class="block truncate text-xs text-ink-500">{{ date(i.issued_on) }} · {{ i.items[0]?.description }}<template v-if="i.items.length > 1"> +{{ i.items.length - 1 }}</template></span>
+                                </span>
+                                <span class="shrink-0 font-semibold tabular-nums">{{ T(dueAmount(i)) }}</span>
+                            </button>
+                        </div>
+                        <div v-if="invForm.carry.length" class="mt-2.5 flex justify-between border-t border-line pt-2 text-sm">
+                            <span class="text-ink-600">This invoice {{ T(invTotal) }} + previous {{ T(carriedTotal) }}</span>
+                            <b class="tabular-nums">{{ T(invTotal + carriedTotal) }}</b>
                         </div>
                     </div>
                     <div><div class="label">Date *</div><DatePicker v-model="invForm.issued_on" /></div>

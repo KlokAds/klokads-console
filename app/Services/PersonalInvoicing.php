@@ -172,7 +172,7 @@ class PersonalInvoicing
             || ! in_array($old->status, ['unpaid', 'partial'], true) || ! in_array($into->status, ['unpaid', 'partial'], true) || $old->carried_into_id) {
             throw new RuntimeException('Only an unpaid invoice of the same client (and money) can go into another unpaid one.');
         }
-        if (self::kind($old) !== self::kind($into)) {
+        if (! self::canGoTogether($into, $old)) {
             throw new RuntimeException('A salary invoice and an ads bill stay apart — only one of the same kind goes in.');
         }
         DB::transaction(function () use ($into, $old) {
@@ -202,6 +202,32 @@ class PersonalInvoicing
             (bool) $invoice->personal_recurring_id => 'salary',
             default => 'other',
         };
+    }
+
+    /**
+     * Salary and ads bills never share an invoice. A by-hand invoice may take either kind — but
+     * once it holds one kind, only that kind.
+     */
+    public static function canGoTogether(PersonalInvoice $into, PersonalInvoice $old): bool
+    {
+        $kinds = $into->previous()->get()->map(fn (PersonalInvoice $p) => self::kind($p))
+            ->push(self::kind($into), self::kind($old))->reject(fn ($k) => $k === 'other')->unique();
+
+        return $kinds->count() <= 1;
+    }
+
+    /**
+     * The previous dues picked in the invoice form: the ticked ones go in, the unticked come out.
+     *
+     * @param  array<int, int>  $ids
+     */
+    public function setCarried(PersonalInvoice $into, array $ids): void
+    {
+        $ids = array_map('intval', $ids);
+        $into->previous()->get()->reject(fn (PersonalInvoice $p) => in_array($p->id, $ids, true))->each(fn ($p) => $this->uncarry($p));
+        foreach (PersonalInvoice::whereIn('id', $ids)->whereNull('carried_into_id')->orderBy('issued_on')->get() as $old) {
+            $this->carry($into->fresh(), $old);
+        }
     }
 
     /** A new monthly or ads invoice takes the client's earlier unpaid ones along. @return int how many */

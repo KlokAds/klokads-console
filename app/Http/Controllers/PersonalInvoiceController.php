@@ -31,7 +31,7 @@ class PersonalInvoiceController extends Controller
     public function index(Request $request): Response
     {
         $request->session()->put('mode', 'personal');
-        $invoices = PersonalInvoice::with('client', 'payments', 'carriedInto')->latest('issued_on')->latest('id')->get();
+        $invoices = PersonalInvoice::with('client', 'payments', 'carriedInto', 'previous')->latest('issued_on')->latest('id')->get();
 
         return Inertia::render('Personal/Invoices', [
             'invoices' => $invoices->map(fn (PersonalInvoice $i) => [
@@ -40,6 +40,10 @@ class PersonalInvoiceController extends Controller
                 'due' => $i->due(),
                 'total' => $i->grand(), // with the previous dues it carries
                 'carried_into' => $i->carriedInto?->only('id', 'number'),
+                'carried_into_id' => $i->carried_into_id,
+                'carried_ids' => $i->previous->pluck('id'),
+                'own_total' => $i->total,
+                'kind' => PersonalInvoicing::kind($i), // ads | salary | other — salary and ads never go together
                 'issued_on' => $i->issued_on->toDateString(),
                 'due_on' => $i->due_on?->toDateString(),
                 'paid_on' => $i->paid_on?->toDateString(),
@@ -72,6 +76,9 @@ class PersonalInvoiceController extends Controller
         $data = $this->invoiceData($request);
         $invoice = $this->invoicing->create(PersonalClient::findOrFail($data['personal_client_id']), $data['items'],
             CarbonImmutable::parse($data['issued_on']), isset($data['due_on']) ? CarbonImmutable::parse($data['due_on']) : null, $data['note'] ?? null);
+        if (($error = $this->setCarried($invoice->fresh(), $request)) !== null) {
+            return back()->with('error', "{$invoice->number} created, but: {$error}");
+        }
 
         if ($request->boolean('send')) {
             return $this->trySend($invoice, "{$invoice->number} created and emailed.");
@@ -89,6 +96,9 @@ class PersonalInvoiceController extends Controller
         $data = $this->invoiceData($request);
         $invoice->update([...collect($data)->except('send')->all(), 'total' => PersonalInvoicing::total($data['items'])]);
         $this->invoicing->refresh($invoice->fresh());
+        if (($error = $this->setCarried($invoice->fresh(), $request)) !== null) {
+            return back()->with('error', $error);
+        }
 
         return back()->with('success', 'Invoice updated.');
     }
@@ -410,6 +420,22 @@ class PersonalInvoiceController extends Controller
     }
 
     /** @return array<string, mixed> */
+    /** The previous dues ticked in the form (only when the form sends the list). @return string|null what went wrong */
+    private function setCarried(PersonalInvoice $invoice, Request $request): ?string
+    {
+        if (! $request->has('carry')) {
+            return null;
+        }
+        $ids = $request->validate(['carry' => ['array'], 'carry.*' => ['integer', 'exists:personal_invoices,id']])['carry'] ?? [];
+        try {
+            $this->invoicing->setCarried($invoice, $ids);
+        } catch (\RuntimeException $e) {
+            return $e->getMessage();
+        }
+
+        return null;
+    }
+
     private function invoiceData(Request $request): array
     {
         $data = $request->validate([
