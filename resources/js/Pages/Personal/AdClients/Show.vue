@@ -415,11 +415,12 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                                 <div class="font-bold tabular-nums" :class="ch.kind === 'credit' ? 'text-violet-600 dark:text-violet-300' : 'text-ink-900'">{{ m(ch.amount, ch.currency) }}</div>
                                 <span class="mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ring-1" :class="CHARGE[ch.state]?.[1]">{{ CHARGE[ch.state]?.[0] }}</span>
                             </div>
+                            <button v-if="!ch.billed && ch.kind !== 'credit'" type="button" class="-mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-400 transition hover:bg-rose-50 hover:text-rose-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 dark:hover:bg-rose-500/15"
+                                aria-label="Remove this charge" title="Remove" @click="removeCharge(ch)"><Icon name="trash" :size="16" /></button>
                         </div>
                         <div v-if="ch.invoice || (!ch.billed && ch.kind !== 'credit')" class="mt-2 flex items-center justify-end gap-2 border-t border-line/60 pt-2">
                             <span v-if="ch.invoice" class="mr-auto text-xs text-ink-500">On {{ ch.invoice }}</span>
                             <span v-else-if="ch.kind === 'credit'" class="mr-auto text-xs text-ink-500">Meta's credit — never on their bill</span>
-                            <button v-if="!ch.billed && ch.kind !== 'credit'" class="btn-ghost btn-sm text-rose-600" @click="removeCharge(ch)"><Icon name="trash" :size="14" /> Remove</button>
                             <button v-if="!ch.billed && ch.kind !== 'credit'" class="btn-primary btn-sm" @click="billCharge(ch)"><Icon name="invoice" :size="14" /> Bill this</button>
                         </div>
                         <div v-else-if="ch.kind === 'credit'" class="mt-2 border-t border-line/60 pt-2 text-xs text-ink-500">Meta's credit — never on their bill</div>
