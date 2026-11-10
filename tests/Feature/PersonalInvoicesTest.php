@@ -58,6 +58,12 @@ class PersonalInvoicesTest extends TestCase
         $this->assertSame(['carried', 0], [$old->fresh()->status, $old->fresh()->due()]);
         $this->get("/personal/invoices/{$new->id}")->assertInertia(fn ($page) => $page->where('invoice.previous.0.number', $old->number)->where('invoice.grand', 2250000));
         $this->get(route('personal.invoice.public', $old->fresh()->public_token))->assertInertia(fn ($page) => $page->where('invoice.carried_into.number', $new->number));
+        // The previous due shows what it was for, line by line — on the page and in the PDF.
+        $this->get(route('personal.invoice.public', $new->public_token))->assertInertia(fn ($page) => $page
+            ->where('invoice.previous.0.items.0.description', 'Website design')->where('invoice.previous.0.items.1.amount', 250000));
+        $html = view('personal.invoice-pdf', ['invoice' => $new, 'me' => PersonalInvoicing::profile()])->render();
+        $this->assertStringContainsString('Website design', $html);
+        $this->assertStringContainsString('Hosting · 2 ×', $html);
 
         // Paid in full on the new one: both are settled.
         $this->post("/personal/invoices/{$new->id}/payments", ['amount' => 22500, 'paid_on' => today()->toDateString(), 'method' => 'bkash'])->assertSessionHasNoErrors();

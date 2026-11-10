@@ -228,6 +228,13 @@ class PersonalInvoicing
             'previous' => $invoice->previous()->get()->map(fn (PersonalInvoice $p) => [
                 'id' => $p->id, 'number' => $p->number, 'issued_on' => $p->issued_on->toDateString(), 'amount' => $p->carried_amount,
                 'for' => mb_strimwidth((string) ($p->items[0]['description'] ?? ''), 0, 60, '…').(count($p->items ?? []) > 1 ? ' +'.(count($p->items) - 1) : ''),
+                // What it was for — its own lines, so the client sees what each due is.
+                'items' => collect($p->items ?? [])->map(fn (array $i) => [
+                    'description' => (string) $i['description'], 'qty' => (float) $i['qty'], 'rate' => (int) $i['rate'],
+                    'amount' => (int) round((float) $i['qty'] * (int) $i['rate']),
+                ])->values()->all(),
+                'older' => (int) $p->carried, // dues it was itself carrying
+                'paid' => (int) $p->paid,     // part already paid on it
             ])->values()->all(),
             'this_total' => $invoice->total,
             'previous_total' => $invoice->carried,

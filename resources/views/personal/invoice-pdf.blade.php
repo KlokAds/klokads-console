@@ -108,7 +108,12 @@
         <table class="items" style="margin-bottom:16px">
             <tbody>
                 @foreach ($prev as $p)
-                    <tr><td style="font-size:11px"><b>{{ $p->number }}</b> <span class="muted">· {{ $p->issued_on->format('j M Y') }}</span></td><td class="r" style="font-weight:bold">{{ $money($p->carried_amount) }}</td></tr>
+                    <tr><td style="font-size:11px;border-bottom:0;padding-bottom:3px"><b>{{ $p->number }}</b> <span class="muted">· {{ $p->issued_on->format('j M Y') }}</span></td><td class="r" style="font-weight:bold;border-bottom:0;padding-bottom:3px">{{ $money($p->carried_amount) }}</td></tr>
+                    @foreach (collect($p->items ?? [])->map(fn ($i) => [$i['description'].((float) $i['qty'] != 1 ? ' · '.$qty($i['qty']).' × '.$money((int) $i['rate']) : ''), $money((int) round((float) $i['qty'] * (int) $i['rate']))])
+                        ->when($p->carried > 0, fn ($c) => $c->push(['Earlier dues on it', $money((int) $p->carried)]))
+                        ->when($p->paid > 0, fn ($c) => $c->push(['Already paid', '−'.$money((int) $p->paid)])) as [$what, $amount])
+                        <tr><td class="muted" style="font-size:10px;padding:2px 0 {{ $loop->last ? '8px' : '2px' }} 12px;{{ $loop->last ? '' : 'border-bottom:0;' }}">{{ $what }}</td><td class="r muted" style="font-size:10px;padding:2px 0 {{ $loop->last ? '8px' : '2px' }} 0;{{ $loop->last ? '' : 'border-bottom:0;' }}">{{ $amount }}</td></tr>
+                    @endforeach
                 @endforeach
             </tbody>
         </table>

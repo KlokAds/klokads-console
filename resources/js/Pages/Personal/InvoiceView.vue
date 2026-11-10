@@ -59,10 +59,17 @@ const sending = ref(null);
         <section v-if="invoice.previous.length || canCarry.length" class="mt-4 rounded-3xl border border-line/70 bg-surface p-4 shadow-sm sm:p-5">
             <h3 class="text-sm font-bold text-ink-900">Previous dues</h3>
             <div class="mt-2 divide-y divide-line/70">
-                <div v-for="p in invoice.previous" :key="p.id" class="flex items-center gap-3 py-2.5 text-sm">
-                    <span class="min-w-0 flex-1"><Link :href="route('personal.invoices.show', p.id)" class="font-semibold text-ink-900 hover:text-teal-700">{{ p.number }}</Link> <span class="text-xs text-ink-500">· {{ date(p.issued_on) }} · {{ p.for }}</span></span>
-                    <span class="font-semibold tabular-nums">{{ m(p.amount) }}</span>
-                    <button class="btn-ghost btn-sm text-rose-600" @click="uncarry(p.id)"><Icon name="close" :size="14" /> Remove</button>
+                <div v-for="p in invoice.previous" :key="p.id" class="py-2.5 text-sm">
+                    <div class="flex items-center gap-3">
+                        <span class="min-w-0 flex-1"><Link :href="route('personal.invoices.show', p.id)" class="font-semibold text-ink-900 hover:text-teal-700">{{ p.number }}</Link> <span class="text-xs text-ink-500">· {{ date(p.issued_on) }}</span></span>
+                        <span class="font-semibold tabular-nums">{{ m(p.amount) }}</span>
+                        <button class="btn-ghost btn-sm text-rose-600" @click="uncarry(p.id)"><Icon name="close" :size="14" /> Remove</button>
+                    </div>
+                    <div class="mt-1 space-y-1 border-l-2 border-line pl-3 text-xs text-ink-600">
+                        <div v-for="(it, k) in p.items" :key="k" class="flex justify-between gap-3"><span class="min-w-0">{{ it.description }}<span v-if="Number(it.qty) !== 1" class="text-ink-400"> × {{ it.qty }}</span></span><span class="shrink-0 tabular-nums">{{ m(it.amount) }}</span></div>
+                        <div v-if="p.older" class="flex justify-between gap-3"><span>Earlier dues on it</span><span class="tabular-nums">{{ m(p.older) }}</span></div>
+                        <div v-if="p.paid" class="flex justify-between gap-3 text-emerald-600"><span>Already paid</span><span class="tabular-nums">−{{ m(p.paid) }}</span></div>
+                    </div>
                 </div>
                 <div v-for="p in canCarry" :key="'c' + p.id" class="flex items-center gap-3 py-2.5 text-sm">
                     <span class="min-w-0 flex-1 text-ink-500">{{ p.number }} · {{ date(p.issued_on) }} · unpaid</span>

@@ -109,9 +109,19 @@ const report = () => {
                 <!-- Previous dues: earlier invoices not paid yet, carried into this one -->
                 <section v-if="inv.previous.length" class="px-6 pb-2 sm:px-10">
                     <div class="flex items-center gap-3 pb-2"><span class="h-px w-5 bg-[#B08D57]"></span><span class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">Previous dues</span></div>
-                    <div v-for="p in inv.previous" :key="p.number" class="flex items-baseline justify-between gap-3 border-b border-[#E8E2D6] py-3 text-sm">
-                        <span class="min-w-0"><b class="font-semibold">{{ p.number }}</b> <span class="text-[#6B6F82]">· {{ date(p.issued_on) }}</span><span class="block truncate text-xs text-[#8D8A80]">{{ p.for }}</span></span>
-                        <span class="shrink-0 font-semibold tabular-nums">{{ T(p.amount) }}</span>
+                    <div v-for="p in inv.previous" :key="p.number" class="border-b border-[#E8E2D6] py-3 text-sm">
+                        <div class="flex items-baseline justify-between gap-3">
+                            <span class="min-w-0"><b class="font-semibold">{{ p.number }}</b> <span class="text-[#6B6F82]">· {{ date(p.issued_on) }}</span></span>
+                            <span class="shrink-0 font-semibold tabular-nums">{{ T(p.amount) }}</span>
+                        </div>
+                        <div class="mt-1.5 space-y-1 border-l-2 border-[#E8DCC4] pl-3">
+                            <div v-for="(it, k) in p.items" :key="k" class="flex items-baseline justify-between gap-3 text-[13px] text-[#3A4060]">
+                                <span class="min-w-0">{{ parts(it.description).title }}<span v-if="parts(it.description).sub" class="text-[#8D8A80]"> — {{ parts(it.description).sub }}</span><span v-if="Number(it.qty) !== 1" class="text-[#8D8A80]"> · {{ qty(it.qty) }} × {{ T(it.rate) }}</span></span>
+                                <span class="shrink-0 tabular-nums">{{ T(it.amount) }}</span>
+                            </div>
+                            <div v-if="p.older" class="flex justify-between gap-3 text-[13px] text-[#3A4060]"><span>Earlier dues on it</span><span class="tabular-nums">{{ T(p.older) }}</span></div>
+                            <div v-if="p.paid" class="flex justify-between gap-3 text-[13px] text-[#1E6B4A]"><span>Already paid</span><span class="tabular-nums">−{{ T(p.paid) }}</span></div>
+                        </div>
                     </div>
                     <div class="flex justify-between py-2.5 text-sm text-[#3A4060]"><span>Previous dues</span><span class="tabular-nums font-semibold">{{ T(inv.previous_total) }}</span></div>
                 </section>
