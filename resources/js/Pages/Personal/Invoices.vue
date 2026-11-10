@@ -188,21 +188,25 @@ if (wantsNew()) openInv();
             </div>
             <div v-if="!clients.length" class="px-6 py-8 text-sm text-ink-500">Add a client first (Clients tab), and your payment details (My details).</div>
             <ul v-else-if="shown.length" class="divide-y divide-line/70">
-                <li v-for="i in shown" :key="i.id" class="px-5 py-4 sm:px-6">
-                    <div class="flex items-start gap-3">
-                        <Link :href="route('personal.invoices.show', i.id)" class="min-w-0 flex-1">
+                <li v-for="i in shown" :key="i.id" class="px-3 py-3 sm:px-4">
+                    <!-- The whole top of the row opens the invoice: number in teal, a chevron, a hover tint -->
+                    <div class="flex items-start gap-2">
+                        <Link :href="route('personal.invoices.show', i.id)" class="group -my-1 flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-2 py-2 transition hover:bg-teal-50/70 active:bg-teal-50 dark:hover:bg-teal-500/10">
+                            <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="font-semibold text-ink-900">{{ clientName(i.client) }}</span>
                                 <span class="badge" :class="STATUS[i.status][1]">{{ STATUS[i.status][0] }}</span>
                                 <span v-if="i.overdue" class="badge bg-rose-50 text-rose-700">Overdue</span>
                                 <span v-if="i.reported && i.status !== 'paid'" class="badge bg-amber-50 text-amber-700">On hold</span>
                             </div>
-                            <div class="mt-0.5 truncate text-xs text-ink-500">{{ i.number }} · {{ date(i.issued_on) }}<template v-if="i.due_on"> · due {{ date(i.due_on) }}</template> · {{ i.sent_at ? 'sent' : 'not sent' }}</div>
+                            <span class="mt-0.5 block truncate text-xs text-ink-500"><b class="font-semibold text-teal-700 group-hover:underline">{{ i.number }}</b> · {{ date(i.issued_on) }} · {{ i.sent_at ? 'sent' : 'not sent' }}</span>
+                            </div>
+                            <span class="shrink-0 text-right">
+                                <span class="block font-bold tabular-nums text-ink-900">{{ T(i.due || i.total, i.currency) }}</span>
+                                <span v-if="i.paid" class="block text-[11px] text-ink-500">paid {{ T(i.paid, i.currency) }}</span>
+                            </span>
+                            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-100 text-ink-500 transition group-hover:bg-teal-600 group-hover:text-white dark:bg-white/[0.06]"><Icon name="chevron" :size="15" class="-rotate-90" /></span>
                         </Link>
-                        <div class="text-right">
-                            <div class="font-bold tabular-nums text-ink-900">{{ T(i.due || i.total, i.currency) }}</div>
-                            <div v-if="i.paid" class="text-[11px] text-ink-500">paid {{ T(i.paid, i.currency) }}</div>
-                        </div>
                         <RowMenu>
                             <Link :href="route('personal.invoices.show', i.id)" class="menu-item"><Icon name="invoice" :size="15" /> Open</Link>
                             <button class="menu-item" @click="openInv(i)"><Icon name="pencil" :size="15" /> Edit</button>
@@ -221,8 +225,8 @@ if (wantsNew()) openInv();
                         <button class="btn-ghost btn-sm" @click="dismiss(i)">Not received</button>
                     </div>
 
-                    <div v-if="['unpaid', 'partial'].includes(i.status)" class="mt-3 flex flex-wrap items-center gap-2">
-                        <CopyButton :text="i.url" />
+                    <div v-if="['unpaid', 'partial'].includes(i.status)" class="mt-2 flex flex-wrap items-center gap-2 px-2">
+                        <CopyButton :text="i.url" label="Copy invoice link" />
                         <button class="btn-secondary btn-sm" @click="openPay(i)">+ Payment received</button>
                     </div>
                     <ul v-if="i.payments.length" class="mt-2 space-y-1">

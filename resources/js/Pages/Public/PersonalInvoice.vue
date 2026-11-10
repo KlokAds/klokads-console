@@ -173,7 +173,7 @@ const report = () => {
                                 <div class="truncate font-mono text-[15px] font-semibold">{{ m.number }}</div>
                                 <div v-if="m.name || m.extra" class="truncate text-[11px] text-[#6B6F82]">{{ [m.name, m.extra].filter(Boolean).join(' · ') }}</div>
                             </div>
-                            <CopyButton v-if="m.number" :text="m.number" />
+                            <CopyButton v-if="m.number" :text="m.number" label="Copy number" />
                         </div>
                     </div>
                     <p v-else class="mt-3 text-sm text-[#3A4060]">Pay {{ me.name }} by your usual way<template v-if="me.phone"> — or call <b>{{ me.phone }}</b></template>.</p>
