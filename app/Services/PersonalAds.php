@@ -526,6 +526,9 @@ class PersonalAds
         // The client sees the campaigns and the total — never my rate, the dollars or my commission.
         $items = self::campaignLines($c, $spentFrom ?? $from, $to, $taka['bdt'] + $fee, self::period($spentFrom ?? $from, $to));
         $invoice = app(PersonalInvoicing::class)->create($c, $items, CarbonImmutable::today(), CarbonImmutable::today()->addDays(7), null, null, 'BDT');
+        // Last bill (or last month's salary invoice) not paid yet: it goes on this one too.
+        app(PersonalInvoicing::class)->carryUnpaid($invoice);
+        $invoice->refresh();
         // How it was worked out stays with me (the Money tab), not on the invoice.
         $bill = PersonalAdBill::create(['personal_client_id' => $c->id, 'period_from' => $from->toDateString(), 'period_to' => $to->toDateString(),
             'currency' => 'BDT', 'spend' => (int) array_sum($amounts), 'basis' => $basis, 'usd' => $taka['usd'], 'fx_rate' => $taka['fx'], 'personal_invoice_id' => $invoice->id]);

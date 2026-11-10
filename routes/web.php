@@ -175,6 +175,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/personal/invoices', [PersonalInvoiceController::class, 'store'])->middleware('personal')->name('personal.invoices.store');
     Route::put('/personal/invoices/{invoice}', [PersonalInvoiceController::class, 'update'])->middleware('personal')->name('personal.invoices.update');
     Route::delete('/personal/invoices/{invoice}', [PersonalInvoiceController::class, 'destroy'])->middleware('personal')->name('personal.invoices.destroy');
+    Route::post('/personal/invoices/{invoice}/carry', [PersonalInvoiceController::class, 'carry'])->middleware('personal')->name('personal.invoices.carry');
+    Route::delete('/personal/invoices/{invoice}/carry/{old}', [PersonalInvoiceController::class, 'uncarry'])->middleware('personal')->name('personal.invoices.uncarry');
     Route::post('/personal/invoices/{invoice}/void', [PersonalInvoiceController::class, 'void'])->middleware('personal')->name('personal.invoices.void');
     Route::post('/personal/invoices/{invoice}/send', [PersonalInvoiceController::class, 'send'])->middleware('personal')->name('personal.invoices.send');
     Route::get('/personal/invoices/{invoice}/compose', [PersonalInvoiceController::class, 'compose'])->middleware('personal')->name('personal.invoices.compose');

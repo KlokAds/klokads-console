@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PersonalInvoice extends Model
 {
     protected $fillable = [
-        'number', 'personal_client_id', 'personal_recurring_id', 'currency', 'items', 'total', 'paid', 'status',
+        'number', 'personal_client_id', 'personal_recurring_id', 'carried_into_id', 'carried_amount', 'currency', 'items', 'total', 'carried', 'paid', 'status',
         'issued_on', 'due_on', 'paid_on', 'public_token', 'note', 'sent_at', 'sent_via', 'sent_to', 'reported',
     ];
 
@@ -26,9 +26,26 @@ class PersonalInvoice extends Model
         return $this->hasMany(PersonalInvoicePayment::class)->orderBy('paid_on');
     }
 
+    /** Unpaid invoices carried into this one. */
+    public function previous(): HasMany
+    {
+        return $this->hasMany(self::class, 'carried_into_id')->orderBy('issued_on');
+    }
+
+    public function carriedInto(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'carried_into_id');
+    }
+
+    /** This invoice's own work plus the previous dues it carries. */
+    public function grand(): int
+    {
+        return $this->total + $this->carried;
+    }
+
     public function due(): int
     {
-        return max(0, $this->total - $this->paid);
+        return $this->status === 'carried' ? 0 : max(0, $this->grand() - $this->paid);
     }
 
     public function publicUrl(): string

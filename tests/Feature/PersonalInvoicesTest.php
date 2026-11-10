@@ -45,6 +45,28 @@ class PersonalInvoicesTest extends TestCase
         return PersonalInvoice::latest('id')->first();
     }
 
+    public function test_an_unpaid_invoice_carries_into_a_newer_one_and_back(): void
+    {
+        $old = $this->invoice(); // ৳17,500, unpaid
+        $new = app(PersonalInvoicing::class)->create($this->client, [['description' => 'Website care — November', 'qty' => 1, 'rate' => 500000]], CarbonImmutable::today(), null);
+
+        $this->post("/personal/invoices/{$new->id}/carry", ['from' => $old->id])->assertSessionHas('success');
+        $new->refresh();
+        $this->assertSame([500000, 1750000, 2250000, 2250000], [$new->total, $new->carried, $new->grand(), $new->due()]);
+        $this->assertSame(['carried', 0], [$old->fresh()->status, $old->fresh()->due()]);
+        $this->get("/personal/invoices/{$new->id}")->assertInertia(fn ($page) => $page->where('invoice.previous.0.number', $old->number)->where('invoice.grand', 2250000));
+        $this->get(route('personal.invoice.public', $old->fresh()->public_token))->assertInertia(fn ($page) => $page->where('invoice.carried_into.number', $new->number));
+
+        // Paid in full on the new one: both are settled.
+        $this->post("/personal/invoices/{$new->id}/payments", ['amount' => 22500, 'paid_on' => today()->toDateString(), 'method' => 'bkash'])->assertSessionHasNoErrors();
+        $this->assertSame('paid', $new->fresh()->status);
+
+        // Taken out again: the old one is as it was.
+        $this->delete("/personal/invoices/{$new->id}/carry/{$old->id}")->assertSessionHas('success');
+        $this->assertSame(['unpaid', 1750000, null], [$old->fresh()->status, $old->fresh()->due(), $old->fresh()->carried_into_id]);
+        $this->assertSame(0, $new->fresh()->carried);
+    }
+
     public function test_invoice_totals_in_bdt_and_a_payment_lands_in_the_account(): void
     {
         $this->travelTo('2026-10-28 12:00'); // "this month" is October

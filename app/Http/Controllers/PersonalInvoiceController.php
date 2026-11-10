@@ -38,6 +38,7 @@ class PersonalInvoiceController extends Controller
                 ...$i->only('id', 'number', 'personal_client_id', 'currency', 'items', 'total', 'paid', 'status', 'note', 'reported'),
                 'client' => $i->client->only('id', 'name', 'company', 'email', 'phone'),
                 'due' => $i->due(),
+                'total' => $i->grand(), // with the previous dues it carries
                 'issued_on' => $i->issued_on->toDateString(),
                 'due_on' => $i->due_on?->toDateString(),
                 'paid_on' => $i->paid_on?->toDateString(),
@@ -89,14 +90,40 @@ class PersonalInvoiceController extends Controller
 
     public function destroy(PersonalInvoice $invoice): RedirectResponse
     {
+        // What it carried goes back to being its own invoice.
+        $invoice->previous->each(fn ($p) => $this->invoicing->uncarry($p));
         $invoice->payments->each(fn ($p) => $this->invoicing->removePayment($p));
         $invoice->delete();
 
         return back()->with('success', 'Invoice deleted.');
     }
 
+    /** Put an unpaid invoice into this one (previous dues), or take it out again. */
+    public function carry(Request $request, PersonalInvoice $invoice): RedirectResponse
+    {
+        $data = $request->validate(['from' => ['required', 'integer', 'exists:personal_invoices,id']]);
+        try {
+            $this->invoicing->carry($invoice, PersonalInvoice::findOrFail($data['from']));
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Added to this invoice — the old one says where it went.');
+    }
+
+    public function uncarry(PersonalInvoice $invoice, PersonalInvoice $old): RedirectResponse
+    {
+        abort_unless($old->carried_into_id === $invoice->id, 404);
+        $this->invoicing->uncarry($old);
+
+        return back()->with('success', "{$old->number} is on its own again.");
+    }
+
     public function void(PersonalInvoice $invoice): RedirectResponse
     {
+        if ($invoice->status !== 'void') {
+            $invoice->previous->each(fn ($p) => $this->invoicing->uncarry($p));
+        }
         $invoice->update(['status' => $invoice->status === 'void' ? 'unpaid' : 'void', 'reported' => null]);
         if ($invoice->status !== 'void') {
             $this->invoicing->refresh($invoice);
@@ -291,6 +318,8 @@ class PersonalInvoiceController extends Controller
             'invoice' => [
                 ...$invoice->only('id', 'number', 'currency', 'items', 'total', 'paid', 'status', 'note', 'sent_via', 'sent_to'),
                 'due' => $invoice->due(),
+                ...PersonalInvoicing::totals($invoice),
+                'carried_into' => $invoice->carriedInto?->only('id', 'number'),
                 'issued_on' => $invoice->issued_on->toDateString(),
                 'due_on' => $invoice->due_on?->toDateString(),
                 'paid_on' => $invoice->paid_on?->toDateString(),
@@ -299,6 +328,10 @@ class PersonalInvoiceController extends Controller
                 'url' => $invoice->publicUrl(),
                 'reported' => $invoice->reported,
             ],
+            // Their other unpaid invoices, to carry into this one.
+            'canCarry' => in_array($invoice->status, ['unpaid', 'partial'], true) ? PersonalInvoice::where('personal_client_id', $invoice->personal_client_id)
+                ->where('currency', $invoice->currency)->where('id', '!=', $invoice->id)->whereIn('status', ['unpaid', 'partial'])->whereNull('carried_into_id')
+                ->orderBy('issued_on')->get()->map(fn ($p) => ['id' => $p->id, 'number' => $p->number, 'issued_on' => $p->issued_on->toDateString(), 'due' => $p->due()])->values() : [],
             'payments' => $invoice->payments->sortBy('paid_on')->values()->map(fn ($p) => [
                 'id' => $p->id, 'amount' => $p->amount, 'paid_on' => $p->paid_on->toDateString(),
                 'method' => Catalog::PAY_METHODS[$p->method] ?? $p->method, 'reference' => $p->reference, 'account' => $p->account?->name,
@@ -319,6 +352,8 @@ class PersonalInvoiceController extends Controller
             'invoice' => [
                 ...$invoice->only('number', 'currency', 'items', 'total', 'paid', 'status', 'note'),
                 'due' => $invoice->due(),
+                ...PersonalInvoicing::totals($invoice),
+                'carried_into' => $invoice->carriedInto?->only('number', 'public_token'),
                 'issued_on' => $invoice->issued_on->toDateString(),
                 'due_on' => $invoice->due_on?->toDateString(),
                 'paid_on' => $invoice->paid_on?->toDateString(),

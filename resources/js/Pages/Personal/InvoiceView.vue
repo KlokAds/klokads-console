@@ -4,11 +4,13 @@ import Icon from '@/Components/Icon.vue';
 import SendInvoice from '@/Components/Personal/SendInvoice.vue';
 import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { date, money } from '@/money';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 /** An invoice inside the app: what it's for, what was paid (the receipt), and sending it. */
-const props = defineProps({ invoice: Object, payments: Array, working: { type: Object, default: null } });
+const props = defineProps({ invoice: Object, payments: Array, working: { type: Object, default: null }, canCarry: { type: Array, default: () => [] } });
+const carry = (from) => router.post(route('personal.invoices.carry', props.invoice.id), { from }, { preserveScroll: true });
+const uncarry = (old) => router.delete(route('personal.invoices.uncarry', [props.invoice.id, old]), { preserveScroll: true });
 
 const m = (cents) => money(cents, props.invoice.currency);
 const name = computed(() => props.invoice.client.company || props.invoice.client.name);
@@ -17,6 +19,7 @@ const STATUS = {
     partial: ['Part paid', 'bg-amber-400/20 text-amber-200'],
     paid: ['Paid ✓', 'bg-emerald-400/20 text-emerald-200'],
     void: ['Void', 'bg-white/10 text-white/70'],
+    carried: ['Moved', 'bg-sky-400/20 text-sky-200'],
 };
 const sending = ref(null);
 </script>
@@ -33,7 +36,9 @@ const sending = ref(null);
                 <div class="text-[11px] font-bold uppercase tracking-[0.14em] text-[#aaa2ff]">Invoice · {{ invoice.number }}</div>
                 <span class="rounded-full px-2.5 py-1 text-xs font-bold" :class="STATUS[invoice.status]?.[1]">{{ STATUS[invoice.status]?.[0] }}</span>
             </div>
-            <div class="mt-2 text-3xl font-extrabold tabular-nums">{{ m(invoice.total) }}</div>
+            <div class="mt-2 text-3xl font-extrabold tabular-nums">{{ m(invoice.grand) }}</div>
+            <div v-if="invoice.previous.length" class="mt-1 text-xs text-white/70">{{ m(invoice.this_total) }} this invoice + {{ m(invoice.previous_total) }} previous dues</div>
+            <Link v-if="invoice.carried_into" :href="route('personal.invoices.show', invoice.carried_into.id)" class="mt-2 inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-sky-200">Moved into {{ invoice.carried_into.number }} <Icon name="arrow" :size="12" /></Link>
             <div class="mt-1 text-sm text-white/70">{{ name }} · issued {{ date(invoice.issued_on) }}<template v-if="invoice.due_on"> · due {{ date(invoice.due_on) }}</template></div>
             <div v-if="invoice.paid && invoice.status !== 'paid'" class="mt-3 text-sm"><span class="text-white/60">Paid</span> <b class="tabular-nums text-emerald-300">{{ m(invoice.paid) }}</b> · <span class="text-white/60">still due</span> <b class="tabular-nums text-amber-300">{{ m(invoice.due) }}</b></div>
         </div>
@@ -50,6 +55,23 @@ const sending = ref(null);
         </div>
         <p v-if="invoice.sent_at" class="mt-2 px-1 text-xs text-ink-500">Sent {{ date(invoice.sent_at) }} by {{ invoice.sent_via === 'whatsapp' ? 'WhatsApp' : 'email' }}{{ invoice.sent_to ? ' to ' + invoice.sent_to : '' }}</p>
 
+        <!-- Previous dues carried into this one, and the client's other unpaid invoices to add -->
+        <section v-if="invoice.previous.length || canCarry.length" class="mt-4 rounded-3xl border border-line/70 bg-surface p-4 shadow-sm sm:p-5">
+            <h3 class="text-sm font-bold text-ink-900">Previous dues</h3>
+            <div class="mt-2 divide-y divide-line/70">
+                <div v-for="p in invoice.previous" :key="p.id" class="flex items-center gap-3 py-2.5 text-sm">
+                    <span class="min-w-0 flex-1"><Link :href="route('personal.invoices.show', p.id)" class="font-semibold text-ink-900 hover:text-teal-700">{{ p.number }}</Link> <span class="text-xs text-ink-500">· {{ date(p.issued_on) }} · {{ p.for }}</span></span>
+                    <span class="font-semibold tabular-nums">{{ m(p.amount) }}</span>
+                    <button class="btn-ghost btn-sm text-rose-600" @click="uncarry(p.id)"><Icon name="close" :size="14" /> Remove</button>
+                </div>
+                <div v-for="p in canCarry" :key="'c' + p.id" class="flex items-center gap-3 py-2.5 text-sm">
+                    <span class="min-w-0 flex-1 text-ink-500">{{ p.number }} · {{ date(p.issued_on) }} · unpaid</span>
+                    <span class="tabular-nums text-ink-500">{{ m(p.due) }}</span>
+                    <button class="btn-secondary btn-sm" @click="carry(p.id)"><Icon name="plus" :size="14" /> Add to this</button>
+                </div>
+            </div>
+        </section>
+
         <!-- The lines, as the client sees them -->
         <section class="mt-4 rounded-3xl border border-line/70 bg-surface p-4 shadow-sm sm:p-5">
             <h3 class="text-sm font-bold text-ink-900">For</h3>
@@ -58,7 +80,11 @@ const sending = ref(null);
                     <span class="min-w-0 text-ink-700">{{ it.description }}<span v-if="Number(it.qty) !== 1" class="text-ink-400"> × {{ it.qty }}</span></span>
                     <span class="shrink-0 font-semibold tabular-nums">{{ m(Math.round(it.qty * it.rate)) }}</span>
                 </div>
-                <div class="flex justify-between py-3 font-bold text-ink-900"><span>Total</span><span class="tabular-nums">{{ m(invoice.total) }}</span></div>
+                <div class="flex justify-between py-3 font-bold text-ink-900"><span>{{ invoice.previous.length ? 'This invoice' : 'Total' }}</span><span class="tabular-nums">{{ m(invoice.this_total) }}</span></div>
+                <template v-if="invoice.previous.length">
+                    <div class="flex justify-between py-2 text-sm text-ink-600"><span>Previous dues</span><span class="tabular-nums">{{ m(invoice.previous_total) }}</span></div>
+                    <div class="flex justify-between py-3 text-base font-extrabold text-ink-900"><span>Total</span><span class="tabular-nums">{{ m(invoice.grand) }}</span></div>
+                </template>
             </div>
             <div v-if="working" class="mt-1 flex flex-wrap items-center gap-2 rounded-2xl bg-ink-50 px-3 py-2 text-xs text-ink-500">
                 🔒 {{ working.how }} — only you see this

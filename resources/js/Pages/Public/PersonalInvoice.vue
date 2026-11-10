@@ -23,7 +23,9 @@ const open = computed(() => ['unpaid', 'partial'].includes(inv.value.status));
 const thanks = computed(() => usePage().props.flash?.success);
 const ICON = { bank: 'bank', bkash: 'wallet', nagad: 'wallet', rocket: 'wallet', upay: 'wallet' };
 const monogram = computed(() => props.me.name.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase());
-const STATUS = { paid: ['Paid', 'bg-[#E6F2EC] text-[#1E6B4A]'], partial: ['Part paid', 'bg-[#FBF0DC] text-[#8A5A12]'], void: ['Cancelled', 'bg-[#EEEDEA] text-[#6B6A66]'], unpaid: ['Due', 'bg-[#FBF0DC] text-[#8A5A12]'] };
+const STATUS = { paid: ['Paid', 'bg-[#E6F2EC] text-[#1E6B4A]'], partial: ['Part paid', 'bg-[#FBF0DC] text-[#8A5A12]'], void: ['Cancelled', 'bg-[#EEEDEA] text-[#6B6A66]'], unpaid: ['Due', 'bg-[#FBF0DC] text-[#8A5A12]'], carried: ['Moved to a newer invoice', 'bg-[#E8ECF6] text-[#2B3A6B]'] };
+// "Campaign name — 22 Oct – 9 Nov 2026": the name stands out, the period sits under it.
+const parts = (d) => { const [title, ...rest] = String(d).split(' — '); return { title, sub: rest.join(' — ') }; };
 const status = computed(() => STATUS[inv.value.status] ?? STATUS.unpaid);
 const qty = (q) => (Number(q) === 1 ? '1' : String(Number(q)));
 
@@ -80,7 +82,8 @@ const report = () => {
                         <span class="rounded-full px-3 py-1 text-xs font-bold" :class="status[1]">{{ status[0] }}<template v-if="inv.status === 'paid' && inv.paid_on"> · {{ date(inv.paid_on) }}</template></span>
                     </div>
                     <div class="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6B6F82]">{{ open ? 'Amount due' : 'Total' }}</div>
-                    <div class="mt-1 text-[40px] font-semibold leading-none tabular-nums sm:text-[52px]" style="font-family: Fraunces, serif">{{ T(open ? inv.due : inv.total) }}</div>
+                    <div class="mt-1 text-[40px] font-semibold leading-none tabular-nums sm:text-[52px]" style="font-family: Fraunces, serif">{{ T(open ? inv.due : inv.grand) }}</div>
+                    <div v-if="inv.carried_into" class="mt-2 text-sm text-[#2B3A6B]">This invoice is now part of <a :href="route('personal.invoice.public', inv.carried_into.public_token)" class="font-semibold underline">{{ inv.carried_into.number }}</a> — please pay that one.</div>
                     <div v-if="open && inv.due_on" class="mt-2 text-sm text-[#3A4060]">Please pay by <b>{{ date(inv.due_on) }}</b></div>
                 </section>
 
@@ -103,13 +106,24 @@ const report = () => {
                     </div>
                 </section>
 
+                <!-- Previous dues: earlier invoices not paid yet, carried into this one -->
+                <section v-if="inv.previous.length" class="px-6 pb-2 sm:px-10">
+                    <div class="flex items-center gap-3 pb-2"><span class="h-px w-5 bg-[#B08D57]"></span><span class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">Previous dues</span></div>
+                    <div v-for="p in inv.previous" :key="p.number" class="flex items-baseline justify-between gap-3 border-b border-[#E8E2D6] py-3 text-sm">
+                        <span class="min-w-0"><b class="font-semibold">{{ p.number }}</b> <span class="text-[#6B6F82]">· {{ date(p.issued_on) }}</span><span class="block truncate text-xs text-[#8D8A80]">{{ p.for }}</span></span>
+                        <span class="shrink-0 font-semibold tabular-nums">{{ T(p.amount) }}</span>
+                    </div>
+                    <div class="flex justify-between py-2.5 text-sm text-[#3A4060]"><span>Previous dues</span><span class="tabular-nums font-semibold">{{ T(inv.previous_total) }}</span></div>
+                </section>
+
                 <!-- Items -->
                 <section class="px-6 sm:px-10">
+                    <div v-if="inv.previous.length" class="flex items-center gap-3 pb-2 pt-3"><span class="h-px w-5 bg-[#B08D57]"></span><span class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">This invoice</span></div>
                     <div class="hidden grid-cols-[1fr_60px_130px_130px] gap-3 border-b border-[#0E1630] pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8D8A80] sm:grid">
                         <span>Description</span><span class="text-right">Qty</span><span class="text-right">Rate</span><span class="text-right">Amount</span>
                     </div>
                     <div v-for="(it, k) in inv.items" :key="k" class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 border-b border-[#E8E2D6] py-3.5 text-sm sm:grid-cols-[1fr_60px_130px_130px]">
-                        <span class="font-medium">{{ it.description }}</span>
+                        <span class="min-w-0"><span class="block font-semibold text-[#0E1630]">{{ parts(it.description).title }}</span><span v-if="parts(it.description).sub" class="mt-0.5 inline-block rounded-full bg-[#F1EADC] px-2 py-0.5 text-[11px] font-medium text-[#6B5A3A]">{{ parts(it.description).sub }}</span></span>
                         <span class="hidden text-right tabular-nums text-[#3A4060] sm:block">{{ qty(it.qty) }}</span>
                         <span class="hidden text-right tabular-nums text-[#3A4060] sm:block">{{ T(it.rate) }}</span>
                         <span class="text-right font-semibold tabular-nums">{{ T(Math.round(it.qty * it.rate)) }}</span>
@@ -117,7 +131,11 @@ const report = () => {
                     </div>
 
                     <div class="ml-auto mt-4 max-w-xs space-y-2 pb-7 text-sm">
-                        <div class="flex justify-between text-[#3A4060]"><span>Total</span><span class="tabular-nums">{{ T(inv.total) }}</span></div>
+                        <div class="flex justify-between text-[#3A4060]"><span>{{ inv.previous.length ? 'This invoice' : 'Total' }}</span><span class="tabular-nums">{{ T(inv.this_total) }}</span></div>
+                        <template v-if="inv.previous.length">
+                            <div class="flex justify-between text-[#3A4060]"><span>Previous dues</span><span class="tabular-nums">{{ T(inv.previous_total) }}</span></div>
+                            <div class="flex justify-between border-t border-[#E8E2D6] pt-2 font-semibold"><span>Total</span><span class="tabular-nums">{{ T(inv.grand) }}</span></div>
+                        </template>
                         <div v-if="inv.paid" class="flex justify-between text-[#1E6B4A]"><span>Paid</span><span class="tabular-nums">− {{ T(inv.paid) }}</span></div>
                         <div class="flex items-baseline justify-between border-t border-[#0E1630] pt-2.5">
                             <span class="text-xs font-semibold uppercase tracking-[0.16em]">Amount due</span>
@@ -199,7 +217,7 @@ const report = () => {
             <div class="flex items-center gap-3">
                 <div class="min-w-0 flex-1">
                     <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8D8A80]">{{ open ? 'Due' : status[0] }}</div>
-                    <div class="truncate text-lg font-semibold tabular-nums" style="font-family: Fraunces, serif">{{ T(open ? inv.due : inv.total) }}</div>
+                    <div class="truncate text-lg font-semibold tabular-nums" style="font-family: Fraunces, serif">{{ T(open ? inv.due : inv.grand) }}</div>
                 </div>
                 <a :href="route('personal.invoice.public.pdf', token)" class="flex h-11 w-11 items-center justify-center rounded-xl border border-[#D9D1C2] bg-white text-[#0E1630]" title="Download PDF"><Icon name="download" :size="18" /></a>
                 <button v-if="open && !showReport" class="flex h-11 items-center gap-1.5 rounded-xl bg-[#0E1630] px-4 text-sm font-semibold text-white" @click="report"><Icon name="check" :size="16" class="text-[#E9D7B3]" /> I've paid</button>

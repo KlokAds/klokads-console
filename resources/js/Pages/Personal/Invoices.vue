@@ -27,7 +27,7 @@ const props = defineProps({
 const T = (v, c = 'BDT') => money(v, c);
 const tab = ref('invoices');
 const filter = ref('open');
-const STATUS = { unpaid: ['Unpaid', 'bg-amber-50 text-amber-700'], partial: ['Part paid', 'bg-sky-50 text-sky-700'], paid: ['Paid', 'bg-emerald-50 text-emerald-700'], void: ['Void', 'bg-ink-100 text-ink-500'] };
+const STATUS = { unpaid: ['Unpaid', 'bg-amber-50 text-amber-700'], partial: ['Part paid', 'bg-sky-50 text-sky-700'], paid: ['Paid', 'bg-emerald-50 text-emerald-700'], void: ['Void', 'bg-ink-100 text-ink-500'], carried: ['Moved to newer', 'bg-indigo-50 text-indigo-700'] };
 const methodLabel = (m) => props.methods.find((x) => x.value === m)?.label ?? m;
 const shown = computed(() => props.invoices.filter((i) => (filter.value === 'open' ? ['unpaid', 'partial'].includes(i.status) : filter.value === 'paid' ? i.status === 'paid' : true)));
 const clientName = (c) => c?.company || c?.name || '—';

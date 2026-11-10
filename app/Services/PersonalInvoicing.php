@@ -142,20 +142,84 @@ class PersonalInvoicing
         });
     }
 
-    /** Re-total payments and set the status. */
+    /** Re-total payments (and the previous dues it carries) and set the status. */
     public function refresh(PersonalInvoice $invoice): void
     {
-        if ($invoice->status === 'void') {
+        if ($invoice->status === 'void' || ($invoice->status === 'carried' && $invoice->carried_into_id)) {
             return;
         }
+        $carried = (int) $invoice->previous()->sum('carried_amount');
+        $grand = $invoice->total + $carried;
         $paid = (int) $invoice->payments()->sum('amount');
         $last = $invoice->payments()->max('paid_on');
         $invoice->update([
+            'carried' => $carried,
             'paid' => $paid,
-            'status' => $paid <= 0 ? 'unpaid' : ($paid >= $invoice->total ? 'paid' : 'partial'),
-            'paid_on' => $paid >= $invoice->total ? $last : null,
-            'reported' => $paid >= $invoice->total ? null : $invoice->reported,
+            'status' => $paid <= 0 ? 'unpaid' : ($paid >= $grand ? 'paid' : 'partial'),
+            'paid_on' => $paid >= $grand ? $last : null,
+            'reported' => $paid >= $grand ? null : $invoice->reported,
         ]);
+    }
+
+    /**
+     * An unpaid invoice goes into a newer one for the same client: the newer one shows it under
+     * "Previous dues" and its total includes it; the old one says where it went.
+     */
+    public function carry(PersonalInvoice $into, PersonalInvoice $old): void
+    {
+        if ($old->id === $into->id || $old->personal_client_id !== $into->personal_client_id || $old->currency !== $into->currency
+            || ! in_array($old->status, ['unpaid', 'partial'], true) || ! in_array($into->status, ['unpaid', 'partial'], true) || $old->carried_into_id) {
+            throw new RuntimeException('Only an unpaid invoice of the same client (and money) can go into another unpaid one.');
+        }
+        DB::transaction(function () use ($into, $old) {
+            $old->update(['carried_into_id' => $into->id, 'carried_amount' => $old->due(), 'status' => 'carried', 'reported' => null]);
+            $this->refresh($into->fresh());
+        });
+    }
+
+    /** Taken out of the newer invoice: the old one is exactly as it was again. */
+    public function uncarry(PersonalInvoice $old): void
+    {
+        DB::transaction(function () use ($old) {
+            $into = $old->carriedInto;
+            $old->update(['carried_into_id' => null, 'carried_amount' => 0, 'status' => 'unpaid']);
+            $this->refresh($old->fresh());
+            if ($into) {
+                $this->refresh($into->fresh());
+            }
+        });
+    }
+
+    /** A new monthly or ads invoice takes the client's earlier unpaid ones along. @return int how many */
+    public function carryUnpaid(PersonalInvoice $into): int
+    {
+        $old = PersonalInvoice::where('personal_client_id', $into->personal_client_id)->where('currency', $into->currency)->where('id', '<', $into->id)
+            ->whereIn('status', ['unpaid', 'partial'])->whereNull('carried_into_id')->orderBy('id')->get();
+        foreach ($old as $o) {
+            $this->carry($into->fresh(), $o);
+        }
+
+        return $old->count();
+    }
+
+    /**
+     * What the invoice shows: its own lines, the previous dues it carries, and the totals.
+     *
+     * @return array{previous: array<int, array<string, mixed>>, this_total: int, previous_total: int, grand: int, paid: int, due: int}
+     */
+    public static function totals(PersonalInvoice $invoice): array
+    {
+        return [
+            'previous' => $invoice->previous()->get()->map(fn (PersonalInvoice $p) => [
+                'id' => $p->id, 'number' => $p->number, 'issued_on' => $p->issued_on->toDateString(), 'amount' => $p->carried_amount,
+                'for' => mb_strimwidth((string) ($p->items[0]['description'] ?? ''), 0, 60, '…').(count($p->items ?? []) > 1 ? ' +'.(count($p->items) - 1) : ''),
+            ])->values()->all(),
+            'this_total' => $invoice->total,
+            'previous_total' => $invoice->carried,
+            'grand' => $invoice->grand(),
+            'paid' => $invoice->paid,
+            'due' => $invoice->due(),
+        ];
     }
 
     /** The client tapped "I've paid": keep it on hold until confirmed. */
@@ -259,6 +323,7 @@ class PersonalInvoicing
             $period = self::period($payDay, $r->day);
             $items = collect($r->items)->map(fn ($i) => [...$i, 'description' => $i['description'].' ('.$period.')'])->all();
             $invoice = $this->create($r->client, $items, $today, $payDay->lt($today) ? $today : $payDay, $r->note, $r, $r->currency);
+            $this->carryUnpaid($invoice);
             $made++;
             if ($r->auto_send && $r->client->email) {
                 try {

@@ -93,16 +93,28 @@
                 </td>
                 <td class="r">
                     <div class="cap">{{ $open ? 'Amount due' : 'Total' }}</div>
-                    <div class="serif" style="margin-top:4px;font-size:24px;font-weight:bold">{{ $money($open ? $invoice->due() : $invoice->total) }}</div>
+                    <div class="serif" style="margin-top:4px;font-size:24px;font-weight:bold">{{ $money($open ? $invoice->due() : $invoice->grand()) }}</div>
                 </td>
             </tr>
         </table>
     </div>
 </div>
 
-{{-- Items --}}
+{{-- Previous dues, then this invoice --}}
+@php($prev = $invoice->previous()->get())
 <div class="wrap" style="padding-top:26px">
-    <table class="items">
+    @if ($prev->isNotEmpty())
+        <div style="font-size:8px;letter-spacing:1.6px;color:{{ $soft }};text-transform:uppercase;margin-bottom:6px">Previous dues</div>
+        <table class="items" style="margin-bottom:16px">
+            <tbody>
+                @foreach ($prev as $p)
+                    <tr><td style="font-size:11px"><b>{{ $p->number }}</b> <span class="muted">· {{ $p->issued_on->format('j M Y') }}</span></td><td class="r" style="font-weight:bold">{{ $money($p->carried_amount) }}</td></tr>
+                @endforeach
+            </tbody>
+        </table>
+        <div style="font-size:8px;letter-spacing:1.6px;color:{{ $soft }};text-transform:uppercase;margin-bottom:6px">This invoice</div>
+    @endif
+    <table class="items" style="margin-top:0">
         <thead><tr><th>Description</th><th class="r" style="width:9%;text-align:right">Qty</th><th class="r" style="width:20%;text-align:right">Rate</th><th class="r" style="width:20%;text-align:right">Amount</th></tr></thead>
         <tbody>
             @foreach ($invoice->items as $i)
@@ -121,7 +133,11 @@
             <td style="width:56%"></td>
             <td>
                 <table>
-                    <tr><td class="muted" style="padding:3px 0">Total</td><td class="r" style="padding:3px 0">{{ $money($invoice->total) }}</td></tr>
+                    <tr><td class="muted" style="padding:3px 0">{{ $prev->isNotEmpty() ? 'This invoice' : 'Total' }}</td><td class="r" style="padding:3px 0">{{ $money($invoice->total) }}</td></tr>
+                    @if ($prev->isNotEmpty())
+                        <tr><td class="muted" style="padding:3px 0">Previous dues</td><td class="r" style="padding:3px 0">{{ $money($invoice->carried) }}</td></tr>
+                        <tr><td style="padding:3px 0;font-weight:bold">Total</td><td class="r" style="padding:3px 0;font-weight:bold">{{ $money($invoice->grand()) }}</td></tr>
+                    @endif
                     @if ($invoice->paid)<tr><td style="padding:3px 0;color:#1E6B4A">Paid</td><td class="r" style="padding:3px 0;color:#1E6B4A">− {{ $money($invoice->paid) }}</td></tr>@endif
                     <tr>
                         <td style="padding-top:9px;border-top:1.2px solid {{ $navy }};font-size:8.5px;font-weight:bold;letter-spacing:1.6px">AMOUNT DUE</td>
