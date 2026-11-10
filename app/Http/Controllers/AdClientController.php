@@ -229,9 +229,9 @@ class AdClientController extends Controller
     /** Bill now: every unbilled day up to the date given (today by default). */
     public function bill(Request $request, PersonalClient $client): RedirectResponse
     {
-        $data = $request->validate(['to' => ['nullable', 'date', 'before_or_equal:today']]);
+        $data = $request->validate(['to' => ['nullable', 'date', 'before_or_equal:today'], 'charge' => ['nullable', 'integer', 'exists:personal_ad_charges,id']]);
         try {
-            $bills = $this->ads->billUpTo($client, CarbonImmutable::parse($data['to'] ?? 'today')->startOfDay());
+            $bills = $this->ads->billUpTo($client, CarbonImmutable::parse($data['to'] ?? 'today')->startOfDay(), $data['charge'] ?? null);
         } catch (Throwable $e) {
             return back()->with('error', $e->getMessage());
         }

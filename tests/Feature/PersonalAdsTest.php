@@ -203,7 +203,13 @@ class PersonalAdsTest extends TestCase
         $ucb = Account::create(['name' => 'UCB', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'ucb', 'currency' => 'BDT']);
 
         $this->post("/personal/client-ads/{$this->edge->id}/charges", ['date' => '2026-10-24', 'amount' => '2501.94', 'currency' => 'BDT']);
-        $this->post("/personal/client-ads/{$this->edge->id}/bill");
+        $this->post("/personal/client-ads/{$this->edge->id}/charges", ['date' => '2026-10-25', 'amount' => '100', 'currency' => 'BDT']);
+        // "Bill this" on one charge: only that one goes on the bill.
+        $one = PersonalAdCharge::where('amount', 250194)->sole();
+        $this->post("/personal/client-ads/{$this->edge->id}/bill", ['charge' => $one->id])->assertSessionHas('success');
+        $this->assertNotNull($one->fresh()->personal_ad_bill_id);
+        $this->assertNull(PersonalAdCharge::where('amount', 10000)->sole()->personal_ad_bill_id);
+        PersonalAdCharge::where('amount', 10000)->delete();
         $first = PersonalAdBill::where('personal_client_id', $this->edge->id)->sole()->invoice;
 
         // They pay more than the bill: the bill is paid, the rest is credit; the money lands once in UCB.

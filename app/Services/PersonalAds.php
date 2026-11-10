@@ -422,13 +422,15 @@ class PersonalAds
      *
      * @return array<int, PersonalAdBill>
      */
-    public function billUpTo(PersonalClient $c, CarbonImmutable $to): array
+    public function billUpTo(PersonalClient $c, CarbonImmutable $to, ?int $onlyCharge = null): array
     {
         // Only finished days: today's spend is still growing, and a billed day is never billed again.
         $to = $to->min(CarbonImmutable::yesterday());
 
         if ($c->ad_bill_basis === 'charges') {
-            $charges = PersonalAdCharge::where('personal_client_id', $c->id)->where('kind', '!=', 'credit')->whereNull('personal_ad_bill_id')->whereDate('date', '<=', $to->toDateString())->orderBy('date')->get();
+            // One charge on its own ("Bill this"), or every one not billed yet up to the day.
+            $charges = PersonalAdCharge::where('personal_client_id', $c->id)->where('kind', '!=', 'credit')->whereNull('personal_ad_bill_id')
+                ->when($onlyCharge, fn ($q) => $q->whereKey($onlyCharge), fn ($q) => $q->whereDate('date', '<=', $to->toDateString()))->orderBy('date')->get();
             if ($charges->isEmpty()) {
                 return [];
             }

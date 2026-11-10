@@ -181,6 +181,7 @@ const PILL = {
 const CHARGE = { credit: ['Not billed', PILL.violet], to_bill: ['To bill', PILL.sky], unpaid: ['Billed · unpaid', PILL.amber], partial: ['Part paid', PILL.amber], paid: ['Paid ✓', PILL.green], void: ['Void', PILL.grey] };
 const INVOICE = { unpaid: ['Unpaid', PILL.amber], partial: ['Part paid', PILL.amber], paid: ['Paid ✓', PILL.green], void: ['Void', PILL.grey], carried: ['Moved to newer', PILL.violet] };
 const chargeTitle = (ch) => (ch.kind === 'credit' ? 'Meta credit (coupon)' : ch.kind === 'refund' ? 'Meta refund' : ch.auto ? 'Meta charged the card' : ch.note || 'Card charge');
+const billCharge = (ch) => router.post(route('ad-clients.bill', props.client.id), { charge: ch.id }, { preserveScroll: true });
 const chargeIcon = (ch) => (ch.kind === 'credit' ? '🎁' : ch.kind === 'refund' ? '↩️' : '💳');
 const byCharges = computed(() => props.client.ad_bill_basis === 'charges');
 
@@ -419,6 +420,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                             <span v-if="ch.invoice" class="mr-auto text-xs text-ink-500">On {{ ch.invoice }}</span>
                             <span v-else-if="ch.kind === 'credit'" class="mr-auto text-xs text-ink-500">Meta's credit — never on their bill</span>
                             <button v-if="!ch.billed && ch.kind !== 'credit'" class="btn-ghost btn-sm text-rose-600" @click="removeCharge(ch)"><Icon name="trash" :size="14" /> Remove</button>
+                            <button v-if="!ch.billed && ch.kind !== 'credit'" class="btn-primary btn-sm" @click="billCharge(ch)"><Icon name="invoice" :size="14" /> Bill this</button>
                         </div>
                         <div v-else-if="ch.kind === 'credit'" class="mt-2 border-t border-line/60 pt-2 text-xs text-ink-500">Meta's credit — never on their bill</div>
                     </div>
