@@ -89,6 +89,8 @@ class TransactionParser
             'fee' => $fee,
             'last4' => self::last4($raw),
             'balance' => self::balance($raw),
+            // bKash "Your Pay Bill request … is being processed": not done yet — it may still fail.
+            'pending' => (bool) preg_match('/\b(?:being processed|is processing|under process)\b/i', $raw),
         ];
     }
 

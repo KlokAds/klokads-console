@@ -232,6 +232,29 @@ class AutoEntriesTest extends TestCase
         $this->assertSame(150000, Ledger::balance($islami));
     }
 
+    public function test_pay_bills_still_processing_are_booked_only_when_the_balance_shows_them(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $bkash = Account::create(['name' => 'bKash', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'last4' => '9304', 'currency' => 'BDT', 'opening_balance' => 627000,
+            'bank_balance' => 627000, 'bank_balance_at' => now()->subHours(3)]);
+        $auto = app(AutoEntries::class);
+        // Nine requests; only five went through (870 × 3 and 916 × 2 = 4,442).
+        foreach ([870, 1677, 916, 870, 916, 870, 916, 1005, 916] as $i => $tk) {
+            $auto->ingest('sms', 'bKashNotice', "Your Pay Bill request of Tk {$tk}.0 is being processed at 08/11/26 06:16PM Fee: Tk 0.0 TrxID: DK88{$i}1KY8C Org: Palli Bidyut (Postpaid) A/C: 103610284184{$i}", CarbonImmutable::now()->subHours(2)->addMinutes($i));
+        }
+        $this->assertSame(9, InboxMessage::where('status', 'pending')->count());
+        $this->assertSame(627000, Ledger::balance($bkash));
+
+        $auto->ingest('sms', 'bKash', 'Payment of Tk 4.00 to Al Madina Cloth Store is successful. Balance Tk 1,823.82. TrxID DK998U4OR1 at 09/11/2026 09:00', CarbonImmutable::now()->subMinutes(30));
+        $auto->reconcile();
+
+        $this->assertSame(5, InboxMessage::where('status', 'added')->where('note', null)->where('body', 'like', '%Pay Bill%')->count());
+        $this->assertSame(4, InboxMessage::where('status', 'ignored')->count());
+        $this->assertSame([870, 916, 870, 916, 870], InboxMessage::where('status', 'added')->where('body', 'like', '%Pay Bill%')->orderBy('id')->get()->map(fn ($m) => $m->parsed['amount'] / 100)->all());
+        // The books now: 6,270 − 4,442 − 4 (the 18 poisha the bank shows less are matched with its next balance).
+        $this->assertSame(182400, Ledger::balance($bkash));
+    }
+
     public function test_atm_cash_moves_to_cash_in_hand(): void
     {
         $this->actingAs(User::factory()->create(['is_owner' => true]));

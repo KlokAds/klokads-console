@@ -127,7 +127,17 @@ class PersonalAds
         foreach ($this->meta->charges($account, $since->max(CarbonImmutable::today()->subDays(90))) as $c) {
             $day = CarbonImmutable::parse($c['time'])->setTimezone($tz)->startOfDay();
             // Compared as calendar days (Meta's time in Dhaka against the settled day), never across time zones.
-            if ($day->toDateString() < $since->toDateString() || $c['amount'] <= 0 || PersonalAdCharge::where('meta_id', $c['id'])->exists()) {
+            $kind = $c['kind'] ?? 'charge';
+            // A Meta credit (coupon) paid for some ads, not my card: never on their bill.
+            if ($kind === 'credit' || $day->toDateString() < $since->toDateString() || PersonalAdCharge::where('meta_id', $c['id'])->exists()) {
+                continue;
+            }
+            if ($kind === 'refund') {
+                $this->refunded($client, $c, $day, $now['card']);
+
+                continue;
+            }
+            if ($c['amount'] <= 0) {
                 continue;
             }
             $charge = PersonalAdCharge::create(['personal_client_id' => $client->id, 'date' => $day->toDateString(), 'currency' => $c['currency'], 'amount' => $c['amount'],
@@ -137,6 +147,27 @@ class PersonalAds
                 $day->format('j M').($now['card'] ? " · {$now['card']}" : '').' · from Meta. It goes on their next ads bill.',
                 route('ad-clients.show', ['client' => $client, 'tab' => 'money']), 'klok-adcharge-'.$client->id);
         }
+    }
+
+    /**
+     * Meta gave money back to my card: it comes off their next bill. Meta's log may not say how much —
+     * then I'm told where to see it and how to enter it.
+     *
+     * @param  array{id: string, time: string, amount: int, currency: string}  $c
+     */
+    private function refunded(PersonalClient $client, array $c, CarbonImmutable $day, ?string $card): void
+    {
+        if ($c['amount'] > 0) {
+            PersonalAdCharge::create(['personal_client_id' => $client->id, 'date' => $day->toDateString(), 'currency' => $c['currency'], 'amount' => -$c['amount'],
+                'note' => 'Meta refunded '.($card ?: 'the card'), 'source' => 'meta', 'meta_id' => $c['id']]);
+            $this->notify->send('billing', "↩️ Meta refunded {$client->name}'s ads: ".Notify::money($c['amount'], $c['currency']),
+                $day->format('j M').' · it comes off their next ads bill.', route('ad-clients.show', ['client' => $client, 'tab' => 'money']), 'klok-adcharge-'.$client->id);
+
+            return;
+        }
+        $this->notify->once("ad-refund:{$c['id']}", 'billing', "↩️ Meta refunded {$client->name}'s ads — amount not shown",
+            $day->format('j M').'. Meta does not share the amount. See it in Meta Billing → Payment activity, then add it on their Money tab as a charge with a minus amount, so it comes off their bill.',
+            route('ad-clients.show', ['client' => $client, 'tab' => 'money']));
     }
 
     /**

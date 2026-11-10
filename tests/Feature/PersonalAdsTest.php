@@ -233,6 +233,10 @@ class PersonalAdsTest extends TestCase
             'pilot.test/internal/console/ad-accounts/act_1/charges*' => Http::response(['data' => [
                 ['id' => 'tx-old', 'time' => '2026-10-01T14:46:10+0000', 'amount' => 358572, 'currency' => 'BDT'],
                 ['id' => 'tx-new', 'time' => '2026-10-21T00:13:05+0000', 'amount' => 250194, 'currency' => 'BDT'],
+                // Meta's coupon (not my card) and a refund back to the card.
+                ['id' => 'coupon', 'time' => '2026-11-02T00:30:41+0000', 'amount' => 38, 'currency' => 'BDT', 'kind' => 'credit'],
+                ['id' => 'refund', 'time' => '2026-11-03T10:00:00+0000', 'amount' => 5000, 'currency' => 'BDT', 'kind' => 'refund'],
+                ['id' => 'refund-0', 'time' => '2026-11-04T10:00:00+0000', 'amount' => 0, 'currency' => 'BDT', 'kind' => 'refund'],
             ]]),
             'pilot.test/internal/console/ad-accounts/*/charges*' => Http::response(['data' => []]),
         ]);
@@ -241,7 +245,10 @@ class PersonalAdsTest extends TestCase
         app(PersonalAds::class)->sync(force: true);
 
         $charges = PersonalAdCharge::where('personal_client_id', $this->edge->id)->get();
-        $this->assertSame(['tx-new'], $charges->pluck('meta_id')->all(), 'the 1 Oct charge is settled already');
+        $this->assertSame(['tx-new', 'refund'], $charges->pluck('meta_id')->all(), 'the 1 Oct charge is settled already; the coupon is no charge');
+        $this->assertSame(-5000, $charges->last()->amount, 'a refund comes off the bill');
+        $this->assertSame(1, AppNotification::where('title', 'like', '%amount not shown%')->count());
+        $charges = $charges->take(1);
         $this->assertSame('2026-10-21', $charges->first()->date->toDateString());
         $this->assertSame(250194, $charges->first()->amount);
         $this->assertSame('charges', $this->edge->fresh()->ad_bill_basis, 'my card: billed by charges, like Edge');

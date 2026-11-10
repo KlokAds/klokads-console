@@ -21,7 +21,7 @@ const props = defineProps({
     rules: Object,
 });
 
-const TABS = [['review', 'Needs a look'], ['added', 'Added'], ['matched', 'Paid invoices'], ['ignored', 'Ignored'], ['skipped', 'Not money'], ['all', 'All']];
+const TABS = [['review', 'Needs a look'], ['pending', 'Processing'], ['added', 'Added'], ['matched', 'Paid invoices'], ['ignored', 'Ignored'], ['skipped', 'Not money'], ['all', 'All']];
 const go = (status) => router.get(route('personal.inbox.index'), { status }, { preserveScroll: true });
 const showSetup = ref(!props.setup.last_sms && !props.setup.imap.checked_at);
 
@@ -52,7 +52,7 @@ async function tryIt() {
 }
 
 const parsedLine = (p) => p ? `${p.direction === 'in' ? '+' : '−'}${money(p.amount, p.currency)}${p.counterparty ? (p.direction === 'in' ? ' from ' : ' to ') + p.counterparty : ''}${p.reference ? ' · ' + p.reference : ''}` : '';
-const STATUS_STYLE = { added: 'bg-emerald-50 text-emerald-700', matched: 'bg-brand-50 text-brand-700', review: 'bg-amber-50 text-amber-700', ignored: 'bg-ink-100 text-ink-500', skipped: 'bg-ink-100 text-ink-500' };
+const STATUS_STYLE = { added: 'bg-emerald-50 text-emerald-700', matched: 'bg-brand-50 text-brand-700', review: 'bg-amber-50 text-amber-700', pending: 'bg-sky-50 text-sky-700', ignored: 'bg-ink-100 text-ink-500', skipped: 'bg-ink-100 text-ink-500' };
 // Senders, wallet apps and ignore words: the same list the MH-Bot app shows and edits.
 const rulesForm = useForm({ senders: props.rules.senders.map((x) => ({ ...x })), ignore: [...props.rules.ignore], whitelist: props.rules.whitelist });
 const senderTab = ref('sms');
@@ -229,7 +229,7 @@ const appStatus = computed(() => {
                             <button class="btn-ghost btn-sm" @click="decide(m, false)">Block</button>
                         </div>
                     </div>
-                    <div v-else-if="m.status === 'review' && m.parsed" class="mt-3 flex flex-wrap items-center gap-2">
+                    <div v-else-if="['review', 'pending'].includes(m.status) && m.parsed" class="mt-3 flex flex-wrap items-center gap-2">
                         <Select v-model="pick(m).account_id" :options="accountOptions(m)" placeholder="Account…" size="sm" class="min-w-[170px]" />
                         <Select v-model="pick(m).category" :options="categoryOptions(m)" size="sm" class="min-w-[160px]" />
                         <button class="btn-primary btn-sm" :disabled="!pick(m).account_id" @click="add(m)"><Icon name="plus" :size="14" /> Add</button>

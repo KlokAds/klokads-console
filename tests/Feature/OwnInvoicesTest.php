@@ -137,13 +137,22 @@ class OwnInvoicesTest extends TestCase
         $this->assertCount(2, $invoice->lines);
     }
 
-    public function test_a_paid_invoice_cannot_be_changed(): void
+    public function test_a_paid_top_up_invoice_changes_its_words_never_its_amounts(): void
     {
         $this->actingAs(User::factory()->create());
-        $invoice = app(StripeService::class)->createInvoice($this->client, [['description' => 'SEO', 'amount' => 5000, 'quantity' => 1]], []);
+        $invoice = app(StripeService::class)->createInvoice($this->client, [['description' => 'Ad balance top-up', 'amount' => 5000, 'quantity' => 1]], []);
         app(StripeService::class)->markInvoicePaid($invoice);
 
-        $this->get("/invoices/{$invoice->id}/edit")->assertRedirect('/invoices');
+        $this->get("/invoices/{$invoice->id}/edit")->assertOk()->assertInertia(fn ($page) => $page->where('invoice.locked', true)->where('invoice.total', 5000));
+        $this->put("/invoices/{$invoice->id}", [
+            'client_id' => $this->client->id, 'memo' => 'November ads', 'billing' => 'standard', 'days_until_due' => 7,
+            'items' => [['description' => 'Meta ads balance — November', 'amount' => 999, 'quantity' => 1]],
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-30', 'campaigns' => [['name' => 'Leads', 'amount' => 50]],
+        ])->assertRedirect('/invoices')->assertSessionHas('success');
+
+        $invoice->refresh();
+        $this->assertSame(['paid', 5000, 'Meta ads balance — November', 5000, 'November ads', 'Leads'],
+            [$invoice->status, $invoice->total, $invoice->lines[0]['description'], $invoice->lines[0]['amount'], $invoice->description, $invoice->details['campaigns'][0]['name']]);
     }
 
     public function test_marking_our_invoice_paid_needs_no_stripe_invoice(): void

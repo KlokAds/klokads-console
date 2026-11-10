@@ -530,7 +530,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                 <h2 class="text-lg font-bold text-ink-900">Meta charged my card</h2>
                 <div class="mt-4 space-y-3">
                     <Segmented v-model="charge.currency" :options="[{ value: 'USD', label: '$ Dollars cut' }, { value: 'BDT', label: '৳ Taka charged' }]" block size="sm" />
-                    <div><label class="label">{{ charge.currency === 'USD' ? 'Dollars' : 'Taka' }}</label><input v-model="charge.amount" type="number" step="0.01" min="0.01" class="input text-lg font-bold" required /></div>
+                    <div><label class="label">{{ charge.currency === 'USD' ? 'Dollars' : 'Taka' }}</label><input v-model="charge.amount" type="number" step="0.01" class="input text-lg font-bold" required /><p class="mt-1 text-xs text-ink-500">A refund or credit Meta gave back? Put a minus (−12.50) — it comes off their bill.</p></div>
                     <div class="grid grid-cols-2 gap-3">
                         <div><label class="label">Date</label><DatePicker v-model="charge.date" :max="today" /></div>
                         <div><label class="label">Note</label><input v-model="charge.note" class="input" placeholder="Optional" /></div>

@@ -111,9 +111,10 @@ class InvoiceController extends Controller
     /** An open invoice of ours, opened in the same form to change it before the client pays. */
     public function edit(Invoice $invoice, StripeService $stripe): Response|RedirectResponse
     {
-        if ($invoice->stripe_invoice_id || $invoice->status !== 'open' || $invoice->collection_method === 'charge_automatically') {
-            return redirect()->route('invoices.index')->with('error', 'Only an open invoice that is not paid yet can be changed.');
+        if ($invoice->stripe_invoice_id || ! in_array($invoice->status, ['open', 'paid'], true)) {
+            return redirect()->route('invoices.index')->with('error', 'Only our own open or paid invoices can be changed.');
         }
+        $locked = self::locked($invoice);
 
         return Inertia::render('Invoices/Create', $this->formProps($stripe) + [
             'clientId' => $invoice->client_id,
@@ -125,7 +126,10 @@ class InvoiceController extends Controller
                 'memo' => $invoice->description,
                 'days_until_due' => $invoice->due_at ? max(0, (int) ceil(now()->startOfDay()->diffInDays($invoice->due_at->copy()->startOfDay(), false))) : 7,
                 // A commission-only or ad-budget invoice opens priced the same way; anything else as its lines.
-                'billing' => $invoice->client_spend !== null ? 'commission' : ($invoice->net_amount !== null ? 'budget' : 'standard'),
+                'locked' => $locked,
+                'total' => $invoice->total,
+                // Paid: its lines exactly as charged; open: priced the way it was made.
+                'billing' => $locked ? 'standard' : ($invoice->client_spend !== null ? 'commission' : ($invoice->net_amount !== null ? 'budget' : 'standard')),
                 'budget_amount' => $invoice->client_spend !== null ? $invoice->client_spend / 100 : ($invoice->net_amount !== null ? $invoice->net_amount / 100 : ''),
                 'commission_rate' => $invoice->commission_rate ?? 20,
                 'pass_fees' => $invoice->net_amount === null || (int) $invoice->processing_fee > 0,
@@ -142,6 +146,9 @@ class InvoiceController extends Controller
 
     public function update(Request $request, Invoice $invoice, StripeService $stripe): RedirectResponse
     {
+        if (self::locked($invoice)) {
+            return $this->updateWords($request, $invoice);
+        }
         [$client, $items, $data] = $this->input($request);
 
         return $this->stripeAction(
@@ -160,6 +167,61 @@ class InvoiceController extends Controller
             },
             "{$invoice->number} updated — the pay link shows the new amount."
         );
+    }
+
+    /** Paid already (a top-up, an auto charge): the card took this amount, so only its words and details change. */
+    private static function locked(Invoice $invoice): bool
+    {
+        return $invoice->status === 'paid' || $invoice->collection_method === 'charge_automatically';
+    }
+
+    private function updateWords(Request $request, Invoice $invoice): RedirectResponse
+    {
+        abort_if($invoice->stripe_invoice_id || $invoice->status === 'void', 422);
+        $lines = $invoice->lines ?? [];
+        $data = $request->validate([
+            'memo' => ['nullable', 'string', 'max:500'],
+            'template' => ['nullable', Rule::in(array_keys(Catalog::TEMPLATES))],
+            'items' => ['required', 'array', 'size:'.count($lines)],
+            'items.*.description' => ['required', 'string', 'max:250'],
+            'ad_account_id' => ['nullable', 'string', 'max:40'],
+            'period_start' => ['nullable', 'date'],
+            'period_end' => ['nullable', 'date', 'after_or_equal:period_start'],
+            'campaigns' => ['nullable', 'array', 'max:50'],
+            'campaigns.*.name' => ['required', 'string', 'max:150'],
+            'campaigns.*.detail' => ['nullable', 'string', 'max:150'],
+            'campaigns.*.quantity' => ['nullable', 'integer', 'min:0'],
+            'campaigns.*.unit' => ['nullable', Rule::in(Catalog::UNITS)],
+            'campaigns.*.amount' => ['required', 'numeric', 'between:-1000000,1000000'],
+        ]);
+        foreach ($data['items'] as $i => $item) {
+            $lines[$i]['description'] = $item['description'];
+        }
+        $invoice->update([
+            'description' => isset($data['memo']) ? mb_substr($data['memo'], 0, 250) : $invoice->description,
+            'template' => $data['template'] ?? $invoice->template,
+            'lines' => $lines,
+            'details' => $this->details($data) ?? $invoice->details,
+        ]);
+
+        return redirect()->route('invoices.index')->with('success', "{$invoice->number} updated — the amounts stay as charged.");
+    }
+
+    /** Ad account, period and campaign rows for the invoice template. */
+    private function details(array $data): ?array
+    {
+        return array_filter([
+            'ad_account_id' => $data['ad_account_id'] ?? null,
+            'period_start' => $data['period_start'] ?? null,
+            'period_end' => $data['period_end'] ?? null,
+            'campaigns' => collect($data['campaigns'] ?? [])->map(fn ($c) => [
+                'name' => $c['name'],
+                'detail' => $c['detail'] ?? null,
+                'quantity' => isset($c['quantity']) ? (int) $c['quantity'] : null,
+                'unit' => $c['unit'] ?? null,
+                'amount' => $this->toCents($c['amount']),
+            ])->values()->all(),
+        ]) ?: null;
     }
 
     /**

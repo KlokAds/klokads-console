@@ -13,6 +13,8 @@ import { computed, ref, watch } from 'vue';
 
 const props = defineProps({ clients: Array, services: Array, templates: Array, templateFor: Object, units: Array, currency: String, clientId: Number, lastDetails: { type: Object, default: () => ({}) }, invoice: { type: Object, default: null } });
 const editing = !!props.invoice;
+// Paid already (a top-up, an auto charge): the card took this amount — only the words and details change.
+const locked = !!props.invoice?.locked;
 
 const form = useForm({
     client_id: props.clientId ?? '',
@@ -140,7 +142,11 @@ function setService(value) {
                     </div>
                 </div>
 
-                <div class="card">
+                <div v-if="locked" class="flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50/70 p-4 text-sm text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200">
+                    <Icon name="shield" :size="18" class="mt-0.5 shrink-0" />
+                    <span>{{ invoice.number }} is paid — the card was charged {{ money(invoice.total, currency) }}. The text, campaigns and template can change; the amounts stay as charged.</span>
+                </div>
+                <div v-if="!locked" class="card">
                     <div class="card-head"><div class="card-title">Amount</div></div>
                     <div class="space-y-4 p-5 sm:p-6">
                         <BudgetFields :form="form" :amount="form.budget_amount" :currency="currency" :client-rate="client?.commission_rate ?? null" />
@@ -168,19 +174,19 @@ function setService(value) {
                                     <div v-if="form.errors[`items.${i}.description`]" class="error">{{ form.errors[`items.${i}.description`] }}</div>
                                 </div>
                                 <div class="col-span-4 sm:col-span-2">
-                                    <input v-model="item.quantity" type="number" min="1" class="input" />
-                                    <Select v-model="item.unit" :options="itemUnitOptions" size="sm" class="mt-1" title="With a unit, the price is the line total and the quantity is just shown (e.g. 1,151 Clicks)" />
+                                    <input v-model="item.quantity" type="number" min="1" class="input" :disabled="locked" />
+                                    <Select v-if="!locked" v-model="item.unit" :options="itemUnitOptions" size="sm" class="mt-1" title="With a unit, the price is the line total and the quantity is just shown (e.g. 1,151 Clicks)" />
                                 </div>
                                 <div class="col-span-6 sm:col-span-3">
-                                    <input v-model="item.amount" type="number" step="0.01" min="0.5" class="input" placeholder="0.00" required />
+                                    <input v-model="item.amount" type="number" step="0.01" min="0.5" class="input" placeholder="0.00" required :disabled="locked" />
                                     <div v-if="form.errors[`items.${i}.amount`]" class="error">{{ form.errors[`items.${i}.amount`] }}</div>
                                 </div>
-                                <button type="button" class="icon-btn col-span-2 mt-1.5 justify-self-end hover:text-rose-600 sm:col-span-1" :disabled="form.items.length === 1" @click="removeItem(i)">
+                                <button v-if="!locked" type="button" class="icon-btn col-span-2 mt-1.5 justify-self-end hover:text-rose-600 sm:col-span-1" :disabled="form.items.length === 1" @click="removeItem(i)">
                                     <Icon name="trash" :size="16" />
                                 </button>
                             </div>
                         </div>
-                        <button type="button" class="btn-secondary btn-sm mt-4" @click="addItem"><Icon name="plus" :size="14" /> Add line</button>
+                        <button v-if="!locked" type="button" class="btn-secondary btn-sm mt-4" @click="addItem"><Icon name="plus" :size="14" /> Add line</button>
                     </div>
                 </div>
 

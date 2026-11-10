@@ -145,6 +145,12 @@ class AutoEntries
         if ($p['direction'] === 'in' && self::isReversal($message->body)) {
             return $this->undoReversed($message, $account, $p, $date);
         }
+        // Still being processed (bKash pay bill): booked only once the balance shows it went through.
+        if (($p['pending'] ?? false) && $p['direction'] === 'out') {
+            $message->update(['status' => 'pending', 'account_id' => $account->id, 'note' => 'Still processing — booked when the balance shows it went through']);
+
+            return $message;
+        }
         if ($this->alreadyRecorded($account, $p, $date, $message->source)) {
             $message->update(['status' => 'ignored', 'account_id' => $account->id, 'note' => 'Already recorded']);
 
@@ -292,6 +298,12 @@ class AutoEntries
         $now ??= CarbonImmutable::now();
         $fixed = 0;
         foreach (Account::where('archived', false)->whereNotNull('bank_balance')->whereBetween('bank_balance_at', [$now->subDays(3), $now->subMinutes(10)])->get() as $account) {
+            // Requests that were still processing: the balance now tells which went through.
+            if ($this->settlePending($account)) {
+                $fixed++;
+
+                continue;
+            }
             // Something booked after the bank's word: that word is old now.
             if (MoneyTransaction::where(fn ($q) => $q->where('account_id', $account->id)->orWhere('to_account_id', $account->id))->where('created_at', '>', $account->bank_balance_at)->exists()) {
                 continue;
@@ -313,6 +325,58 @@ class AutoEntries
         }
 
         return $fixed;
+    }
+
+    /**
+     * Pay bills that were "being processed" before the bank's latest balance: the set of them whose
+     * total is what the balance went down by (to ৳1) went through and is booked; the rest failed.
+     * Nothing fits: they wait, and after a day I am asked.
+     *
+     * @return bool true when it settled them
+     */
+    public function settlePending(Account $account): bool
+    {
+        $pending = InboxMessage::where('status', 'pending')->where('account_id', $account->id)->where('received_at', '<=', $account->bank_balance_at)->orderBy('received_at')->get();
+        if ($pending->isEmpty() || $pending->count() > 16) {
+            return false;
+        }
+        $missing = Ledger::balance($account) - (int) $account->bank_balance; // what left that is not booked yet
+        $amounts = $pending->map(fn ($m) => $m->parsed['amount'] + ($m->parsed['fee'] ?? 0))->values()->all();
+        $best = null;
+        for ($mask = 0; $mask < (1 << count($amounts)); $mask++) {
+            $sum = 0;
+            foreach ($amounts as $i => $a) {
+                $sum += $mask & (1 << $i) ? $a : 0;
+            }
+            // The earliest requests first when several sets fit (a retry comes after the first try).
+            if (abs($sum - $missing) <= 100 && ($best === null || $mask < $best)) {
+                $best = $mask;
+                if (abs($sum - $missing) === 0) {
+                    break;
+                }
+            }
+        }
+        if ($best === null) {
+            if ($pending->first()->received_at->lt(now()->subDay())) {
+                $this->notify->once("pending-unsettled:{$account->id}:".$pending->first()->id, 'info', '⏳ '.$account->name.': '.$pending->count().' requests still unclear',
+                    'They were "being processed" and the balance does not show which went through. Open Auto entries → Needs a look and add the ones that were paid; ignore the failed ones.',
+                    route('personal.inbox.index', ['status' => 'pending']));
+            }
+
+            return false;
+        }
+        foreach ($pending->values() as $i => $m) {
+            $parsed = $m->parsed;
+            $parsed['pending'] = false;
+            $m->update(['parsed' => $parsed]);
+            if ($best & (1 << $i)) {
+                $this->process($m->fresh(), $account->id);
+            } else {
+                $m->update(['status' => 'ignored', 'note' => 'Did not go through — the balance does not show it']);
+            }
+        }
+
+        return true;
     }
 
     /** Gaps up to this (cents) are a fee or VAT the bank sent no SMS for. */

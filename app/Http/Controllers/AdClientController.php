@@ -189,14 +189,15 @@ class AdClientController extends Controller
     {
         $data = $request->validate([
             'date' => ['required', 'date', 'before_or_equal:today'],
-            'amount' => ['required', 'numeric', 'min:0.01', 'max:100000000'],
+            // A minus amount is a refund or credit Meta gave back: it comes off the bill.
+            'amount' => ['required', 'numeric', 'between:-100000000,100000000', 'not_in:0'],
             'currency' => ['required', 'string', 'size:3'],
             'note' => ['nullable', 'string', 'max:200'],
         ]);
         PersonalAdCharge::create(['personal_client_id' => $client->id, 'date' => $data['date'], 'currency' => strtoupper($data['currency']),
             'amount' => $this->toCents($data['amount']), 'note' => $data['note'] ?? null]);
 
-        return back()->with('success', 'Charge added — it goes on the next bill.');
+        return back()->with('success', $data['amount'] < 0 ? 'Refund added — it comes off the next bill.' : 'Charge added — it goes on the next bill.');
     }
 
     /** The client paid for their ads — any amount, before or after a bill. */

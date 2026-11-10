@@ -126,6 +126,10 @@ class InboxController extends Controller
             'account_id' => ['required', 'exists:accounts,id'],
             'category' => ['nullable', 'string', 'max:40'],
         ]);
+        // I say it went through: no longer waiting on the balance.
+        if ($message->parsed['pending'] ?? false) {
+            $message->update(['parsed' => ['pending' => false] + $message->parsed]);
+        }
 
         $this->entries->process($message, (int) $data['account_id'], $data['category'] ?? null);
         $message->refresh();
