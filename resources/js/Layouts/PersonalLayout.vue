@@ -1,4 +1,5 @@
 <script setup>
+import ModeSwitch from '@/Components/ModeSwitch.vue';
 import BotLogo from '@/Components/Personal/BotLogo.vue';
 import CommandPalette from '@/Components/CommandPalette.vue';
 import ConfirmDialog from '@/Components/ConfirmDialog.vue';
@@ -84,7 +85,7 @@ router.on('navigate', () => {
                 </Link>
             </nav>
             <div class="space-y-1 border-t border-line/70 pt-3">
-                <Link :href="route('dashboard')" class="flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold text-ink-600 hover:bg-ink-50"><Icon name="bank" :size="17" class="text-ink-400" /> Business side</Link>
+                <ModeSwitch current="personal" variant="tabs" class="mb-2" />
                 <button v-if="!inApp" class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold text-ink-600 hover:bg-ink-50" @click="lock"><span class="w-[17px] text-center">🔒</span> Lock</button>
                 <div class="flex items-center gap-2.5 px-3 pt-2">
                     <span class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-brand-500 text-xs font-bold text-white">{{ first.slice(0, 1) }}</span>
@@ -154,12 +155,12 @@ router.on('navigate', () => {
             <div v-if="inApp && more" class="fixed inset-0 z-40 bg-ink-950/50 backdrop-blur-sm lg:hidden" @click.self="more = false">
                 <div class="absolute inset-x-0 bottom-0 rounded-t-3xl bg-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl">
                     <div class="mx-auto mb-4 h-1.5 w-10 rounded-full bg-ink-200"></div>
+                    <ModeSwitch current="personal" class="mb-3" />
                     <div class="grid grid-cols-3 gap-2">
                         <Link v-for="item in NAV.slice(2)" :key="item.name" :href="route(item.route)" class="flex flex-col items-center gap-2 rounded-2xl p-3 text-center text-xs font-semibold transition"
                             :class="active(item) ? 'bg-teal-50 text-teal-800' : 'bg-ink-50 text-ink-700'">
                             <Icon :name="item.icon" :size="22" /> {{ item.name }}
                         </Link>
-                        <Link :href="route('dashboard')" class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700"><Icon name="bank" :size="22" /> Business</Link>
                         <button v-if="!inApp" class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700" @click="lock"><span class="text-xl leading-none">🔒</span> Lock</button>
                         <button v-if="inApp" class="flex flex-col items-center gap-2 rounded-2xl bg-ink-50 p-3 text-xs font-semibold text-ink-700" @click="appSettings"><Icon name="cog" :size="22" /> App settings</button>
                     </div>

@@ -1,4 +1,5 @@
 <script setup>
+import ModeSwitch from '@/Components/ModeSwitch.vue';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import CommandPalette from '@/Components/CommandPalette.vue';
 import ConfirmDialog from '@/Components/ConfirmDialog.vue';
@@ -203,12 +204,7 @@ router.on('navigate', () => {
             </div>
 
             <!-- Business / Personal switch (the personal side is the owner's only) -->
-            <div v-if="isOwner" class="mx-3 mb-3 grid grid-cols-2 gap-1 rounded-xl bg-white/[0.05] p-1">
-                <Link :href="route('dashboard')" class="flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition"
-                    :class="mode === 'business' ? 'bg-white text-ink-900' : 'text-ink-400 hover:text-white'"><Icon name="bank" :size="14" /> Business</Link>
-                <Link :href="route('personal.dashboard')" class="flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition"
-                    :class="mode === 'personal' ? 'bg-white text-ink-900' : 'text-ink-400 hover:text-white'"><Icon name="user" :size="14" /> Personal</Link>
-            </div>
+            <ModeSwitch v-if="isOwner" :current="mode" variant="tabs" dark class="mx-3 mb-3" />
 
             <nav class="flex-1 space-y-6 overflow-y-auto px-3 pb-4 pt-2">
                 <div v-for="section in sections" :key="section.label">
@@ -407,6 +403,7 @@ router.on('navigate', () => {
                                 <button v-if="stripe.mode" class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10" :disabled="syncing" title="Sync now" @click="sync"><Icon name="sync" :size="16" :class="{ 'animate-spin': syncing }" /></button>
                             </div>
 
+                            <ModeSwitch v-if="isOwner" current="business" class="mb-3" />
                             <div class="grid grid-cols-3 gap-2">
                                 <Link v-for="t in moreTiles" :key="t.name" :href="route(t.route, t.params)" class="flex flex-col items-center gap-2 rounded-2xl p-3 text-center text-xs font-semibold transition active:scale-95"
                                     :class="route().current(t.match) ? 'bg-brand-50 text-brand-800 ring-1 ring-brand-200 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/30' : 'bg-ink-50 text-ink-700 dark:bg-white/[0.04]'">
@@ -415,8 +412,7 @@ router.on('navigate', () => {
                                 </Link>
                             </div>
 
-                            <div class="mt-3 grid grid-cols-3 gap-2 text-xs font-semibold">
-                                <Link v-if="isOwner" :href="route('personal.dashboard')" class="flex flex-col items-center gap-1.5 rounded-2xl bg-ink-50 p-3 text-ink-700 dark:bg-white/[0.04]"><Icon name="user" :size="19" /> Personal</Link>
+                            <div class="mt-3 grid grid-cols-2 gap-2 text-xs font-semibold">
                                 <button class="flex flex-col items-center gap-1.5 rounded-2xl bg-ink-50 p-3 text-ink-700 dark:bg-white/[0.04]" @click="cycleTheme"><Icon :name="THEME_ICON[theme]" :size="19" /> {{ THEME_LABEL[theme] }}</button>
                                 <button class="flex flex-col items-center gap-1.5 rounded-2xl bg-ink-50 p-3 text-ink-700 dark:bg-white/[0.04]" @click="appSettings"><Icon name="cog" :size="19" /> App settings</button>
                             </div>
