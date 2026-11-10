@@ -28,6 +28,11 @@ const STATUS = { paid: ['Paid', 'bg-[#E6F2EC] text-[#1E6B4A]'], partial: ['Part 
 const parts = (d) => { const [title, ...rest] = String(d).split(' — '); return { title, sub: rest.join(' — ') }; };
 const status = computed(() => STATUS[inv.value.status] ?? STATUS.unpaid);
 const qty = (q) => (Number(q) === 1 ? '1' : String(Number(q)));
+// Every line once: Qty and Rate would only repeat the amount — show each line's period instead.
+const allLines = computed(() => [...(inv.value.items || []), ...(inv.value.previous || []).flatMap((p) => p.items || [])]);
+const simple = computed(() => allLines.value.every((it) => Number(it.qty) === 1));
+const period = computed(() => simple.value && allLines.value.some((it) => parts(it.description).sub));
+const cols = computed(() => (simple.value ? (period.value ? 'sm:grid-cols-[1fr_200px_130px]' : 'sm:grid-cols-[1fr_130px]') : 'sm:grid-cols-[1fr_60px_130px_130px]'));
 
 const showReport = ref(false);
 const methodOptions = Object.entries(props.methods).map(([value, label]) => ({ value, label }));
@@ -109,18 +114,18 @@ const report = () => {
                 <!-- Previous dues: earlier invoices not paid yet, carried into this one -->
                 <section v-if="inv.previous.length" class="px-6 pb-2 sm:px-10">
                     <div class="flex items-center gap-3 pb-2"><span class="h-px w-5 bg-[#B08D57]"></span><span class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">Previous dues</span></div>
-                    <div class="hidden grid-cols-[1fr_60px_130px_130px] gap-3 border-b border-[#0E1630] pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8D8A80] sm:grid">
-                        <span>Description</span><span class="text-right">Qty</span><span class="text-right">Rate</span><span class="text-right">Amount</span>
+                    <div class="hidden gap-3 border-b border-[#0E1630] pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8D8A80] sm:grid" :class="cols">
+                        <span>Description</span><template v-if="!simple"><span class="text-right">Qty</span><span class="text-right">Rate</span></template><span v-else-if="period">Period</span><span class="text-right">Amount</span>
                     </div>
                     <template v-for="p in inv.previous" :key="p.number">
                         <div class="mt-2 flex items-baseline justify-between gap-3 rounded-lg bg-[#F1EADC] px-3 py-2 text-sm">
                             <span class="min-w-0"><b class="font-semibold text-[#0E1630]">{{ p.number }}</b> <span class="text-[#6B5A3A]">· {{ date(p.issued_on) }}</span></span>
                             <span class="shrink-0 font-semibold tabular-nums text-[#0E1630]">{{ T(p.amount) }}</span>
                         </div>
-                        <div v-for="(it, k) in p.items" :key="k" class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 border-b border-[#E8E2D6] py-3.5 text-sm sm:grid-cols-[1fr_60px_130px_130px]">
-                            <span class="min-w-0"><span class="block font-semibold text-[#0E1630]">{{ parts(it.description).title }}</span><span v-if="parts(it.description).sub" class="mt-0.5 inline-block rounded-full bg-[#F1EADC] px-2 py-0.5 text-[11px] font-medium text-[#6B5A3A]">{{ parts(it.description).sub }}</span></span>
-                            <span class="hidden text-right tabular-nums text-[#3A4060] sm:block">{{ qty(it.qty) }}</span>
-                            <span class="hidden text-right tabular-nums text-[#3A4060] sm:block">{{ T(it.rate) }}</span>
+                        <div v-for="(it, k) in p.items" :key="k" class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 border-b border-[#E8E2D6] py-3.5 text-sm" :class="cols">
+                            <span class="min-w-0"><span class="block font-semibold text-[#0E1630]">{{ parts(it.description).title }}</span><span v-if="parts(it.description).sub" :class="period ? 'sm:hidden' : ''" class="mt-0.5 inline-block rounded-full bg-[#F1EADC] px-2 py-0.5 text-[11px] font-medium text-[#6B5A3A]">{{ parts(it.description).sub }}</span></span>
+                            <template v-if="!simple"><span class="hidden text-right tabular-nums text-[#3A4060] sm:block">{{ qty(it.qty) }}</span><span class="hidden text-right tabular-nums text-[#3A4060] sm:block">{{ T(it.rate) }}</span></template>
+                            <span v-else-if="period" class="hidden text-sm text-[#6B6F82] sm:block">{{ parts(it.description).sub }}</span>
                             <span class="text-right font-semibold tabular-nums">{{ T(it.amount) }}</span>
                             <span v-if="Number(it.qty) !== 1" class="text-xs text-[#8D8A80] sm:hidden">{{ qty(it.qty) }} × {{ T(it.rate) }}</span>
                         </div>
@@ -133,13 +138,13 @@ const report = () => {
                 <!-- Items -->
                 <section class="px-6 sm:px-10">
                     <div v-if="inv.previous.length" class="flex items-center gap-3 pb-2 pt-3"><span class="h-px w-5 bg-[#B08D57]"></span><span class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">This invoice</span></div>
-                    <div class="hidden grid-cols-[1fr_60px_130px_130px] gap-3 border-b border-[#0E1630] pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8D8A80] sm:grid">
-                        <span>Description</span><span class="text-right">Qty</span><span class="text-right">Rate</span><span class="text-right">Amount</span>
+                    <div class="hidden gap-3 border-b border-[#0E1630] pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8D8A80] sm:grid" :class="cols">
+                        <span>Description</span><template v-if="!simple"><span class="text-right">Qty</span><span class="text-right">Rate</span></template><span v-else-if="period">Period</span><span class="text-right">Amount</span>
                     </div>
-                    <div v-for="(it, k) in inv.items" :key="k" class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 border-b border-[#E8E2D6] py-3.5 text-sm sm:grid-cols-[1fr_60px_130px_130px]">
-                        <span class="min-w-0"><span class="block font-semibold text-[#0E1630]">{{ parts(it.description).title }}</span><span v-if="parts(it.description).sub" class="mt-0.5 inline-block rounded-full bg-[#F1EADC] px-2 py-0.5 text-[11px] font-medium text-[#6B5A3A]">{{ parts(it.description).sub }}</span></span>
-                        <span class="hidden text-right tabular-nums text-[#3A4060] sm:block">{{ qty(it.qty) }}</span>
-                        <span class="hidden text-right tabular-nums text-[#3A4060] sm:block">{{ T(it.rate) }}</span>
+                    <div v-for="(it, k) in inv.items" :key="k" class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 border-b border-[#E8E2D6] py-3.5 text-sm" :class="cols">
+                        <span class="min-w-0"><span class="block font-semibold text-[#0E1630]">{{ parts(it.description).title }}</span><span v-if="parts(it.description).sub" :class="period ? 'sm:hidden' : ''" class="mt-0.5 inline-block rounded-full bg-[#F1EADC] px-2 py-0.5 text-[11px] font-medium text-[#6B5A3A]">{{ parts(it.description).sub }}</span></span>
+                        <template v-if="!simple"><span class="hidden text-right tabular-nums text-[#3A4060] sm:block">{{ qty(it.qty) }}</span><span class="hidden text-right tabular-nums text-[#3A4060] sm:block">{{ T(it.rate) }}</span></template>
+                        <span v-else-if="period" class="hidden text-sm text-[#6B6F82] sm:block">{{ parts(it.description).sub }}</span>
                         <span class="text-right font-semibold tabular-nums">{{ T(Math.round(it.qty * it.rate)) }}</span>
                         <span v-if="Number(it.qty) !== 1" class="text-xs text-[#8D8A80] sm:hidden">{{ qty(it.qty) }} × {{ T(it.rate) }}</span>
                     </div>

@@ -86,6 +86,19 @@ class PersonalInvoicesTest extends TestCase
         $this->assertSame(0, $new->fresh()->carried);
     }
 
+    public function test_lines_billed_once_show_their_period_instead_of_qty_and_rate(): void
+    {
+        $once = app(PersonalInvoicing::class)->create($this->client, [['description' => 'Leads campaign — 3 Nov – 9 Nov 2026', 'qty' => 1, 'rate' => 275192]], CarbonImmutable::today(), null);
+        $html = view('personal.invoice-pdf', ['invoice' => $once, 'me' => PersonalInvoicing::profile()])->render();
+        $this->assertStringContainsString('>Period<', $html);
+        $this->assertStringContainsString('>3 Nov – 9 Nov 2026<', $html);
+        $this->assertStringNotContainsString('>Qty<', $html);
+
+        $many = app(PersonalInvoicing::class)->create($this->client, [['description' => 'Hosting', 'qty' => 2, 'rate' => 1250]], CarbonImmutable::today(), null);
+        $html = view('personal.invoice-pdf', ['invoice' => $many, 'me' => PersonalInvoicing::profile()])->render();
+        $this->assertStringContainsString('>Qty<', $html);
+    }
+
     public function test_invoice_totals_in_bdt_and_a_payment_lands_in_the_account(): void
     {
         $this->travelTo('2026-10-28 12:00'); // "this month" is October

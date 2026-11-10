@@ -104,28 +104,46 @@
 </div>
 
 {{-- Previous dues, then this invoice --}}
-@php($prev = $invoice->previous()->get())
+@php
+    $prev = $invoice->previous()->get();
+    // Every line once, as "1 ×": Qty and Rate would only repeat the amount, so show the period
+    // ("3 Nov – 9 Nov 2026", after the " — ") in its own column instead. Real quantities keep Qty and Rate.
+    $lines = collect($invoice->items ?? [])->merge($prev->flatMap(fn ($x) => $x->items ?? []));
+    $simple = $lines->every(fn ($i) => (float) $i['qty'] == 1);
+    $part = fn ($d) => array_pad(explode(' — ', (string) $d, 2), 2, '');
+    $period = $simple && $lines->contains(fn ($i) => $part($i['description'])[1] !== '');
+    $span = $simple ? ($period ? 2 : 1) : 3; // columns before Amount
+    $head = '<thead><tr><th>Description</th>'
+        .($simple ? ($period ? '<th style="width:30%">Period</th>' : '') : '<th class="r" style="width:9%;text-align:right">Qty</th><th class="r" style="width:20%;text-align:right">Rate</th>')
+        .'<th class="r" style="width:20%;text-align:right">Amount</th></tr></thead>';
+    $row = function (array $i) use ($simple, $period, $part, $qty, $money) {
+        $amount = '<td class="r" style="font-weight:bold">'.e($money((int) round((float) $i['qty'] * (int) $i['rate']))).'</td>';
+        if (! $simple) {
+            return '<tr><td style="font-size:11px">'.e($i['description']).'</td><td class="r muted">'.e($qty($i['qty'])).'</td><td class="r muted">'.e($money((int) $i['rate'])).'</td>'.$amount.'</tr>';
+        }
+        [$what, $when] = $part($i['description']);
+
+        return $period
+            ? '<tr><td style="font-size:11px;padding-right:12px">'.e($what).'</td><td class="muted" style="font-size:10.5px">'.e($when).'</td>'.$amount.'</tr>'
+            : '<tr><td style="font-size:11px">'.e($i['description']).'</td>'.$amount.'</tr>';
+    };
+@endphp
 <div class="wrap" style="padding-top:26px">
     @if ($prev->isNotEmpty())
         <div style="font-size:8px;letter-spacing:1.6px;color:{{ $soft }};text-transform:uppercase;margin-bottom:6px">Previous dues</div>
         <table class="items" style="margin-bottom:16px">
-            <thead><tr><th>Description</th><th class="r" style="width:9%;text-align:right">Qty</th><th class="r" style="width:20%;text-align:right">Rate</th><th class="r" style="width:20%;text-align:right">Amount</th></tr></thead>
+            {!! $head !!}
             <tbody>
                 @foreach ($prev as $p)
-                    <tr><td colspan="3" style="font-size:11px;background:{{ $band }};padding:7px 8px"><b>{{ $p->number }}</b> <span class="muted">· {{ $p->issued_on->format('j M Y') }}</span></td><td class="r" style="font-weight:bold;background:{{ $band }};padding:7px 8px">{{ $money($p->carried_amount) }}</td></tr>
+                    <tr><td colspan="{{ $span }}" style="font-size:11px;background:{{ $band }};padding:7px 8px"><b>{{ $p->number }}</b> <span class="muted">· {{ $p->issued_on->format('j M Y') }}</span></td><td class="r" style="font-weight:bold;background:{{ $band }};padding:7px 8px">{{ $money($p->carried_amount) }}</td></tr>
                     @foreach ($p->items ?? [] as $i)
-                        <tr>
-                            <td style="font-size:11px">{{ $i['description'] }}</td>
-                            <td class="r muted">{{ $qty($i['qty']) }}</td>
-                            <td class="r muted">{{ $money((int) $i['rate']) }}</td>
-                            <td class="r" style="font-weight:bold">{{ $money((int) round((float) $i['qty'] * (int) $i['rate'])) }}</td>
-                        </tr>
+                        {!! $row($i) !!}
                     @endforeach
                     @if ($p->carried > 0)
-                        <tr><td colspan="3" style="font-size:11px">Earlier dues on it</td><td class="r" style="font-weight:bold">{{ $money((int) $p->carried) }}</td></tr>
+                        <tr><td colspan="{{ $span }}" style="font-size:11px">Earlier dues on it</td><td class="r" style="font-weight:bold">{{ $money((int) $p->carried) }}</td></tr>
                     @endif
                     @if ($p->paid > 0)
-                        <tr><td colspan="3" style="font-size:11px;color:#1E6B4A">Already paid</td><td class="r" style="font-weight:bold;color:#1E6B4A">−{{ $money((int) $p->paid) }}</td></tr>
+                        <tr><td colspan="{{ $span }}" style="font-size:11px;color:#1E6B4A">Already paid</td><td class="r" style="font-weight:bold;color:#1E6B4A">−{{ $money((int) $p->paid) }}</td></tr>
                     @endif
                 @endforeach
             </tbody>
@@ -133,15 +151,10 @@
         <div style="font-size:8px;letter-spacing:1.6px;color:{{ $soft }};text-transform:uppercase;margin-bottom:6px">This invoice</div>
     @endif
     <table class="items" style="margin-top:0">
-        <thead><tr><th>Description</th><th class="r" style="width:9%;text-align:right">Qty</th><th class="r" style="width:20%;text-align:right">Rate</th><th class="r" style="width:20%;text-align:right">Amount</th></tr></thead>
+        {!! $head !!}
         <tbody>
             @foreach ($invoice->items as $i)
-                <tr>
-                    <td style="font-size:11px">{{ $i['description'] }}</td>
-                    <td class="r muted">{{ $qty($i['qty']) }}</td>
-                    <td class="r muted">{{ $money((int) $i['rate']) }}</td>
-                    <td class="r" style="font-weight:bold">{{ $money((int) round((float) $i['qty'] * (int) $i['rate'])) }}</td>
-                </tr>
+                {!! $row($i) !!}
             @endforeach
         </tbody>
     </table>
