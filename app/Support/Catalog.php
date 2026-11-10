@@ -132,6 +132,9 @@ class Catalog
         'loan_taken' => 'Loan taken',
         'loan_repaid_to_me' => 'Loan repaid to me',
         'loan_repaid_by_me' => 'Loan repaid by me',
+        // Someone else's money through my wallet (bills I pay for others with their money): not mine either way.
+        'held_for_others' => 'Someone else\'s money (in)',
+        'paid_for_others' => 'Paid with someone else\'s money',
     ];
 
     /** How clients pay my personal invoices. */
