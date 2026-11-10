@@ -170,8 +170,18 @@ const savePay = () => pay.post(route('ad-clients.payments.store', props.client.i
 const billTo = ref('');
 const billNow = () => router.post(route('ad-clients.bill', props.client.id), { to: billTo.value || yesterday }, { preserveScroll: true, onSuccess: () => (sheet.value = null) });
 const sending = ref(null);
-const CHARGE = { credit: ['Meta credit · not billed', 'text-violet-600'], to_bill: ['To bill', 'text-sky-600'], unpaid: ['Billed · unpaid', 'text-amber-600'], partial: ['Part paid', 'text-amber-600'], paid: ['Paid ✓', 'text-emerald-600'], void: ['Void', 'text-ink-400'] };
-const INVOICE = { unpaid: ['Unpaid', 'text-amber-600'], partial: ['Part paid', 'text-amber-600'], paid: ['Paid', 'text-emerald-600'], void: ['Void', 'text-ink-400'] };
+// Status pills: a word and its colour (light and dark).
+const PILL = {
+    violet: 'bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:ring-violet-500/30',
+    sky: 'bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-500/30',
+    amber: 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30',
+    green: 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/30',
+    grey: 'bg-ink-100 text-ink-600 ring-line',
+};
+const CHARGE = { credit: ['Not billed', PILL.violet], to_bill: ['To bill', PILL.sky], unpaid: ['Billed · unpaid', PILL.amber], partial: ['Part paid', PILL.amber], paid: ['Paid ✓', PILL.green], void: ['Void', PILL.grey] };
+const INVOICE = { unpaid: ['Unpaid', PILL.amber], partial: ['Part paid', PILL.amber], paid: ['Paid ✓', PILL.green], void: ['Void', PILL.grey], carried: ['Moved to newer', PILL.violet] };
+const chargeTitle = (ch) => (ch.kind === 'credit' ? 'Meta credit (coupon)' : ch.kind === 'refund' ? 'Meta refund' : ch.auto ? 'Meta charged the card' : ch.note || 'Card charge');
+const chargeIcon = (ch) => (ch.kind === 'credit' ? '🎁' : ch.kind === 'refund' ? '↩️' : '💳');
 const byCharges = computed(() => props.client.ad_bill_basis === 'charges');
 
 // ---------------------------------------------------------------- setup
@@ -392,13 +402,25 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
             <!-- Card charges -->
             <section v-if="byCharges" class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm sm:p-5">
                 <h3 class="text-sm font-bold text-ink-900">Card charges &amp; Meta credits</h3>
-                <div class="mt-2 divide-y divide-line/70">
-                    <div v-for="ch in ledger.charges" :key="ch.id" class="flex items-center gap-3 py-2.5 text-sm">
-                        <span class="w-24 text-ink-500">{{ date(ch.date) }}</span>
-                        <span class="min-w-0 flex-1 truncate text-ink-600">{{ ch.note }}<span v-if="ch.auto" class="ml-1.5 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">seen from Meta</span></span>
-                        <span class="font-semibold tabular-nums" :class="ch.kind === 'credit' ? 'text-violet-600' : ''">{{ m(ch.amount, ch.currency) }}</span>
-                        <span class="w-28 text-right text-xs font-bold" :class="CHARGE[ch.state]?.[1]">{{ CHARGE[ch.state]?.[0] }}<span v-if="ch.invoice" class="block font-normal text-ink-400">{{ ch.invoice }}</span></span>
-                        <button v-if="!ch.billed && ch.kind !== 'credit'" class="icon-btn" aria-label="Remove" @click="removeCharge(ch)"><Icon name="trash" :size="14" /></button>
+                <div class="mt-3 space-y-2">
+                    <div v-for="ch in ledger.charges" :key="ch.id" class="rounded-2xl bg-ink-50/70 p-3 ring-1 ring-line/60 dark:bg-white/[0.03]">
+                        <div class="flex items-start gap-3">
+                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-lg ring-1 ring-line/70">{{ chargeIcon(ch) }}</span>
+                            <div class="min-w-0 flex-1">
+                                <div class="font-semibold text-ink-900">{{ chargeTitle(ch) }}</div>
+                                <div class="mt-0.5 text-xs text-ink-500">{{ date(ch.date) }}<template v-if="ch.auto"> · seen from Meta</template><template v-if="ch.note && ch.auto && ch.kind === 'charge'"> · {{ ch.note.replace('Meta charged ', '') }}</template></div>
+                            </div>
+                            <div class="shrink-0 text-right">
+                                <div class="font-bold tabular-nums" :class="ch.kind === 'credit' ? 'text-violet-600 dark:text-violet-300' : 'text-ink-900'">{{ m(ch.amount, ch.currency) }}</div>
+                                <span class="mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ring-1" :class="CHARGE[ch.state]?.[1]">{{ CHARGE[ch.state]?.[0] }}</span>
+                            </div>
+                        </div>
+                        <div v-if="ch.invoice || (!ch.billed && ch.kind !== 'credit')" class="mt-2 flex items-center justify-end gap-2 border-t border-line/60 pt-2">
+                            <span v-if="ch.invoice" class="mr-auto text-xs text-ink-500">On {{ ch.invoice }}</span>
+                            <span v-else-if="ch.kind === 'credit'" class="mr-auto text-xs text-ink-500">Meta's credit — never on their bill</span>
+                            <button v-if="!ch.billed && ch.kind !== 'credit'" class="btn-ghost btn-sm text-rose-600" @click="removeCharge(ch)"><Icon name="trash" :size="14" /> Remove</button>
+                        </div>
+                        <div v-else-if="ch.kind === 'credit'" class="mt-2 border-t border-line/60 pt-2 text-xs text-ink-500">Meta's credit — never on their bill</div>
                     </div>
                     <p v-if="!ledger.charges.length" class="py-2 text-xs text-ink-500">None yet.</p>
                 </div>
@@ -407,14 +429,24 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
             <!-- Bills -->
             <section class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm sm:p-5">
                 <h3 class="text-sm font-bold text-ink-900">Bills</h3>
-                <div class="mt-2 divide-y divide-line/70">
-                    <div v-for="b in ledger.bills" :key="b.id" class="flex flex-wrap items-center gap-3 py-2.5 text-sm">
-                        <span class="min-w-0 flex-1"><b class="text-ink-900">{{ b.period }}</b><span v-if="b.invoice" class="ml-2 text-xs text-ink-500">{{ b.invoice.number }}{{ b.invoice.sent ? '' : ' · not sent' }}</span>
-                            <span v-if="b.how" class="block text-[11px] text-ink-400">🔒 {{ b.how }} — only you see this</span></span>
-                        <span class="tabular-nums font-semibold">{{ m(b.invoice?.total ?? b.spend, 'BDT') }}</span>
-                        <span v-if="b.invoice" class="w-20 text-right text-xs font-bold" :class="INVOICE[b.invoice.status]?.[1]">{{ INVOICE[b.invoice.status]?.[0] }}</span>
-                        <Link v-if="b.invoice" :href="route('personal.invoices.show', b.invoice.id)" class="text-xs font-semibold text-ink-500 hover:text-teal-700">Open</Link>
-                        <button v-if="b.invoice && b.invoice.status !== 'paid'" class="rounded-lg bg-teal-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-teal-700" @click="sending = { id: b.invoice.id, number: b.invoice.number }">{{ b.invoice.sent ? 'Send again' : 'Send' }}</button>
+                <div class="mt-3 space-y-2">
+                    <div v-for="b in ledger.bills" :key="b.id" class="rounded-2xl bg-ink-50/70 p-3 ring-1 ring-line/60 dark:bg-white/[0.03]">
+                        <div class="flex items-start gap-3">
+                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-teal-600 ring-1 ring-line/70"><Icon name="invoice" :size="18" /></span>
+                            <div class="min-w-0 flex-1">
+                                <div class="font-semibold text-ink-900">{{ b.invoice ? b.invoice.number : 'Bill' }} <span class="font-normal text-ink-500">· {{ b.period }}</span></div>
+                                <div class="mt-0.5 text-xs" :class="b.invoice && !b.invoice.sent ? 'text-amber-600' : 'text-ink-500'">{{ b.invoice ? (b.invoice.sent ? 'Sent to them' : 'Not sent yet') : '' }}</div>
+                            </div>
+                            <div class="shrink-0 text-right">
+                                <div class="font-bold tabular-nums text-ink-900">{{ m(b.invoice?.total ?? b.spend, 'BDT') }}</div>
+                                <span v-if="b.invoice" class="mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ring-1" :class="INVOICE[b.invoice.status]?.[1]">{{ INVOICE[b.invoice.status]?.[0] }}</span>
+                            </div>
+                        </div>
+                        <div v-if="b.how" class="mt-2 rounded-xl bg-surface px-3 py-1.5 text-[11px] text-ink-500 ring-1 ring-line/60">🔒 {{ b.how }} — only you see this</div>
+                        <div v-if="b.invoice" class="mt-2 flex items-center justify-end gap-2 border-t border-line/60 pt-2">
+                            <Link :href="route('personal.invoices.show', b.invoice.id)" class="btn-secondary btn-sm"><Icon name="external" :size="14" /> Open</Link>
+                            <button v-if="!['paid', 'carried', 'void'].includes(b.invoice.status)" class="btn-primary btn-sm" @click="sending = { id: b.invoice.id, number: b.invoice.number }"><Icon name="send" :size="14" /> {{ b.invoice.sent ? 'Send again' : 'Send' }}</button>
+                        </div>
                     </div>
                     <p v-if="!ledger.bills.length" class="py-2 text-xs text-ink-500">No bills yet.</p>
                 </div>
