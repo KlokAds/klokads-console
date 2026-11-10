@@ -1,8 +1,15 @@
 package com.klokads.app
 
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
+import android.os.Environment
+import android.widget.Toast
+import androidx.core.content.ContextCompat
 import android.os.PowerManager
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterFragmentActivity
@@ -14,10 +21,22 @@ class MainActivity : FlutterFragmentActivity() {
     private var channel: MethodChannel? = null
     private var launchUrl: String? = null
 
+    /** Downloads started from the app: their names, for the "saved" message when each is done. */
+    private val downloads = mutableMapOf<Long, String>()
+    private val downloaded = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+            val name = downloads.remove(id) ?: return
+            Toast.makeText(context, "✅ $name — Downloads-এ রাখা হয়েছে", Toast.LENGTH_LONG).show()
+            channel?.invokeMethod("downloaded", name)
+        }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         launchUrl = intent?.getStringExtra("url")?.takeUnless { it.isBlank() || it == "null" }
         Feed.channels(this)
+        ContextCompat.registerReceiver(this, downloaded, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), ContextCompat.RECEIVER_EXPORTED)
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "klok/native").apply {
             setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -71,6 +90,26 @@ class MainActivity : FlutterFragmentActivity() {
                             result.error("url", "no url", null)
                         } else {
                             AppUpdater.install(this@MainActivity, url) { status -> runOnUiThread { result.success(status) } }
+                        }
+                    }
+                    // A file from the site (an invoice PDF): straight into Downloads, signed in, with the phone's
+                    // own "downloading… / download complete" notification — never through the browser.
+                    "download" -> {
+                        try {
+                            val name = call.argument<String>("name") ?: "file.pdf"
+                            val request = DownloadManager.Request(Uri.parse(call.argument<String>("url")))
+                                .setTitle(name)
+                                .setDescription("MH-Bot")
+                                .setMimeType(call.argument<String>("mime") ?: "application/pdf")
+                                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
+                            call.argument<String>("cookie")?.takeIf { it.isNotBlank() }?.let { request.addRequestHeader("Cookie", it) }
+                            call.argument<String>("agent")?.takeIf { it.isNotBlank() }?.let { request.addRequestHeader("User-Agent", it) }
+                            val id = (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+                            downloads[id] = name
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.success(false)
                         }
                     }
                     else -> result.notImplemented()

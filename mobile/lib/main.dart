@@ -385,8 +385,32 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
                   }
                   return NavigationActionPolicy.ALLOW;
                 },
+                // A PDF (or any file): the app downloads it itself — into Downloads, signed in,
+                // "downloading…" now and the phone's "download complete" when done. Never the browser.
                 onDownloadStartRequest: (controller, request) async {
-                  await launchUrl(request.url, mode: LaunchMode.externalApplication);
+                  final url = request.url.toString();
+                  final cookies = await CookieManager.instance().getCookies(url: request.url);
+                  final fromHeader = RegExp(r'filename="?([^";]+)"?').firstMatch(request.contentDisposition ?? '')?.group(1);
+                  var name = (request.suggestedFilename ?? fromHeader ?? request.url.pathSegments.lastWhere((s) => s.isNotEmpty, orElse: () => 'file'))
+                      .replaceAll(RegExp(r'[^\w.\-]'), '_');
+                  if (!name.contains('.') && (request.mimeType ?? '').contains('pdf')) {
+                    name = '$name.pdf';
+                  }
+                  final ok = await nativeChannel.invokeMethod<bool>('download', {
+                    'url': url,
+                    'name': name,
+                    'mime': request.mimeType ?? 'application/pdf',
+                    'cookie': cookies.map((c) => '${c.name}=${c.value}').join('; '),
+                    'agent': request.userAgent ?? '',
+                  });
+                  if (!mounted) {
+                    return;
+                  }
+                  if (ok == true) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('⬇️ $name নামানো হচ্ছে… শেষ হলে notification আসবে।')));
+                  } else {
+                    await launchUrl(request.url, mode: LaunchMode.externalApplication);
+                  }
                 },
                 onProgressChanged: (controller, value) {
                   setState(() => progress = value / 100);
