@@ -255,14 +255,6 @@ class FollowUpActionReceiver : BroadcastReceiver() {
         val notification = intent.getIntExtra("notification", 0)
         context.getSystemService(NotificationManager::class.java).cancel(notification)
         val base = FollowUps.url(context) ?: return
-        val pending = goAsync()
-        Thread {
-            try {
-                FollowUps.post("$base/$id/$action", JSONObject().put("minutes", 60))
-            } catch (_: Exception) {
-            } finally {
-                pending.finish()
-            }
-        }.start()
+        ActionWorker.send(context, "$base/$id/$action", JSONObject().put("minutes", 60).toString())
     }
 }

@@ -19,6 +19,8 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import androidx.work.BackoffPolicy
+import androidx.work.workDataOf
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -194,22 +196,46 @@ class TaskActionReceiver : BroadcastReceiver() {
         val action = intent.getStringExtra("action") ?: return
         context.getSystemService(NotificationManager::class.java).cancel(intent.getIntExtra("notification", 0))
         val feed = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE).getString("flutter.feed.url", null) ?: return
-        val pending = goAsync()
-        Thread {
-            try {
-                val path = intent.getStringExtra("path") ?: "tasks"
-                val connection = URL(feed.replace("/app/feed/", "/app/$path/") + "/$id/$action").openConnection() as HttpURLConnection
-                connection.requestMethod = "POST"
-                connection.connectTimeout = 8000
-                connection.readTimeout = 8000
-                connection.setRequestProperty("Accept", "application/json")
-                connection.responseCode
-                connection.disconnect()
-            } catch (_: Exception) {
-            } finally {
-                pending.finish()
-            }
-        }.start()
+        val path = intent.getStringExtra("path") ?: "tasks"
+        ActionWorker.send(context, feed.replace("/app/feed/", "/app/$path/") + "/$id/$action")
+    }
+}
+
+/**
+ * A button on a notification (Talked ✓, Done, Seen, 1 hour later) reaches the server for sure:
+ * kept by WorkManager and sent as soon as there is internet, tried again until the server has it —
+ * the phone asleep or offline at the tap never loses it.
+ */
+class ActionWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+    override fun doWork(): Result {
+        val target = inputData.getString("url") ?: return Result.success()
+        return try {
+            val connection = URL(target).openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 15000
+            connection.readTimeout = 20000
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.outputStream.use { it.write((inputData.getString("body") ?: "{}").toByteArray(Charsets.UTF_8)) }
+            val code = connection.responseCode
+            connection.disconnect()
+            // 404: that item is gone (deleted, unpaired) — nothing to send any more.
+            if (code in 200..299 || code == 404) Result.success() else Result.retry()
+        } catch (_: Exception) {
+            Result.retry()
+        }
+    }
+
+    companion object {
+        fun send(context: Context, url: String, body: String = "{}") {
+            val request = OneTimeWorkRequestBuilder<ActionWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                .setInputData(workDataOf("url" to url, "body" to body))
+                .build()
+            WorkManager.getInstance(context).enqueue(request)
+        }
     }
 }
 
@@ -219,21 +245,7 @@ class SeenReceiver : BroadcastReceiver() {
         val id = intent.getLongExtra("id", 0L)
         context.getSystemService(NotificationManager::class.java).cancel(intent.getIntExtra("notification", 0))
         val feed = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE).getString("flutter.feed.url", null) ?: return
-        val pending = goAsync()
-        Thread {
-            try {
-                val connection = URL("$feed/read?id=$id").openConnection() as HttpURLConnection
-                connection.requestMethod = "POST"
-                connection.connectTimeout = 8000
-                connection.readTimeout = 8000
-                connection.setRequestProperty("Accept", "application/json")
-                connection.responseCode
-                connection.disconnect()
-            } catch (_: Exception) {
-            } finally {
-                pending.finish()
-            }
-        }.start()
+        ActionWorker.send(context, "$feed/read?id=$id")
     }
 }
 
