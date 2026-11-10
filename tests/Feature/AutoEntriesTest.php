@@ -89,6 +89,12 @@ class AutoEntriesTest extends TestCase
                 ['provider' => 'dbs', 'direction' => 'out', 'amount' => 1230, 'currency' => 'SGD', 'counterparty' => 'FAIRPRICE XTRA']],
             'airwallex email' => ['notifications@airwallex.com', "You've received SGD 1,000.00\nPayment from KLOK ADS PTE LTD has arrived in your Airwallex account.",
                 ['provider' => 'airwallex', 'direction' => 'in', 'amount' => 100000, 'currency' => 'SGD']],
+            // Promotions and news from money apps: no money of mine moved.
+            'binance news' => ['Binance', 'Record $57B Leveraged ETF Selling Drove the Nov 5 Selloff. Morgan Stanley says leveraged ETFs sold a record $57B of US stocks', null],
+            'binance price alert' => ['Binance', 'BTC Price Alert 📉 . BTC Dips Below 74,000 USDT. Tap here to explore market dynamics and trade ➡️', null],
+            'binance reward' => ['Binance', 'Last Call for $10 in SPCXB. Earnings return every quarter, but this reward might not. Complete your mission now.', null],
+            'fasset promo' => ['Fasset', 'Sending money? Get gold back 💥. Send $30+ to any Fasset Tag and earn $1 in Tether Gold (XAUT) on every transfer until 22 Nov. T&Cs apply.', null],
+            'telegram bot' => ['Telegram', '[BOT] Gemini Pixel Extractor. 🎉 This bot is now Sellixy Marketplace Starting today you can buy digital products. Products are delivered once your payment of $0.10 succeeds', null],
         ];
     }
 

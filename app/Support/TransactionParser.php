@@ -51,7 +51,9 @@ class TransactionParser
         'withdraw', 'purchase', 'card transaction', 'card payment approved', 'pay bill', 'paid bill', 'bill payment', 'make payment', 'mobile recharge', 'top-up', 'topup', 'paid $', 'paid us$', 'paid usd', 'paid sgd', 'paid bdt', 'spent', 'transferred', 'transfer of', 'bill pay', 'recharge', 'merchant payment', 'you sent', "you've sent", 'debit'];
 
     /** Not a completed transaction: codes, promotions, failures (whole words only). */
-    private const NOT_MONEY = '/\b(otp|one[- ]time password|verification code|do not share|pin|offer|cashback up to|win|\d+% off|discount|failed|unsuccessful|declined|insufficient)\b/u';
+    private const NOT_MONEY = '/\b(otp|one[- ]time password|verification code|do not share|pin|offer|cashback up to|win|\d+% off|discount|failed|unsuccessful|declined|insufficient'
+        // Promotions, rewards, price alerts and news (Binance, Fasset, Telegram bots…): never my money.
+        .'|price alert|crosses|dips below|rewards?|earn|up to|voucher|bonus|referral|invite|mission|claim|giveaway|t&cs apply|marketplace|starting today|market update|liquidations?|valuation|selloff|sell-off)\b/u';
 
     /**
      * @return array{provider: ?string, direction: string, amount: int, currency: string, counterparty: ?string, reference: ?string, fee: int, last4: ?string, balance: ?int}|null
@@ -131,6 +133,8 @@ class TransactionParser
         // A date is never the amount ("29-Oct-2026 Tk. 1,00,000" is not ৳2,026).
         $raw = preg_replace('/\b\d{1,2}[-\/. ](?:[A-Za-z]{3,9}|\d{1,2})[-\/. ]\d{2,4}\b/u', ' ', $raw);
         $pattern = '/(?:(?<cur>tk\.?|bdt|৳|sgd|s\$|usdt|usdc|usd|us\$|\$)\s*(?<a>\d[\d,]*(?:\.\d{1,8})?))|(?:(?<b>\d[\d,]*(?:\.\d{1,8})?)\s*(?<cur2>tk|bdt|taka|sgd|usdt|usdc|usd))/iu';
+        // "$57B", "$1.2 million": market news, not an amount.
+        $raw = preg_replace('/(?:\$|usd|tk)?\s?\d[\d,.]*\s?(?:[bmkt]\b|bn\b|million\b|billion\b|trillion\b)/iu', ' ', $raw);
         // An account number is never the amount ("Account: 20502797800006814 Tk2,000.00").
         $raw = preg_replace('/\d{11,}/', ' ', $raw);
         if (! preg_match($pattern, $raw, $m)) {
