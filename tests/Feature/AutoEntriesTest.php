@@ -281,6 +281,23 @@ class AutoEntriesTest extends TestCase
         $this->assertSame([627000, 207782], [Ledger::balance($merchant), Ledger::balance($personal)]);
     }
 
+    public function test_interest_and_its_tax_are_kept_apart_and_giving_it_away_brings_it_to_zero(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $city = Account::create(['name' => 'City Bank', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'city', 'last4' => '0001', 'currency' => 'BDT', 'opening_balance' => 2121400]);
+        $auto = app(AutoEntries::class);
+        $auto->ingest('sms', 'CITYBANK', 'Interest credited Tk. 25.01 to A/C 2583***0001. Balance Tk. 21,239.01');
+        $auto->ingest('sms', 'CITYBANK', 'Tax deducted Tk. 3.75 from A/C 2583***0001. Balance Tk. 21,235.26');
+
+        $this->assertSame(['interest', 'interest_tax'], MoneyTransaction::orderBy('id')->pluck('category')->all());
+        $this->assertSame(2126, AutoEntries::interestDue()['due']);
+        $this->get('/personal')->assertInertia(fn ($page) => $page->where('interest.due', 2126)->where('stats.BDT.current.in', 0));
+
+        $this->post('/personal/interest/give', ['account_id' => $city->id])->assertSessionHas('success');
+        $this->assertSame(0, AutoEntries::interestDue()['due']);
+        $this->assertSame(2121400, Ledger::balance($city), 'what came in went out again');
+    }
+
     public function test_atm_cash_moves_to_cash_in_hand(): void
     {
         $this->actingAs(User::factory()->create(['is_owner' => true]));

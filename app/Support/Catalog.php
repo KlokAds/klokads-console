@@ -69,6 +69,8 @@ class Catalog
         'sadaqah' => 'Sadaqah (not recorded)',
         'envelope' => 'Monthly envelope',
         'mobile_recharge' => 'Mobile recharge',
+        'interest_tax' => 'Tax on interest',
+        'interest_given' => 'Interest given away',
         'bank_fees' => 'Bank & transfer fees',
         'client_ads' => 'Client ads (Meta charged my card)',
         'other' => 'Other',
@@ -136,6 +138,15 @@ class Catalog
         'held_for_others' => 'Someone else\'s money (in)',
         'paid_for_others' => 'Paid with someone else\'s money',
     ];
+
+    /** Interest (riba): kept apart until I give it away — never my income, its tax and giving never my spending. */
+    public const INTEREST_CATEGORIES = ['interest', 'interest_tax', 'interest_given'];
+
+    /** Categories month totals leave out: dena-paona, others' money, interest. @return array<int, string> */
+    public static function outsideTotals(): array
+    {
+        return [...array_keys(self::LOAN_CATEGORIES), ...self::INTEREST_CATEGORIES];
+    }
 
     /** How clients pay my personal invoices. */
     public const PAY_METHODS = [

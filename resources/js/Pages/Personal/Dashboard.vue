@@ -5,7 +5,8 @@ import Segmented from '@/Components/Ui/Segmented.vue';
 import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { cash, cat, currencyChoice, greeting, quickAdd } from '@/personal';
 import { currentDeviceHash, pushStatus } from '@/push';
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import Select from '@/Components/Ui/Select.vue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
 
 const props = defineProps({
@@ -19,7 +20,11 @@ const props = defineProps({
     spendCategories: Array,
     loans: { type: Object, default: () => ({ totals: {}, soon: [], count: 0 }) },
     providers: Object,
+    interest: { type: Object, default: () => ({ due: 0, received: 0, tax: 0, given: 0 }) },
 });
+// Interest (riba): kept apart; given away in one tap from the account I choose.
+const giveFrom = ref(props.accounts.find((a) => a.currency === 'BDT')?.id ?? null);
+const giveInterest = () => router.post(route('personal.interest.give'), { account_id: giveFrom.value }, { preserveScroll: true });
 
 const first = computed(() => (usePage().props.auth.user?.name ?? '').split(' ')[0]);
 const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -138,6 +143,21 @@ function dismissReminders() {
                             <span class="text-xl leading-none">{{ a.emoji }}</span>{{ a.label }}
                         </button>
                     </div>
+                </div>
+            </div>
+
+            <!-- Interest to give away -->
+            <div v-if="interest.due > 0 || interest.received > 0" class="mt-4 rounded-3xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+                <div class="flex flex-wrap items-center gap-3">
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-lg dark:bg-amber-500/20">🤲</span>
+                    <div class="min-w-0 flex-1">
+                        <div class="text-sm font-bold text-ink-900">Interest to give away: {{ cash(interest.due, 'BDT') }}</div>
+                        <div class="text-xs text-ink-500">Banks paid {{ cash(interest.received, 'BDT') }} · tax cut {{ cash(interest.tax, 'BDT') }} · given {{ cash(interest.given, 'BDT') }} — never counted as my income.</div>
+                    </div>
+                    <template v-if="interest.due > 0">
+                        <Select v-model="giveFrom" :options="accounts.filter((a) => a.currency === 'BDT').map((a) => ({ value: a.id, label: a.name + (a.last4 ? ' ••' + a.last4 : '') }))" size="sm" class="min-w-[150px]" />
+                        <button class="btn-primary btn-sm" :disabled="!giveFrom" @click="giveInterest"><Icon name="check" :size="14" /> Gave it away</button>
+                    </template>
                 </div>
             </div>
 

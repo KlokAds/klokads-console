@@ -8,9 +8,11 @@ use App\Models\Budget;
 use App\Models\Goal;
 use App\Models\Loan;
 use App\Models\MoneyTransaction;
+use App\Services\AutoEntries;
 use App\Services\Envelopes;
 use App\Support\Catalog;
 use App\Support\Ledger;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -26,6 +28,18 @@ class PersonalDashboardController extends Controller
     public function __invoke(Request $request): Response
     {
         return Inertia::render('Personal/Dashboard', $this->data($request));
+    }
+
+    /** I gave the interest money away: it is booked from the account I gave it from, and what is due is ৳0. */
+    public function giveInterest(Request $request): RedirectResponse
+    {
+        $data = $request->validate(['account_id' => ['required', 'exists:accounts,id']]);
+        $due = AutoEntries::interestDue()['due'];
+        abort_unless($due > 0, 422);
+        Ledger::save(['kind' => 'expense', 'account_id' => (int) $data['account_id'], 'amount' => $due, 'category' => 'interest_given',
+            'counterparty' => 'Interest given away (sadaqah)', 'occurred_on' => now()->toDateString()]);
+
+        return back()->with('success', 'Done — the interest money is given away. Nothing due now.');
     }
 
     /** Budgets, savings goals and monthly bills in one place. */
@@ -110,6 +124,7 @@ class PersonalDashboardController extends Controller
         $paidBills = $monthTx->whereNotNull('bill_id')->keyBy('bill_id');
 
         return [
+            'interest' => AutoEntries::interestDue(),
             'currencies' => $currencies,
             'accounts' => $accounts->map(fn (Account $a) => [
                 ...$a->only('id', 'name', 'kind', 'purpose', 'provider', 'last4'),
@@ -193,7 +208,7 @@ class PersonalDashboardController extends Controller
         foreach ($transactions as $t) {
             $fromMine = in_array($t->account_id, $ids, true) && strtoupper($t->account->currency) === $currency;
             // Dena-paona moves money but is neither spending nor income — only its sending fee is spent.
-            if ($t->kind !== 'transfer' && array_key_exists((string) $t->category, Catalog::LOAN_CATEGORIES)) {
+            if ($t->kind !== 'transfer' && in_array((string) $t->category, Catalog::outsideTotals(), true)) {
                 if ($fromMine && $t->fee) {
                     $add('bank_fees', $t->fee);
                 }

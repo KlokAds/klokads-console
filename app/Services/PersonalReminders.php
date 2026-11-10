@@ -80,7 +80,7 @@ class PersonalReminders
         $ids = Account::where('scope', 'personal')->pluck('id');
         $entries = MoneyTransaction::with('account:id,currency')->whereIn('account_id', $ids)->whereDate('occurred_on', $today)
             ->where(fn ($q) => $q->whereNull('category')->orWhere('category', '!=', Catalog::SADAQAH))->get();
-        $spent = $entries->where('kind', 'expense')->reject(fn ($t) => array_key_exists((string) $t->category, Catalog::LOAN_CATEGORIES))
+        $spent = $entries->where('kind', 'expense')->reject(fn ($t) => in_array((string) $t->category, Catalog::outsideTotals(), true))
             ->groupBy(fn ($t) => strtoupper($t->account->currency))
             ->map(fn ($list, $currency) => Notify::money((int) $list->sum(fn ($t) => $t->amount + $t->fee), $currency))->implode(' · ');
         $url = route('personal.activity', ['new' => 1]);

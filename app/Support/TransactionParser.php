@@ -48,7 +48,7 @@ class TransactionParser
         'deposit', 'deposited', 'incoming', 'you received', "you've received", 'payment received', 'refund', 'added to your', 'add money', 'money added', 'received money', 'remittance received', 'salary', 'cashback', 'reversal'];
 
     private const OUT = ['you sold', 'sold ', 'sell order', 'send money', 'money sent', 'sent $', 'sent usd', 'sent sgd', 'sent bdt', 'sent tk', 'has been debited', 'debited with', 'debited by', 'debited from', 'payment tk', 'payment of', 'paid tk', 'you paid', 'you have paid', 'cash out',
-        'withdraw', 'purchase', 'card transaction', 'card payment approved', 'pay bill', 'paid bill', 'bill payment', 'make payment', 'mobile recharge', 'top-up', 'topup', 'paid $', 'paid us$', 'paid usd', 'paid sgd', 'paid bdt', 'spent', 'transferred', 'transfer of', 'bill pay', 'recharge', 'merchant payment', 'you sent', "you've sent", 'debit'];
+        'withdraw', 'purchase', 'card transaction', 'card payment approved', 'pay bill', 'paid bill', 'bill payment', 'make payment', 'mobile recharge', 'top-up', 'topup', 'paid $', 'paid us$', 'paid usd', 'paid sgd', 'paid bdt', 'spent', 'transferred', 'transfer of', 'bill pay', 'recharge', 'merchant payment', 'you sent', "you've sent", 'debit', 'deducted'];
 
     /** Not a completed transaction: codes, promotions, failures (whole words only). */
     private const NOT_MONEY = '/\b(otp|one[- ]time password|verification code|do not share|pin|offer|cashback up to|win|\d+% off|discount|failed|unsuccessful|declined|insufficient'
