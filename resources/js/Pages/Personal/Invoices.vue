@@ -12,7 +12,7 @@ import PersonalLayout from '@/Layouts/PersonalLayout.vue';
 import { confirmDialog } from '@/confirm';
 import { date, money, wantsNew } from '@/money';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 const props = defineProps({
     invoices: Array,
@@ -58,6 +58,12 @@ function openInv(inv = null) {
     invForm.clearErrors();
     showInv.value = true;
 }
+// Opened from elsewhere to change one invoice (?edit=ID, e.g. an ads bill): its editor opens at once.
+onMounted(() => {
+    const id = Number(new URLSearchParams(window.location.search).get('edit'));
+    const inv = id ? props.invoices.find((i) => i.id === id) : null;
+    if (inv) openInv(inv);
+});
 function saveInv() {
     const opts = { preserveScroll: true, onSuccess: () => (showInv.value = false) };
     editingInv.value ? invForm.put(route('personal.invoices.update', editingInv.value.id), opts) : invForm.post(route('personal.invoices.store'), opts);

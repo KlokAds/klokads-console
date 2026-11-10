@@ -420,6 +420,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                         </div>
                         <div v-if="ch.invoice || (!ch.billed && ch.kind !== 'credit')" class="mt-2 flex items-center justify-end gap-2 border-t border-line/60 pt-2">
                             <span v-if="ch.invoice" class="mr-auto text-xs text-ink-500">On {{ ch.invoice }}</span>
+                            <Link v-if="ch.invoice_id" :href="route('personal.invoices.index', { edit: ch.invoice_id })" class="btn-secondary btn-sm"><Icon name="pencil" :size="14" /> Edit</Link>
                             <span v-else-if="ch.kind === 'credit'" class="mr-auto text-xs text-ink-500">Meta's credit — never on their bill</span>
                             <button v-if="!ch.billed && ch.kind !== 'credit'" class="btn-primary btn-sm" @click="billCharge(ch)"><Icon name="invoice" :size="14" /> Bill this</button>
                         </div>

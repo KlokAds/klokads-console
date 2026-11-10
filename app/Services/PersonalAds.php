@@ -597,6 +597,7 @@ class PersonalAds
             'period' => self::period(CarbonImmutable::parse($b->period_from), CarbonImmutable::parse($b->period_to))]])->all();
         $stateOf = $bills->mapWithKeys(fn (PersonalAdBill $b) => [$b->id => $b->invoice?->status ?? 'unpaid'])->all();
         $numberOf = $bills->mapWithKeys(fn (PersonalAdBill $b) => [$b->id => $b->invoice?->number])->all();
+        $invoiceOf = $bills->mapWithKeys(fn (PersonalAdBill $b) => [$b->id => $b->invoice?->id])->all();
         $state = AdAccountState::whereIn('account_id', $c->adAssignments()->where('paid_by', 'me')->pluck('account_id'))->get();
 
         return ['bills' => $rows->reverse()->values()->all(), 'totals' => $totals, 'unbilled' => $unbilled, 'unbilled_from' => $from?->toDateString(),
@@ -614,6 +615,7 @@ class PersonalAds
                     'auto' => in_array($ch->source, ['auto', 'meta'], true), 'billed' => (bool) $ch->personal_ad_bill_id,
                     // not billed → on a bill, unpaid → part paid → paid (by the client's payments)
                     'state' => $ch->kind === 'credit' ? 'credit' : (! $ch->personal_ad_bill_id ? 'to_bill' : ($stateOf[$ch->personal_ad_bill_id] ?? 'unpaid')),
-                    'invoice' => $ch->personal_ad_bill_id ? ($numberOf[$ch->personal_ad_bill_id] ?? null) : null])->all()];
+                    'invoice' => $ch->personal_ad_bill_id ? ($numberOf[$ch->personal_ad_bill_id] ?? null) : null,
+                    'invoice_id' => $ch->personal_ad_bill_id ? ($invoiceOf[$ch->personal_ad_bill_id] ?? null) : null])->all()];
     }
 }
