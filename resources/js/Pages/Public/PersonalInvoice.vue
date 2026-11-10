@@ -166,14 +166,17 @@ const report = () => {
                     </div>
 
                     <div v-if="me.methods.length" class="mt-4 grid gap-2.5 sm:grid-cols-2">
-                        <div v-for="(m, k) in me.methods" :key="k" class="flex min-w-0 items-center gap-3 rounded-2xl border border-[#E4DED2] bg-[#FBF8F2] p-3.5">
+                        <div v-for="(m, k) in me.methods" :key="k" class="flex min-w-0 items-start gap-3 rounded-2xl border border-[#E4DED2] bg-[#FBF8F2] p-3.5">
                             <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0E1630] text-[#E9D7B3]"><Icon :name="ICON[m.type] ?? 'card'" :size="17" /></span>
                             <div class="min-w-0 flex-1">
-                                <div class="text-[11px] font-semibold uppercase tracking-wider text-[#8D8A80]">{{ m.label || methods[m.type] }}</div>
-                                <div class="break-all font-mono text-[15px] font-semibold">{{ m.number }}</div>
+                                <!-- the bank's name and the Copy button share the top line, so the number gets the full width -->
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="min-w-0 text-[11px] font-semibold uppercase tracking-wider text-[#8D8A80]">{{ m.label || methods[m.type] }}</span>
+                                    <CopyButton v-if="m.number" :text="m.number" label="Copy" class="shrink-0 !px-2.5 !py-1 !text-xs" />
+                                </div>
+                                <div class="mt-0.5 whitespace-nowrap font-mono text-[15px] font-semibold tracking-tight">{{ m.number }}</div>
                                 <div v-if="m.name || m.extra" class="text-[11px] leading-snug text-[#6B6F82]">{{ [m.name, m.extra].filter(Boolean).join(' · ') }}</div>
                             </div>
-                            <CopyButton v-if="m.number" :text="m.number" label="Copy" class="shrink-0" />
                         </div>
                     </div>
                     <p v-else class="mt-3 text-sm text-[#3A4060]">Pay {{ me.name }} by your usual way<template v-if="me.phone"> — or call <b>{{ me.phone }}</b></template>.</p>
