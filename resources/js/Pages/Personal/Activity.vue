@@ -112,7 +112,7 @@ const filterChips = computed(() => live.value.map((a) => ({ id: a.id, name: a.na
 
 const sheet = ref(false);
 const editing = ref(null);
-const blankAccount = () => ({ name: '', scope: 'personal', kind: 'bank', currency: props.currencies[0], provider: '', last4: '', match_digits: '', app_profile: 'main', in_fee_pct: '', in_fee_fixed: '', out_fee_pct: '', out_fee_fixed: '', purpose: 'spending', opening_balance: '', business_share: '', notes: '', guide: '', archived: false });
+const blankAccount = () => ({ name: '', scope: 'personal', kind: 'bank', currency: props.currencies[0], provider: '', last4: '', match_digits: '', match_senders: '', app_profile: 'main', in_fee_pct: '', in_fee_fixed: '', out_fee_pct: '', out_fee_fixed: '', purpose: 'spending', opening_balance: '', business_share: '', notes: '', guide: '', archived: false });
 const form = useForm(blankAccount());
 const isMfs = computed(() => props.mfs.includes(form.provider));
 const isForeign = computed(() => form.currency !== props.currencies[0]);
@@ -124,7 +124,7 @@ const matchBank = (a) => router.post(route('money.accounts.match-bank', a.id), {
 function openAccount(a = null) {
     editing.value = a;
     form.defaults(a
-        ? { ...blankAccount(), scope: a.scope ?? 'personal', name: a.name, kind: a.kind, currency: a.currency, provider: a.provider ?? '', last4: a.last4 ?? '', match_digits: a.match_digits ?? '', app_profile: a.app_profile ?? 'main', in_fee_pct: a.in_fee_pct || '', in_fee_fixed: a.in_fee_fixed ? String(a.in_fee_fixed / 100) : '', out_fee_pct: a.out_fee_pct || '', out_fee_fixed: a.out_fee_fixed ? String(a.out_fee_fixed / 100) : '', purpose: a.purpose ?? 'spending', opening_balance: a.opening_balance ? String(a.opening_balance / 100) : '', business_share: a.business_share ? String(a.business_share / 100) : '', notes: a.notes ?? '', guide: a.guide ?? '', archived: !!a.archived }
+        ? { ...blankAccount(), scope: a.scope ?? 'personal', name: a.name, kind: a.kind, currency: a.currency, provider: a.provider ?? '', last4: a.last4 ?? '', match_digits: a.match_digits ?? '', match_senders: a.match_senders ?? '', app_profile: a.app_profile ?? 'main', in_fee_pct: a.in_fee_pct || '', in_fee_fixed: a.in_fee_fixed ? String(a.in_fee_fixed / 100) : '', out_fee_pct: a.out_fee_pct || '', out_fee_fixed: a.out_fee_fixed ? String(a.out_fee_fixed / 100) : '', purpose: a.purpose ?? 'spending', opening_balance: a.opening_balance ? String(a.opening_balance / 100) : '', business_share: a.business_share ? String(a.business_share / 100) : '', notes: a.notes ?? '', guide: a.guide ?? '', archived: !!a.archived }
         : blankAccount());
     form.reset();
     form.clearErrors();
@@ -426,6 +426,12 @@ onMounted(() => {
                         <input id="acc-more" v-model="form.match_digits" class="input tabular-nums" inputmode="numeric" placeholder="e.g. 6903, 5372" />
                         <p class="mt-1 text-[11px] text-ink-500">A message or app notification that shows one of these (like "card ending 6903") is booked here too.</p>
                         <div v-if="form.errors.match_digits" class="error">{{ form.errors.match_digits }}</div>
+                    </div>
+                    <div v-if="form.kind !== 'cash'">
+                        <label class="label" for="acc-senders">Messages from <span class="font-normal text-ink-400">(app or SMS sender, optional)</span></label>
+                        <input id="acc-senders" v-model="form.match_senders" class="input" placeholder="e.g. Merchant App" />
+                        <p class="mt-1 text-[11px] text-ink-500">Every money message from these (comma between them) is this account's — like bKash's Merchant App for the merchant wallet.</p>
+                        <div v-if="form.errors.match_senders" class="error">{{ form.errors.match_senders }}</div>
                     </div>
                     <div v-if="form.scope === 'personal'">
                         <div class="label">Used for</div>

@@ -261,6 +261,25 @@ class AutoEntriesTest extends TestCase
         $this->assertSame(182400, Ledger::balance($bkash));
     }
 
+    public function test_the_merchant_apps_messages_go_to_the_merchant_wallet_once(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $personal = Account::create(['name' => 'bKash', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'last4' => '9304', 'currency' => 'BDT', 'opening_balance' => 207782]);
+        $merchant = Account::create(['name' => 'bKash Merchant', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'last4' => '3746', 'currency' => 'BDT', 'opening_balance' => 1000, 'match_senders' => 'Merchant App']);
+        InboxRules::remember('app', 'Merchant App', true);
+        $auto = app(AutoEntries::class);
+
+        // The merchant app's pay bill, then bKash's SMS about it (same TrxID): one, on the merchant wallet, waiting.
+        $auto->ingest('app', 'Merchant App', 'Pay Bill. Your Pay Bill request of Tk 916.0 is being processed at 08/11/2026 06:22 PM. Fee: Tk 0.0 TrxID: DK80821LYE Org: BREB A/C: 1036102842635');
+        $auto->ingest('sms', 'bKashNotice', 'Your Pay Bill request of Tk 916.0 is being processed at 08/11/26 06:22PM Fee: Tk 0.0 TrxID: DK80821LYE Org: Palli Bidyut (Postpaid) A/C: 1036102842635');
+        $this->assertSame(1, InboxMessage::count());
+        $this->assertSame(['pending', $merchant->id], [InboxMessage::sole()->status, InboxMessage::sole()->account_id]);
+
+        // A payment the merchant wallet received: its balance says which wallet.
+        $auto->ingest('sms', 'bKash', 'You have received payment Tk 6,260.00 from 0171XXXX070. Ref 2. Fee Tk 0.00. Balance Tk 6,270.00. TrxID DK88791VZA at 08/11/2026 09:33');
+        $this->assertSame([627000, 207782], [Ledger::balance($merchant), Ledger::balance($personal)]);
+    }
+
     public function test_atm_cash_moves_to_cash_in_hand(): void
     {
         $this->actingAs(User::factory()->create(['is_owner' => true]));

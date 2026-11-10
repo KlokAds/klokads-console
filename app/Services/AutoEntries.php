@@ -123,7 +123,7 @@ class AutoEntries
     public function process(InboxMessage $message, ?int $accountId = null, ?string $category = null): InboxMessage
     {
         $p = $message->parsed;
-        $account = $accountId ? Account::find($accountId) : $this->account($p);
+        $account = $accountId ? Account::find($accountId) : $this->account($p, $message->sender);
         if (! $account) {
             $message->update(['status' => 'review', 'note' => $p['provider'] ? 'No matching '.strtoupper($p['currency']).' account for '.$p['provider'] : 'Which account is this?']);
             $this->notify->send('info', '👀 '.($p['direction'] === 'in' ? 'Money in' : 'Money out').' — which account?',
@@ -434,9 +434,17 @@ class AutoEntries
      * Which of my accounts: the last 4 digits first (they belong to one account),
      * then the bank / wallet and currency, with the digits picking between several.
      */
-    private function account(array $p): ?Account
+    private function account(array $p, ?string $sender = null): ?Account
     {
         $live = Account::where('archived', false)->where('kind', '!=', 'investment')->whereRaw('upper(currency) = ?', [strtoupper($p['currency'])])->orderByRaw("scope = 'personal' desc")->get();
+
+        // A sender I tied to one account (bKash's Merchant App → the merchant wallet) decides first.
+        $from = InboxRules::normalise((string) $sender);
+        $bySender = $from === '' ? collect() : $live->filter(fn (Account $a) => collect(explode(',', (string) $a->match_senders))
+            ->map(fn ($s) => InboxRules::normalise($s))->filter()->contains(fn ($s) => str_contains($from, $s)));
+        if ($bySender->count() === 1) {
+            return $bySender->first();
+        }
         $digits = $p['last4'] ?? null;
 
         if ($digits) {

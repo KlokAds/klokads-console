@@ -203,6 +203,7 @@ class MoneyController extends Controller
             'provider' => ['nullable', 'string', 'max:40'],
             'last4' => ['nullable', 'digits:4'],
             'match_digits' => ['nullable', 'string', 'max:120', 'regex:/^[\d\s,]*$/'],
+            'match_senders' => ['nullable', 'string', 'max:200'],
             'app_profile' => ['nullable', Rule::in(['main', 'clone'])],
             'in_fee_pct' => ['nullable', 'numeric', 'min:0', 'max:50'],
             'in_fee_fixed' => ['nullable', 'numeric', 'min:0'],

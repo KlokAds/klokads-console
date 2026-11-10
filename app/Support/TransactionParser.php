@@ -11,7 +11,7 @@ class TransactionParser
 {
     /** Sender / text clues → provider key (matches Catalog::PROVIDERS). */
     private const PROVIDERS = [
-        'bkash' => ['bkash'],
+        'bkash' => ['bkash', 'merchant app'],
         'nagad' => ['nagad'],
         'rocket' => ['rocket', '16216', 'dbbl mobile'],
         'upay' => ['upay'],
