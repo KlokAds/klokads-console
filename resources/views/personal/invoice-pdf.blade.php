@@ -16,7 +16,7 @@
 <meta charset="utf-8">
 <style>
     /* The bottom 78pt of every page belongs to the sign-off, so lines never run under it. */
-    @page { margin: 34px 0 78px 0; }
+    @page { margin: 34px 0 64px 0; }
     @page :first { margin-top: 0; }
     html { background: {{ $paper }}; }
     body { margin: 0; font-family: 'DejaVu Sans', Helvetica, sans-serif; color: {{ $navy }}; font-size: 10.5px; background: {{ $paper }}; }
@@ -29,7 +29,7 @@
     .cap { font-size: 8px; text-transform: uppercase; letter-spacing: 2px; color: {{ $soft }}; font-weight: bold; }
     .wrap { padding: 0 52px; }
     .items th { font-size: 8px; text-transform: uppercase; letter-spacing: 1.6px; color: {{ $soft }}; padding: 0 0 7px; border-bottom: 1.2px solid {{ $navy }}; text-align: left; }
-    .items td { padding: 11px 0; border-bottom: 0.6px solid {{ $line }}; }
+    .items td { padding: 9px 0; border-bottom: 0.6px solid {{ $line }}; }
     .pill { display: inline-block; padding: 4px 11px; border-radius: 99px; font-size: 9px; font-weight: bold; letter-spacing: .5px; }
     .method { border: 0.8px solid {{ $line }}; border-radius: 10px; padding: 9px 12px; background: #FFFDF9; }
 </style>
@@ -169,7 +169,7 @@
 
 {{-- How to pay --}}
 @if ($open)
-    <div class="wrap" style="padding-top:30px">
+    <div class="wrap" style="padding-top:24px;page-break-inside:avoid">
         <table><tr><td style="width:22px;padding-top:7px"><div style="height:1px;background:{{ $brass }}"></div></td><td class="serif" style="padding-left:8px;font-size:13px;font-weight:bold">How to pay</td></tr></table>
         <table style="margin-top:10px">
             <tr>
@@ -213,8 +213,8 @@
 <div style="position:fixed;top:-34px;left:0;right:0;height:34px;background:{{ $paper }}"></div>
 
 {{-- Sign-off, at the foot of the page --}}
-<div style="position:fixed;bottom:-78px;left:0;right:0;height:78px;background:{{ $paper }}">
-    <div class="wrap" style="padding-bottom:26px">
+<div style="position:fixed;bottom:-64px;left:0;right:0;background:{{ $paper }}">
+    <div class="wrap" style="padding-bottom:20px">
         <table style="border-top:0.6px solid {{ $line }}">
             <tr>
                 <td style="padding-top:12px"><span class="serif" style="font-size:13px;font-style:italic">Thank you.</span> <span class="muted">&nbsp;{{ $me['name'] }}</span></td>
