@@ -31,7 +31,7 @@ class PersonalInvoiceController extends Controller
     public function index(Request $request): Response
     {
         $request->session()->put('mode', 'personal');
-        $invoices = PersonalInvoice::with('client', 'payments')->latest('issued_on')->latest('id')->get();
+        $invoices = PersonalInvoice::with('client', 'payments', 'carriedInto')->latest('issued_on')->latest('id')->get();
 
         return Inertia::render('Personal/Invoices', [
             'invoices' => $invoices->map(fn (PersonalInvoice $i) => [
@@ -39,6 +39,7 @@ class PersonalInvoiceController extends Controller
                 'client' => $i->client->only('id', 'name', 'company', 'email', 'phone'),
                 'due' => $i->due(),
                 'total' => $i->grand(), // with the previous dues it carries
+                'carried_into' => $i->carriedInto?->only('id', 'number'),
                 'issued_on' => $i->issued_on->toDateString(),
                 'due_on' => $i->due_on?->toDateString(),
                 'paid_on' => $i->paid_on?->toDateString(),
@@ -81,6 +82,10 @@ class PersonalInvoiceController extends Controller
 
     public function update(Request $request, PersonalInvoice $invoice): RedirectResponse
     {
+        // Gone into a newer invoice: that one is what the client pays, so this one stays as it was.
+        if ($invoice->status === 'carried' && $invoice->carriedInto) {
+            return back()->with('error', "{$invoice->number} is part of {$invoice->carriedInto->number} now — edit that one, or take it out of it first.");
+        }
         $data = $this->invoiceData($request);
         $invoice->update([...collect($data)->except('send')->all(), 'total' => PersonalInvoicing::total($data['items'])]);
         $this->invoicing->refresh($invoice->fresh());
@@ -331,7 +336,8 @@ class PersonalInvoiceController extends Controller
             // Their other unpaid invoices, to carry into this one.
             'canCarry' => in_array($invoice->status, ['unpaid', 'partial'], true) ? PersonalInvoice::where('personal_client_id', $invoice->personal_client_id)
                 ->where('currency', $invoice->currency)->where('id', '!=', $invoice->id)->whereIn('status', ['unpaid', 'partial'])->whereNull('carried_into_id')
-                ->orderBy('issued_on')->get()->map(fn ($p) => ['id' => $p->id, 'number' => $p->number, 'issued_on' => $p->issued_on->toDateString(), 'due' => $p->due()])->values() : [],
+                ->orderBy('issued_on')->get()->filter(fn ($p) => PersonalInvoicing::kind($p) === PersonalInvoicing::kind($invoice))
+                ->map(fn ($p) => ['id' => $p->id, 'number' => $p->number, 'issued_on' => $p->issued_on->toDateString(), 'due' => $p->due()])->values() : [],
             'payments' => $invoice->payments->sortBy('paid_on')->values()->map(fn ($p) => [
                 'id' => $p->id, 'amount' => $p->amount, 'paid_on' => $p->paid_on->toDateString(),
                 'method' => Catalog::PAY_METHODS[$p->method] ?? $p->method, 'reference' => $p->reference, 'account' => $p->account?->name,

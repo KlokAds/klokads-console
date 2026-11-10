@@ -420,7 +420,8 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                         </div>
                         <div v-if="ch.invoice || (!ch.billed && ch.kind !== 'credit')" class="mt-2 flex items-center justify-end gap-2 border-t border-line/60 pt-2">
                             <span v-if="ch.invoice" class="mr-auto text-xs text-ink-500">On {{ ch.invoice }}</span>
-                            <Link v-if="ch.invoice_id" :href="route('personal.invoices.index', { edit: ch.invoice_id })" class="btn-secondary btn-sm"><Icon name="pencil" :size="14" /> Edit</Link>
+                            <span v-if="ch.moved_to" class="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:ring-indigo-500/30"><Icon name="alert" :size="12" /> Part of {{ ch.moved_to }} — edit that one</span>
+                            <Link v-else-if="ch.invoice_id" :href="route('personal.invoices.index', { edit: ch.invoice_id })" class="btn-secondary btn-sm"><Icon name="pencil" :size="14" /> Edit</Link>
                             <span v-else-if="ch.kind === 'credit'" class="mr-auto text-xs text-ink-500">Meta's credit — never on their bill</span>
                             <button v-if="!ch.billed && ch.kind !== 'credit'" class="btn-primary btn-sm" @click="billCharge(ch)"><Icon name="invoice" :size="14" /> Bill this</button>
                         </div>

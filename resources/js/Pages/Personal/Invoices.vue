@@ -49,7 +49,13 @@ const editingInv = ref(null);
 const blankItem = () => ({ description: '', qty: 1, rate: '' });
 const invForm = useForm({ personal_client_id: '', items: [blankItem()], issued_on: today(), due_on: plusDays(7), note: '', send: true });
 const invTotal = computed(() => invForm.items.reduce((s, i) => s + Math.round((Number(i.qty) || 0) * (Number(i.rate) || 0) * 100), 0));
+const movedNote = ref(null);
 function openInv(inv = null) {
+    // Gone into a newer invoice: not edited here — say where it went.
+    if (inv?.status === 'carried') {
+        movedNote.value = inv;
+        return;
+    }
     editingInv.value = inv;
     invForm.defaults(inv
         ? { personal_client_id: inv.personal_client_id, items: inv.items.map((i) => ({ ...i, rate: (i.rate / 100).toString() })), issued_on: inv.issued_on, due_on: inv.due_on ?? '', note: inv.note ?? '', send: false }
@@ -309,6 +315,23 @@ if (wantsNew()) openInv();
         </form>
 
         <!-- Invoice editor -->
+        <!-- A combined invoice: not edited on its own -->
+        <Modal :show="!!movedNote" max-width="sm" @close="movedNote = null">
+            <div v-if="movedNote" class="p-6">
+                <div class="flex items-start gap-3">
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15"><Icon name="alert" :size="18" /></span>
+                    <div>
+                        <h2 class="text-lg font-bold text-ink-900">{{ movedNote.number }} is part of {{ movedNote.carried_into?.number }}</h2>
+                        <p class="mt-1 text-sm text-ink-600">It went into the newer invoice as a previous due, so the client pays that one. Edit {{ movedNote.carried_into?.number }} — or take {{ movedNote.number }} out of it first to change it on its own.</p>
+                    </div>
+                </div>
+                <div class="mt-5 flex justify-end gap-2">
+                    <button type="button" class="btn-secondary" @click="movedNote = null">Close</button>
+                    <Link v-if="movedNote.carried_into" :href="route('personal.invoices.show', movedNote.carried_into.id)" class="btn-primary"><Icon name="external" :size="16" /> Open {{ movedNote.carried_into.number }}</Link>
+                </div>
+            </div>
+        </Modal>
+
         <Modal :show="showInv" max-width="2xl" @close="showInv = false">
             <form @submit.prevent="saveInv">
                 <div class="flex items-start justify-between border-b border-line px-6 py-5">

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Mail\PersonalInvoiceMail;
 use App\Models\MoneyTransaction;
+use App\Models\PersonalAdBill;
 use App\Models\PersonalClient;
 use App\Models\PersonalInvoice;
 use App\Models\PersonalInvoicePayment;
@@ -171,6 +172,9 @@ class PersonalInvoicing
             || ! in_array($old->status, ['unpaid', 'partial'], true) || ! in_array($into->status, ['unpaid', 'partial'], true) || $old->carried_into_id) {
             throw new RuntimeException('Only an unpaid invoice of the same client (and money) can go into another unpaid one.');
         }
+        if (self::kind($old) !== self::kind($into)) {
+            throw new RuntimeException('A salary invoice and an ads bill stay apart — only one of the same kind goes in.');
+        }
         DB::transaction(function () use ($into, $old) {
             $old->update(['carried_into_id' => $into->id, 'carried_amount' => $old->due(), 'status' => 'carried', 'reported' => null]);
             $this->refresh($into->fresh());
@@ -190,11 +194,22 @@ class PersonalInvoicing
         });
     }
 
+    /** What an invoice is for: an ads bill, a monthly job (salary), or one made by hand. */
+    public static function kind(PersonalInvoice $invoice): string
+    {
+        return match (true) {
+            PersonalAdBill::where('personal_invoice_id', $invoice->id)->exists() => 'ads',
+            (bool) $invoice->personal_recurring_id => 'salary',
+            default => 'other',
+        };
+    }
+
     /** A new monthly or ads invoice takes the client's earlier unpaid ones along. @return int how many */
     public function carryUnpaid(PersonalInvoice $into): int
     {
         $old = PersonalInvoice::where('personal_client_id', $into->personal_client_id)->where('currency', $into->currency)->where('id', '<', $into->id)
-            ->whereIn('status', ['unpaid', 'partial'])->whereNull('carried_into_id')->orderBy('id')->get();
+            ->whereIn('status', ['unpaid', 'partial'])->whereNull('carried_into_id')->orderBy('id')->get()
+            ->filter(fn (PersonalInvoice $o) => self::kind($o) === self::kind($into)); // salary with salary, ads with ads
         foreach ($old as $o) {
             $this->carry($into->fresh(), $o);
         }

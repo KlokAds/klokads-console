@@ -22,6 +22,8 @@ class PersonalInvoicesTest extends TestCase
 {
     use RefreshDatabase;
 
+    private int $expectsNothingCarried = 0;
+
     private PersonalClient $client;
 
     private Account $bkash;
@@ -60,6 +62,17 @@ class PersonalInvoicesTest extends TestCase
         // Paid in full on the new one: both are settled.
         $this->post("/personal/invoices/{$new->id}/payments", ['amount' => 22500, 'paid_on' => today()->toDateString(), 'method' => 'bkash'])->assertSessionHasNoErrors();
         $this->assertSame('paid', $new->fresh()->status);
+
+        // Combined: the old one is not edited on its own.
+        $this->put("/personal/invoices/{$old->id}", ['personal_client_id' => $this->client->id, 'issued_on' => '2026-10-24', 'items' => [['description' => 'X', 'qty' => 1, 'rate' => 1]]])
+            ->assertSessionHas('error');
+
+        // A monthly salary invoice and an ads bill never go together.
+        $salary = app(PersonalInvoicing::class)->create($this->client, [['description' => 'Salary', 'qty' => 1, 'rate' => 100]], CarbonImmutable::today(), null);
+        $salary->update(['personal_recurring_id' => PersonalRecurring::create(['personal_client_id' => $this->client->id, 'items' => [['description' => 'Salary', 'qty' => 1, 'rate' => 100]],
+            'day' => 5, 'start_on' => '2026-10-05', 'lead_days' => 2, 'due_days' => 0, 'auto_send' => false, 'active' => true, 'next_on' => '2026-12-05'])->id]);
+        $this->expectsNothingCarried = app(PersonalInvoicing::class)->carryUnpaid($salary->fresh());
+        $this->assertSame(0, $this->expectsNothingCarried, 'a by-hand invoice does not go into a salary one');
 
         // Taken out again: the old one is as it was.
         $this->delete("/personal/invoices/{$new->id}/carry/{$old->id}")->assertSessionHas('success');
