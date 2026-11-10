@@ -106,14 +106,24 @@
     @if ($prev->isNotEmpty())
         <div style="font-size:8px;letter-spacing:1.6px;color:{{ $soft }};text-transform:uppercase;margin-bottom:6px">Previous dues</div>
         <table class="items" style="margin-bottom:16px">
+            <thead><tr><th>Description</th><th class="r" style="width:9%;text-align:right">Qty</th><th class="r" style="width:20%;text-align:right">Rate</th><th class="r" style="width:20%;text-align:right">Amount</th></tr></thead>
             <tbody>
                 @foreach ($prev as $p)
-                    <tr><td style="font-size:11px;border-bottom:0;padding-bottom:3px"><b>{{ $p->number }}</b> <span class="muted">· {{ $p->issued_on->format('j M Y') }}</span></td><td class="r" style="font-weight:bold;border-bottom:0;padding-bottom:3px">{{ $money($p->carried_amount) }}</td></tr>
-                    @foreach (collect($p->items ?? [])->map(fn ($i) => [$i['description'].((float) $i['qty'] != 1 ? ' · '.$qty($i['qty']).' × '.$money((int) $i['rate']) : ''), $money((int) round((float) $i['qty'] * (int) $i['rate']))])
-                        ->when($p->carried > 0, fn ($c) => $c->push(['Earlier dues on it', $money((int) $p->carried)]))
-                        ->when($p->paid > 0, fn ($c) => $c->push(['Already paid', '−'.$money((int) $p->paid)])) as [$what, $amount])
-                        <tr><td class="muted" style="font-size:10px;padding:2px 0 {{ $loop->last ? '8px' : '2px' }} 12px;{{ $loop->last ? '' : 'border-bottom:0;' }}">{{ $what }}</td><td class="r muted" style="font-size:10px;padding:2px 0 {{ $loop->last ? '8px' : '2px' }} 0;{{ $loop->last ? '' : 'border-bottom:0;' }}">{{ $amount }}</td></tr>
+                    <tr><td colspan="3" style="font-size:11px;background:{{ $band }};padding:7px 8px"><b>{{ $p->number }}</b> <span class="muted">· {{ $p->issued_on->format('j M Y') }}</span></td><td class="r" style="font-weight:bold;background:{{ $band }};padding:7px 8px">{{ $money($p->carried_amount) }}</td></tr>
+                    @foreach ($p->items ?? [] as $i)
+                        <tr>
+                            <td style="font-size:11px">{{ $i['description'] }}</td>
+                            <td class="r muted">{{ $qty($i['qty']) }}</td>
+                            <td class="r muted">{{ $money((int) $i['rate']) }}</td>
+                            <td class="r" style="font-weight:bold">{{ $money((int) round((float) $i['qty'] * (int) $i['rate'])) }}</td>
+                        </tr>
                     @endforeach
+                    @if ($p->carried > 0)
+                        <tr><td colspan="3" style="font-size:11px">Earlier dues on it</td><td class="r" style="font-weight:bold">{{ $money((int) $p->carried) }}</td></tr>
+                    @endif
+                    @if ($p->paid > 0)
+                        <tr><td colspan="3" style="font-size:11px;color:#1E6B4A">Already paid</td><td class="r" style="font-weight:bold;color:#1E6B4A">−{{ $money((int) $p->paid) }}</td></tr>
+                    @endif
                 @endforeach
             </tbody>
         </table>

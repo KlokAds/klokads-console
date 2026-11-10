@@ -63,7 +63,7 @@ class PersonalInvoicesTest extends TestCase
             ->where('invoice.previous.0.items.0.description', 'Website design')->where('invoice.previous.0.items.1.amount', 250000));
         $html = view('personal.invoice-pdf', ['invoice' => $new, 'me' => PersonalInvoicing::profile()])->render();
         $this->assertStringContainsString('Website design', $html);
-        $this->assertStringContainsString('Hosting · 2 ×', $html);
+        $this->assertStringContainsString('>Hosting<', $html);
 
         // Paid in full on the new one: both are settled.
         $this->post("/personal/invoices/{$new->id}/payments", ['amount' => 22500, 'paid_on' => today()->toDateString(), 'method' => 'bkash'])->assertSessionHasNoErrors();
