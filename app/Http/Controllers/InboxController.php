@@ -160,6 +160,27 @@ class InboxController extends Controller
             : "{$message->sender} is blocked — its messages are never booked.");
     }
 
+    /** One amount that was several things: each part booked with its own category and note. */
+    public function split(Request $request, InboxMessage $message): RedirectResponse
+    {
+        abort_unless($message->status === 'review' && $message->parsed, 422);
+        $data = $request->validate([
+            'account_id' => ['required', 'exists:accounts,id'],
+            'parts' => ['required', 'array', 'min:1', 'max:20'],
+            'parts.*.amount' => ['required', 'numeric', 'min:0.01'],
+            'parts.*.category' => ['nullable', 'string', 'max:40'],
+            'parts.*.note' => ['nullable', 'string', 'max:100'],
+        ]);
+        try {
+            $message = $this->entries->split($message, Account::findOrFail($data['account_id']),
+                array_map(fn ($p) => ['amount' => $this->toCents($p['amount']), 'category' => $p['category'] ?? null, 'note' => $p['note'] ?? null], $data['parts']));
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', $message->status === 'added' ? 'Split and booked.' : 'Booked — '.$message->note.'.');
+    }
+
     /** Right as it was booked: mine. Its kind is learned — after a few, ones like it are approved on their own. */
     public function approve(InboxMessage $message): RedirectResponse
     {

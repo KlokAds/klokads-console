@@ -29,6 +29,12 @@ const showSetup = ref(!props.setup.last_sms && !props.setup.imap.checked_at);
 const picks = reactive({});
 const pick = (m) => (picks[m.id] ??= { account_id: m.account_id ?? props.accounts.find((a) => a.provider === m.parsed?.provider && a.currency.toUpperCase() === m.parsed?.currency)?.id ?? '', category: m.category ?? m.parsed?.guess ?? '' });
 const changing = reactive({});
+// One amount that was several things: rows of amount, category and note.
+const splits = reactive({});
+const startSplit = (m) => (splits[m.id] = [{ amount: '', category: pick(m).category || '', note: '' }, { amount: '', category: '', note: '' }]);
+const splitLeft = (m) => Math.round(m.parsed.amount - splits[m.id].reduce((a, r) => a + Math.round((Number(r.amount) || 0) * 100), 0));
+const saveSplit = (m) => router.post(route('personal.inbox.split', m.id), { account_id: pick(m).account_id, parts: splits[m.id].filter((r) => Number(r.amount) > 0) },
+    { preserveScroll: true, onSuccess: () => delete splits[m.id] });
 const approve = (m) => router.post(route('personal.inbox.approve', m.id), {}, { preserveScroll: true });
 const change = (m) => router.post(route('personal.inbox.change', m.id), pick(m), { preserveScroll: true, onSuccess: () => (changing[m.id] = false) });
 const accountOptions = (m) => props.accounts.filter((a) => !m.parsed || a.currency.toUpperCase() === m.parsed.currency)
@@ -236,7 +242,22 @@ const appStatus = computed(() => {
                         <Select v-model="pick(m).account_id" :options="accountOptions(m)" placeholder="Account…" size="sm" class="min-w-[170px]" />
                         <Select v-model="pick(m).category" :options="categoryOptions(m)" size="sm" class="min-w-[160px]" />
                         <button class="btn-primary btn-sm" :disabled="!pick(m).account_id" @click="add(m)"><Icon name="plus" :size="14" /> Add</button>
+                        <button class="btn-secondary btn-sm" @click="splits[m.id] ? delete splits[m.id] : startSplit(m)"><Icon name="flow" :size="14" /> Split</button>
                         <button class="btn-ghost btn-sm" @click="ignore(m)">Ignore</button>
+                    </div>
+                    <div v-if="splits[m.id] && m.parsed" class="mt-3 space-y-2 rounded-2xl bg-ink-50 p-3">
+                        <div class="text-xs font-semibold text-ink-700">Split {{ money(m.parsed.amount, m.parsed.currency) }} — what each part was</div>
+                        <div v-for="(r, i) in splits[m.id]" :key="i" class="flex flex-wrap items-center gap-2">
+                            <input v-model="r.amount" type="number" step="0.01" min="0" class="input w-28" placeholder="Amount" />
+                            <Select v-model="r.category" :options="categoryOptions(m)" size="sm" class="min-w-[160px]" />
+                            <input v-model="r.note" class="input min-w-0 flex-1" placeholder="Note (e.g. GP recharge, Abbu)" maxlength="100" />
+                            <button type="button" class="btn-ghost btn-sm text-rose-600" :disabled="splits[m.id].length === 1" @click="splits[m.id].splice(i, 1)"><Icon name="trash" :size="14" /> Remove</button>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" class="btn-ghost btn-sm" @click="splits[m.id].push({ amount: '', category: '', note: '' })"><Icon name="plus" :size="14" /> Add part</button>
+                            <span class="text-xs" :class="splitLeft(m) < 0 ? 'text-rose-600' : 'text-ink-500'">{{ splitLeft(m) === 0 ? 'All of it' : splitLeft(m) > 0 ? `${money(splitLeft(m), m.parsed.currency)} left — stays a question` : 'More than the amount' }}</span>
+                            <button class="btn-primary btn-sm ml-auto" :disabled="!pick(m).account_id || splitLeft(m) < 0 || splitLeft(m) === m.parsed.amount" @click="saveSplit(m)"><Icon name="check" :size="14" /> Save split</button>
+                        </div>
                     </div>
                     <div v-else-if="['added', 'matched'].includes(m.status) && !m.confirmed" class="mt-3">
                         <div v-if="!changing[m.id]" class="flex flex-wrap items-center gap-2">

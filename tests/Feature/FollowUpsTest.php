@@ -86,6 +86,12 @@ class FollowUpsTest extends TestCase
         $this->postJson("{$this->url}/{$f->id}/done")->assertOk();
         $this->assertSame(0, FollowUp::open()->count());
 
+        // The app posts the same message again: it stays done. A new message opens it again.
+        $this->event(['action' => 'new', 'source' => 'imo', 'person' => 'Ammu', 'text' => 'Call me']);
+        $this->assertSame(0, FollowUp::open()->count());
+        $this->event(['action' => 'new', 'source' => 'imo', 'person' => 'Ammu', 'text' => 'Ar kobe ashbi?']);
+        $this->assertSame(1, FollowUp::open()->count());
+
         $this->get('/personal/followups')->assertOk()->assertInertia(fn ($page) => $page->component('Personal/FollowUps')->has('closed', 1));
         $this->getJson('/app/followups/wrong')->assertNotFound();
     }

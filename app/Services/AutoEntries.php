@@ -89,6 +89,43 @@ class AutoEntries
         return $parsed ? $this->confirmIfLearned($this->process($message)) : $message;
     }
 
+    /**
+     * One amount that was several things (৳785 = a recharge + a bill + …): each part its own entry,
+     * with the category and note I give. What is left stays a question.
+     *
+     * @param  array<int, array{amount: int, category: ?string, note: ?string}>  $parts  cents
+     */
+    public function split(InboxMessage $message, Account $account, array $parts): InboxMessage
+    {
+        $p = $message->parsed;
+        $left = $p['amount'] - array_sum(array_column($parts, 'amount'));
+        if ($left < 0) {
+            throw new \RuntimeException('The parts add up to more than '.Notify::money($p['amount'], $account->currency).'.');
+        }
+        $date = ($message->received_at ?? now())->toDateString();
+        $ids = $p['split_tx'] ?? [];
+        foreach ($parts as $part) {
+            $ids[] = Ledger::save([
+                'kind' => $p['direction'] === 'in' ? 'income' : 'expense',
+                'account_id' => $account->id,
+                'amount' => $part['amount'],
+                'category' => $part['category'] ?: ($p['direction'] === 'in' ? 'other_income' : 'other'),
+                'counterparty' => $part['note'] ? mb_substr($part['note'], 0, 100) : null,
+                'description' => 'Auto · '.($message->source === 'gap' ? 'no SMS' : ucfirst($message->source)).' · split',
+                'occurred_on' => $date,
+            ])->id;
+        }
+        $p['split_tx'] = $ids;
+        $p['split_total'] = ($p['split_total'] ?? 0) + ($p['amount'] - $left);
+        $p['amount'] = $left;
+        $done = $left === 0;
+        $message->update(['parsed' => $p, 'account_id' => $account->id] + ($done
+            ? ['status' => 'added', 'money_transaction_id' => $ids[0], 'confirmed_at' => now(), 'note' => 'Split into '.count($ids)]
+            : ['note' => Notify::money($left, $account->currency).' still to say what it was']));
+
+        return $message;
+    }
+
     /** Approvals in a row (unchanged) after which entries like it are approved on their own. */
     public const LEARNED_AFTER = 3;
 
@@ -478,6 +515,16 @@ class AutoEntries
     /** Undo an auto entry (and its invoice payment). */
     public function undo(InboxMessage $message): void
     {
+        // Split into several entries: each goes.
+        foreach ($message->parsed['split_tx'] ?? [] as $id) {
+            ($tx = MoneyTransaction::find($id)) ? Ledger::delete($tx) : null;
+        }
+        if ($message->parsed['split_tx'] ?? null) {
+            $parsed = $message->parsed;
+            $parsed['amount'] += $parsed['split_total'] ?? 0;
+            unset($parsed['split_tx'], $parsed['split_total']);
+            $message->update(['parsed' => $parsed]);
+        }
         if ($message->personal_invoice_id) {
             $payment = PersonalInvoicePayment::firstWhere('money_transaction_id', $message->money_transaction_id);
             $payment ? $this->invoicing->removePayment($payment) : null;

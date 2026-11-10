@@ -386,6 +386,29 @@ class AutoEntriesTest extends TestCase
         $this->assertNotNull($gap->fresh()->confirmed_at);
     }
 
+    public function test_an_amount_that_was_several_things_is_split_and_the_rest_stays_a_question(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $bkash = Account::create(['name' => 'bKash', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'last4' => '9304', 'currency' => 'BDT', 'opening_balance' => 420382, 'bank_balance' => 341882, 'bank_balance_at' => now()->subMinutes(20)]);
+        app(AutoEntries::class)->reconcile();
+        $gap = InboxMessage::sole();
+        $this->assertSame(78500, $gap->parsed['amount']);
+
+        $this->post("/personal/inbox/{$gap->id}/split", ['account_id' => $bkash->id, 'parts' => [
+            ['amount' => 100, 'category' => 'mobile_recharge', 'note' => 'GP recharge'], ['amount' => 525, 'category' => 'family', 'note' => 'Abbu'],
+        ]])->assertSessionHas('success');
+        $this->assertSame(['review', 16000], [$gap->fresh()->status, $gap->fresh()->parsed['amount']]);
+        $this->assertSame([10000, 52500], MoneyTransaction::orderBy('id')->pluck('amount')->all());
+
+        $this->post("/personal/inbox/{$gap->id}/split", ['account_id' => $bkash->id, 'parts' => [['amount' => 160, 'category' => 'food', 'note' => null]]])->assertSessionHas('success');
+        $this->assertSame('added', $gap->fresh()->status);
+        $this->assertSame(341882, Ledger::balance($bkash));
+
+        // Undo takes every part back.
+        $this->post("/personal/inbox/{$gap->id}/undo");
+        $this->assertSame([0, 78500], [MoneyTransaction::count(), $gap->fresh()->parsed['amount']]);
+    }
+
     public function test_auto_entries_wait_for_approval_until_their_kind_is_learned(): void
     {
         $this->actingAs(User::factory()->create(['is_owner' => true]));

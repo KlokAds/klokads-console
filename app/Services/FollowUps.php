@@ -71,6 +71,13 @@ class FollowUps
             return $open;
         }
 
+        // The app posts the same message again (it updates its notification): one I closed stays closed.
+        $preview = $this->clip($e['text'] ?? null);
+        $closed = FollowUp::where('key', $key)->where(fn ($q) => $q->whereNotNull('done_at')->orWhereNotNull('seen_at'))->latest('id')->first();
+        if ($closed && ($preview === null || $closed->preview === $preview) && $closed->updated_at->gt($at->subDay())) {
+            return $closed;
+        }
+
         $f = FollowUp::create([
             'source' => $e['source'], 'kind' => ($e['kind'] ?? 'message') === 'missed_call' ? 'missed_call' : 'message',
             'person' => mb_substr(trim((string) ($e['person'] ?: $e['phone'])), 0, 190), 'phone' => $e['phone'] ?? null,
