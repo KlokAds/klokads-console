@@ -78,7 +78,7 @@ Route::middleware('throttle:60,1')->group(function () {
     Route::get('/pi/{token}', [PersonalInvoiceController::class, 'public'])->name('personal.invoice.public');
     // A client's own ads report (private link, no login).
     Route::get('/ads/{token}', [AdClientController::class, 'report'])->name('ad-report.show');
-    Route::get('/pi/{token}/pdf', [PersonalInvoiceController::class, 'publicPdf'])->name('personal.invoice.public.pdf');
+    Route::get('/pi/{token}/pdf/{file?}', [PersonalInvoiceController::class, 'publicPdf'])->name('personal.invoice.public.pdf');
     Route::post('/pi/{token}/paid', [PersonalInvoiceController::class, 'report'])->middleware('throttle:6,1')->name('personal.invoice.public.report');
     Route::get('/i/{token}/pdf', [PublicInvoiceController::class, 'pdf'])->name('public.invoice.pdf');
     Route::post('/i/{token}/pay-saved', [PublicInvoiceController::class, 'paySaved'])->middleware('throttle:6,1')->name('public.invoice.pay-saved');
@@ -185,7 +185,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/personal/invoices/{invoice}/payments', [PersonalInvoiceController::class, 'pay'])->middleware('personal')->name('personal.invoices.pay');
     Route::post('/personal/invoices/{invoice}/link', [PersonalInvoiceController::class, 'link'])->middleware('personal')->name('personal.invoices.link');
     Route::post('/personal/invoices/{invoice}/dismiss-report', [PersonalInvoiceController::class, 'dismissReport'])->middleware('personal')->name('personal.invoices.dismiss');
-    Route::get('/personal/invoices/{invoice}/pdf', [PersonalInvoiceController::class, 'pdf'])->middleware('personal')->name('personal.invoices.pdf');
+    Route::get('/personal/invoices/{invoice}/pdf/{file?}', [PersonalInvoiceController::class, 'pdf'])->middleware('personal')->name('personal.invoices.pdf');
     Route::delete('/personal/invoice-payments/{payment}', [PersonalInvoiceController::class, 'destroyPayment'])->middleware('personal')->name('personal.invoices.payments.destroy');
     Route::post('/personal/clients', [PersonalInvoiceController::class, 'storeClient'])->middleware('personal')->name('personal.clients.store');
     Route::put('/personal/clients/{client}', [PersonalInvoiceController::class, 'updateClient'])->middleware('personal')->name('personal.clients.update');

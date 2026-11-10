@@ -309,7 +309,7 @@ class PersonalInvoicing
             // 01XXXXXXXXX → 8801XXXXXXXXX, as WhatsApp wants it
             'phone' => $digits === '' ? null : (str_starts_with($digits, '01') && strlen($digits) === 11 ? '88'.$digits : $digits),
             'url' => $url,
-            'pdf' => route('personal.invoice.public.pdf', $invoice->public_token),
+            'pdf' => route('personal.invoice.public.pdf', ['token' => $invoice->public_token, 'file' => "{$invoice->number}.pdf"]),
             'file' => "{$invoice->number}.pdf",
             'mail_ready' => MailSettings::configured(),
             'sent' => $invoice->sent_at ? ['at' => $invoice->sent_at->toIso8601String(), 'via' => $invoice->sent_via, 'to' => $invoice->sent_to] : null,

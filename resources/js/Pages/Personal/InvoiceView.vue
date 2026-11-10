@@ -48,7 +48,7 @@ const sending = ref(null);
             <button class="flex flex-col items-center gap-1 rounded-2xl bg-teal-600 px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-teal-700" @click="sending = { id: invoice.id, number: invoice.number }">
                 <Icon name="send" :size="18" /> {{ invoice.sent_at ? 'Send again' : 'Send' }}
             </button>
-            <a :href="route('personal.invoices.pdf', invoice.id)" class="flex flex-col items-center gap-1 rounded-2xl bg-surface px-3 py-3 text-sm font-bold text-ink-900 ring-1 ring-line hover:ring-teal-300">
+            <a :href="route('personal.invoices.pdf', { invoice: invoice.id, file: invoice.number + '.pdf' })" class="flex flex-col items-center gap-1 rounded-2xl bg-surface px-3 py-3 text-sm font-bold text-ink-900 ring-1 ring-line hover:ring-teal-300">
                 <Icon name="download" :size="18" class="text-teal-600" /> PDF
             </a>
             <div class="flex flex-col items-center justify-center gap-1 rounded-2xl bg-surface px-3 py-2 text-sm font-bold text-ink-900 ring-1 ring-line"><CopyButton :text="invoice.url" label="Their link" /></div>

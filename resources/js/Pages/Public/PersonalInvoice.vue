@@ -72,7 +72,7 @@ const report = () => {
                             </div>
                         </div>
                     </div>
-                    <a :href="route('personal.invoice.public.pdf', token)" class="hidden shrink-0 items-center gap-1.5 rounded-full border border-[#D9D1C2] bg-white/70 px-3.5 py-2 text-xs font-semibold text-[#0E1630] transition hover:bg-white sm:inline-flex">
+                    <a :href="route('personal.invoice.public.pdf', { token, file: inv.number + '.pdf' })" class="hidden shrink-0 items-center gap-1.5 rounded-full border border-[#D9D1C2] bg-white/70 px-3.5 py-2 text-xs font-semibold text-[#0E1630] transition hover:bg-white sm:inline-flex">
                         <Icon name="download" :size="14" /> Download PDF
                     </a>
                 </header>
@@ -236,7 +236,7 @@ const report = () => {
                     <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8D8A80]">{{ open ? 'Due' : status[0] }}</div>
                     <div class="truncate text-lg font-semibold tabular-nums" style="font-family: Fraunces, serif">{{ T(open ? inv.due : inv.grand) }}</div>
                 </div>
-                <a :href="route('personal.invoice.public.pdf', token)" class="flex h-11 w-11 items-center justify-center rounded-xl border border-[#D9D1C2] bg-white text-[#0E1630]" title="Download PDF"><Icon name="download" :size="18" /></a>
+                <a :href="route('personal.invoice.public.pdf', { token, file: inv.number + '.pdf' })" class="flex h-11 w-11 items-center justify-center rounded-xl border border-[#D9D1C2] bg-white text-[#0E1630]" title="Download PDF"><Icon name="download" :size="18" /></a>
                 <button v-if="open && !showReport" class="flex h-11 items-center gap-1.5 rounded-xl bg-[#0E1630] px-4 text-sm font-semibold text-white" @click="report"><Icon name="check" :size="16" class="text-[#E9D7B3]" /> I've paid</button>
             </div>
         </div>

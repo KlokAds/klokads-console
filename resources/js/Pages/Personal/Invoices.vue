@@ -210,7 +210,7 @@ if (wantsNew()) openInv();
                         <RowMenu>
                             <Link :href="route('personal.invoices.show', i.id)" class="menu-item"><Icon name="invoice" :size="15" /> Open</Link>
                             <button class="menu-item" @click="openInv(i)"><Icon name="pencil" :size="15" /> Edit</button>
-                            <a :href="route('personal.invoices.pdf', i.id)" target="_blank" class="menu-item"><Icon name="download" :size="15" /> PDF</a>
+                            <a :href="route('personal.invoices.pdf', { invoice: i.id, file: i.number + '.pdf' })" target="_blank" class="menu-item"><Icon name="download" :size="15" /> PDF</a>
                             <button class="menu-item font-semibold text-teal-700" @click="send(i)"><Icon name="send" :size="15" /> {{ i.sent_at ? 'Send again' : 'Send' }} — email / WhatsApp</button>
                             <button class="menu-item" @click="voidInv(i)"><Icon name="close" :size="15" /> {{ i.status === 'void' ? 'Restore' : 'Void' }}</button>
                             <button class="menu-item text-rose-600 hover:bg-rose-50 hover:text-rose-700" @click="removeInv(i)"><Icon name="trash" :size="15" /> Delete</button>

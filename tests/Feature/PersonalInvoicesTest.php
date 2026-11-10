@@ -98,6 +98,12 @@ class PersonalInvoicesTest extends TestCase
         $this->assertStringNotContainsString('>'.$once->publicUrl().'<', $html, 'never the long address as text');
         $this->assertStringNotContainsString('>Due<', $html, 'issued only — no separate due date');
 
+        // The PDF's address ends in its own name, so a phone saves it as INV-…pdf, not "pdf.pdf".
+        $file = "{$once->number}.pdf";
+        $this->assertStringEndsWith("/pdf/{$file}", route('personal.invoices.pdf', ['invoice' => $once->id, 'file' => $file]));
+        $this->get(route('personal.invoices.pdf', ['invoice' => $once->id, 'file' => $file]))->assertOk();
+        $this->get(route('personal.invoice.public.pdf', ['token' => $once->public_token, 'file' => $file]))->assertOk()->assertDownload($file);
+
         $many = app(PersonalInvoicing::class)->create($this->client, [['description' => 'Hosting', 'qty' => 2, 'rate' => 1250]], CarbonImmutable::today(), null);
         $html = view('personal.invoice-pdf', ['invoice' => $many, 'me' => PersonalInvoicing::profile()])->render();
         $this->assertStringContainsString('>Qty<', $html);

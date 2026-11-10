@@ -91,6 +91,10 @@ class LockGate extends StatefulWidget {
 class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
   bool locked = false;
   bool asking = false;
+
+  /// An old short PIN just opened the app: a new 6-digit one is set before it opens (typed twice).
+  bool upgrading = false;
+  String? firstNew;
   String mode = 'off';
   DateTime? leftAt;
 
@@ -154,12 +158,47 @@ class _LockGateState extends State<LockGate> with WidgetsBindingObserver {
           Positioned.fill(
             child: Material(
               color: ink,
-              child: mode == 'pin'
+              child: mode == 'pin' && upgrading
+                  ? PinPad(
+                      key: ValueKey('new-${firstNew == null}'),
+                      title: firstNew == null ? 'নতুন ৬ সংখ্যার PIN দিন' : 'আবার একই PIN দিন',
+                      subtitle: firstNew == null ? 'PIN এখন থেকে ৬ সংখ্যার' : 'মিললে নিজেই সেভ হবে',
+                      length: 6,
+                      onDone: (pin) async {
+                        if (firstNew == null) {
+                          setState(() => firstNew = pin);
+                          return true;
+                        }
+                        if (pin != firstNew) {
+                          setState(() => firstNew = null);
+                          return false;
+                        }
+                        await Lock.setPin(pin);
+                        if (mounted) {
+                          setState(() {
+                            upgrading = false;
+                            firstNew = null;
+                            locked = false;
+                          });
+                        }
+                        return true;
+                      },
+                    )
+                  : mode == 'pin'
                   ? PinPad(
                       title: 'PIN দিয়ে খুলুন',
                       onDone: (pin) async {
                         final ok = await Lock.checkPin(pin);
-                        if (ok && mounted) setState(() => locked = false);
+                        if (ok && mounted) {
+                          // A 4-digit PIN from before: change it to 6 digits right now.
+                          setState(() {
+                            if (pin.length < 6) {
+                              upgrading = true;
+                            } else {
+                              locked = false;
+                            }
+                          });
+                        }
                         return ok;
                       },
                     )

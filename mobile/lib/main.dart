@@ -391,7 +391,7 @@ class SitePageState extends State<SitePage> with WidgetsBindingObserver {
                   final url = request.url.toString();
                   final cookies = await CookieManager.instance().getCookies(url: request.url);
                   final fromHeader = RegExp(r'filename="?([^";]+)"?').firstMatch(request.contentDisposition ?? '')?.group(1);
-                  var name = (request.suggestedFilename ?? fromHeader ?? request.url.pathSegments.lastWhere((s) => s.isNotEmpty, orElse: () => 'file'))
+                  var name = (fromHeader ?? request.suggestedFilename ?? request.url.pathSegments.lastWhere((s) => s.isNotEmpty, orElse: () => 'file'))
                       .replaceAll(RegExp(r'[^\w.\-]'), '_');
                   if (!name.contains('.') && (request.mimeType ?? '').contains('pdf')) {
                     name = '$name.pdf';
