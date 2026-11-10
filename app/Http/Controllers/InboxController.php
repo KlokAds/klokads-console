@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Account;
 use App\Models\InboxMessage;
 use App\Models\MoneyTransaction;
+use App\Models\PersonalInvoice;
 use App\Models\Setting;
 use App\Services\AutoEntries;
 use App\Services\EmailInbox;
@@ -93,7 +94,9 @@ class InboxController extends Controller
                 ->when(! in_array($status, ['all', 'approve'], true), fn ($q) => $q->where('status', $status))
                 ->latest('id')->limit(100)->get()
                 ->map(fn (InboxMessage $m) => $m->only('id', 'source', 'sender', 'body', 'parsed', 'status', 'note', 'account_id', 'money_transaction_id', 'personal_invoice_id')
-                    + ['confirmed' => (bool) $m->confirmed_at, 'category' => $m->money_transaction_id ? MoneyTransaction::find($m->money_transaction_id)?->category : null]
+                    + ['confirmed' => (bool) $m->confirmed_at, 'category' => $m->money_transaction_id ? MoneyTransaction::find($m->money_transaction_id)?->category : null,
+                        'maybe_invoice' => ($id = $m->parsed['invoice_suggestion'] ?? null) && ($inv = PersonalInvoice::with('client')->find($id))
+                            ? ['number' => $inv->number, 'client' => $inv->client?->company ?: $inv->client?->name, 'due' => $inv->due(), 'currency' => $inv->currency] : null]
                     + ['account' => $m->account?->name, 'received_at' => $m->received_at?->toIso8601String()]),
             'counts' => InboxMessage::selectRaw('status, count(*) as n')->groupBy('status')->pluck('n', 'status')
                 ->put('approve', InboxMessage::whereIn('status', ['added', 'matched'])->whereNull('confirmed_at')->count()),
@@ -179,6 +182,16 @@ class InboxController extends Controller
         }
 
         return back()->with('success', $message->status === 'added' ? 'Split and booked.' : 'Booked — '.$message->note.'.');
+    }
+
+    /** Is this money that invoice's payment? Yes marks it paid; no leaves it as money in. */
+    public function invoice(Request $request, InboxMessage $message): RedirectResponse
+    {
+        abort_unless($message->parsed['invoice_suggestion'] ?? null, 422);
+        $yes = $request->boolean('yes');
+        $this->entries->answerInvoice($message, $yes);
+
+        return back()->with('success', $yes ? 'Invoice marked paid with this money.' : 'Kept as money in — no invoice paid.');
     }
 
     /** Right as it was booked: mine. Its kind is learned — after a few, ones like it are approved on their own. */

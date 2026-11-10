@@ -198,6 +198,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/personal/inbox/{message}/add', [InboxController::class, 'add'])->middleware('personal')->name('personal.inbox.add');
     Route::post('/personal/inbox/{message}/sender', [InboxController::class, 'sender'])->middleware('personal')->name('personal.inbox.sender');
     Route::post('/personal/interest/give', [PersonalDashboardController::class, 'giveInterest'])->middleware('personal')->name('personal.interest.give');
+    Route::post('/personal/inbox/{message}/invoice', [InboxController::class, 'invoice'])->middleware('personal')->name('personal.inbox.invoice');
     Route::post('/personal/inbox/{message}/split', [InboxController::class, 'split'])->middleware('personal')->name('personal.inbox.split');
     Route::post('/personal/inbox/{message}/approve', [InboxController::class, 'approve'])->middleware('personal')->name('personal.inbox.approve');
     Route::post('/personal/inbox/{message}/change', [InboxController::class, 'change'])->middleware('personal')->name('personal.inbox.change');

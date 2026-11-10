@@ -165,9 +165,17 @@ class AutoEntriesTest extends TestCase
 
         $m = app(AutoEntries::class)->ingest('sms', 'bKash', 'You have received Tk 1,500.00 from 01711000000. Ref INV. Fee Tk 0.00. Balance Tk 8,250.50. TrxID 9JK4XY2Z at 24/10/2026 10:15');
 
-        $this->assertSame('matched', $m->status);
+        // Not sure it is that invoice's money: booked, and asked — the invoice stays unpaid.
+        $this->assertSame(['added', $invoice->id, null], [$m->status, $m->parsed['invoice_suggestion'], $m->confirmed_at]);
+        $this->assertSame('unpaid', $invoice->fresh()->status);
+        $this->assertSame(1, AppNotification::where('title', 'like', '%'.$invoice->number.' paid?%')->count());
+
+        // Yes: paid with that very entry.
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $this->post("/personal/inbox/{$m->id}/invoice", ['yes' => true])->assertSessionHas('success');
+        $this->assertSame('matched', $m->fresh()->status);
         $this->assertSame('paid', $invoice->fresh()->status);
-        $this->assertSame('sms', $invoice->payments()->sole()->source);
+        $this->assertSame('linked', $invoice->payments()->sole()->source);
         $this->assertSame(150000, Ledger::balance($bkash));
         $this->assertSame(1, MoneyTransaction::count(), 'the invoice payment is the only entry');
     }

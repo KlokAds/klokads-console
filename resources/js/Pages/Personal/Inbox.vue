@@ -35,6 +35,7 @@ const startSplit = (m) => (splits[m.id] = [{ amount: '', category: pick(m).categ
 const splitLeft = (m) => Math.round(m.parsed.amount - splits[m.id].reduce((a, r) => a + Math.round((Number(r.amount) || 0) * 100), 0));
 const saveSplit = (m) => router.post(route('personal.inbox.split', m.id), { account_id: pick(m).account_id, parts: splits[m.id].filter((r) => Number(r.amount) > 0) },
     { preserveScroll: true, onSuccess: () => delete splits[m.id] });
+const answerInvoice = (m, yes) => router.post(route('personal.inbox.invoice', m.id), { yes }, { preserveScroll: true });
 const approve = (m) => router.post(route('personal.inbox.approve', m.id), {}, { preserveScroll: true });
 const change = (m) => router.post(route('personal.inbox.change', m.id), pick(m), { preserveScroll: true, onSuccess: () => (changing[m.id] = false) });
 const accountOptions = (m) => props.accounts.filter((a) => !m.parsed || a.currency.toUpperCase() === m.parsed.currency)
@@ -257,6 +258,14 @@ const appStatus = computed(() => {
                             <button type="button" class="btn-ghost btn-sm" @click="splits[m.id].push({ amount: '', category: '', note: '' })"><Icon name="plus" :size="14" /> Add part</button>
                             <span class="text-xs" :class="splitLeft(m) < 0 ? 'text-rose-600' : 'text-ink-500'">{{ splitLeft(m) === 0 ? 'All of it' : splitLeft(m) > 0 ? `${money(splitLeft(m), m.parsed.currency)} left — stays a question` : 'More than the amount' }}</span>
                             <button class="btn-primary btn-sm ml-auto" :disabled="!pick(m).account_id || splitLeft(m) < 0 || splitLeft(m) === m.parsed.amount" @click="saveSplit(m)"><Icon name="check" :size="14" /> Save split</button>
+                        </div>
+                    </div>
+                    <div v-else-if="m.maybe_invoice && !m.confirmed" class="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                        <div class="text-sm font-semibold text-ink-900">Is this {{ m.maybe_invoice.number }}'s payment?</div>
+                        <div class="mt-0.5 text-xs text-ink-600">{{ m.maybe_invoice.client }} owes {{ money(m.maybe_invoice.due, m.maybe_invoice.currency) }} on it. Nothing is marked paid until you say so.</div>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <button class="btn-primary btn-sm" @click="answerInvoice(m, true)"><Icon name="check" :size="14" /> Yes, it paid {{ m.maybe_invoice.number }}</button>
+                            <button class="btn-secondary btn-sm" @click="answerInvoice(m, false)"><Icon name="close" :size="14" /> No, just money in</button>
                         </div>
                     </div>
                     <div v-else-if="['added', 'matched'].includes(m.status) && !m.confirmed" class="mt-3">

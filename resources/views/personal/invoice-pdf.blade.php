@@ -156,12 +156,21 @@
         <table style="margin-top:10px">
             <tr>
                 <td style="width:{{ $me['qr'] ? '64%' : '100%' }};padding-right:{{ $me['qr'] ? '14px' : '0' }}">
-                    @forelse ($me['methods'] as $k => $m)
-                        <div class="method" style="margin-bottom:7px">
-                            <div class="cap" style="letter-spacing:1.4px">{{ $m['label'] ?? ($labels[$m['type']] ?? $m['type']) }}</div>
-                            <div style="margin-top:3px;font-size:12.5px;font-weight:bold;font-family:'DejaVu Sans Mono', monospace">{{ $m['number'] ?? '' }}</div>
-                            @if (! empty($m['name']) || ! empty($m['extra']))<div class="muted" style="margin-top:2px">{{ collect([$m['name'] ?? null, $m['extra'] ?? null])->filter()->implode(' · ') }}</div>@endif
-                        </div>
+                    {{-- Two to a row: bank name, the number big, then whose and which branch --}}
+                    @forelse (array_chunk($me['methods'], 2) as $pair)
+                        <table style="margin-bottom:7px"><tr>
+                            @foreach ($pair as $m)
+                                <td style="width:50%;padding-right:{{ $loop->first ? '6px' : '0' }};padding-left:{{ $loop->first ? '0' : '6px' }};vertical-align:top">
+                                    <div class="method">
+                                        <div class="cap" style="letter-spacing:1.4px;color:{{ $brass }}">{{ $m['label'] ?? ($labels[$m['type']] ?? $m['type']) }}</div>
+                                        <div style="margin-top:3px;font-size:12px;font-weight:bold;font-family:'DejaVu Sans Mono', monospace">{{ $m['number'] ?? '' }}</div>
+                                        @if (! empty($m['name']))<div style="margin-top:2px;font-size:9.5px">{{ $m['name'] }}</div>@endif
+                                        @if (! empty($m['extra']))<div class="muted" style="margin-top:1px">{{ $m['extra'] }}</div>@endif
+                                    </div>
+                                </td>
+                            @endforeach
+                            @if (count($pair) === 1)<td style="width:50%"></td>@endif
+                        </tr></table>
                     @empty
                         <div class="muted">Pay {{ $me['name'] }} by your usual way{{ $me['phone'] ? ' — or call '.$me['phone'] : '' }}.</div>
                     @endforelse

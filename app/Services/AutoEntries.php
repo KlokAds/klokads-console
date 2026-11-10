@@ -126,6 +126,34 @@ class AutoEntries
         return $message;
     }
 
+    /** Money came in that may be an invoice's payment: kept as a question until I answer it. */
+    private function askInvoice(InboxMessage $message, PersonalInvoice $invoice, Account $account, array $p): void
+    {
+        $parsed = $message->parsed;
+        $parsed['invoice_suggestion'] = $invoice->id;
+        $message->update(['parsed' => $parsed, 'note' => "Is it {$invoice->number}'s payment? Confirm it", 'confirmed_at' => null]);
+        $name = $invoice->client?->company ?: $invoice->client?->name;
+        $this->notify->send('invoice', '💰 '.Notify::money($p['amount'], $account->currency)." in — {$invoice->number} paid?",
+            "{$name} owes ".Notify::money($invoice->due(), $invoice->currency)." on {$invoice->number}. Is this money that payment? Tap to confirm — nothing is marked paid until you do.",
+            route('personal.inbox.index', ['status' => 'approve']), 'klok-invoice-ask-'.$message->id);
+    }
+
+    /** My answer: yes — the invoice is paid with this money (the entry stays as it is); no — it is just money in. */
+    public function answerInvoice(InboxMessage $message, bool $yes): void
+    {
+        $parsed = $message->parsed;
+        $invoice = PersonalInvoice::find($parsed['invoice_suggestion'] ?? 0);
+        unset($parsed['invoice_suggestion']);
+        $tx = MoneyTransaction::find($message->money_transaction_id);
+        if ($yes && $invoice && $tx) {
+            $this->invoicing->linkEntry($invoice, $tx);
+            $message->update(['parsed' => $parsed, 'status' => 'matched', 'personal_invoice_id' => $invoice->id, 'confirmed_at' => now(), 'note' => "Paid {$invoice->number}"]);
+
+            return;
+        }
+        $message->update(['parsed' => $parsed, 'confirmed_at' => now(), 'note' => null]);
+    }
+
     /** Entries wait for my approval only when I switch it on (Setting inbox_approve_first = 1). */
     public static function approveFirst(): bool
     {
@@ -167,7 +195,7 @@ class AutoEntries
     /** Booked: approved at once when I approved its kind enough times; else it waits for me. */
     public function confirmIfLearned(InboxMessage $message): InboxMessage
     {
-        if (! in_array($message->status, ['added', 'matched'], true) || $message->confirmed_at) {
+        if (! in_array($message->status, ['added', 'matched'], true) || $message->confirmed_at || ($message->parsed['invoice_suggestion'] ?? null)) {
             return $message;
         }
         $seen = json_decode((string) Setting::get('inbox_approved'), true) ?: [];
@@ -248,12 +276,15 @@ class AutoEntries
         }
 
         try {
-            // Money in that pays one of my invoices: record it against the invoice.
+            // Money in that may pay one of my invoices: the money is booked, but the invoice is paid only
+            // once I say "yes, it is that one" — a guess never marks an invoice paid.
             // Never my own money coming back (a reversal, or the same amount that just left this account).
-            if ($p['direction'] === 'in' && ! $category && ! self::isReversal($message->body) && ! $this->justLeft($account, $p['amount'], $date) && ! $this->fromMyOtherAccount($account, $p['amount'], $date)
-                && ($invoice = $this->invoiceFor($p, $message->body, $account))) {
-                $payment = $this->invoicing->recordPayment($invoice, min($p['amount'], $invoice->due()), $date, $p['provider'] ?? 'other', $p['reference'], $account->id, $message->source);
-                $message->update(['status' => 'matched', 'account_id' => $account->id, 'personal_invoice_id' => $invoice->id, 'money_transaction_id' => $payment->money_transaction_id, 'note' => "Paid {$invoice->number}"]);
+            $maybe = $p['direction'] === 'in' && ! $category && ! self::isReversal($message->body) && ! $this->justLeft($account, $p['amount'], $date) && ! $this->fromMyOtherAccount($account, $p['amount'], $date)
+                ? $this->invoiceFor($p, $message->body, $account) : null;
+            // Sure only when the client told me this very TrxID ("I've paid"): then it is paid at once.
+            if ($maybe && $p['reference'] && strcasecmp((string) ($maybe->reported['reference'] ?? ''), (string) $p['reference']) === 0) {
+                $payment = $this->invoicing->recordPayment($maybe, min($p['amount'], $maybe->due()), $date, $p['provider'] ?? 'other', $p['reference'], $account->id, $message->source);
+                $message->update(['status' => 'matched', 'account_id' => $account->id, 'personal_invoice_id' => $maybe->id, 'money_transaction_id' => $payment->money_transaction_id, 'note' => "Paid {$maybe->number} (their TrxID)", 'confirmed_at' => now()]);
 
                 return $message;
             }
@@ -313,6 +344,9 @@ class AutoEntries
                 'occurred_on' => $date,
             ]);
             $message->update(['status' => 'added', 'account_id' => $account->id, 'money_transaction_id' => $tx->id, 'note' => null]);
+            if ($maybe ?? null) {
+                $this->askInvoice($message, $maybe, $account, $p);
+            }
             if (! $this->pairOwnTransfer($message, $tx)) {
                 $this->tellEntry($account, $p, null, $tx->id);
             }
