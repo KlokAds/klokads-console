@@ -128,8 +128,14 @@ class PersonalAds
             $day = CarbonImmutable::parse($c['time'])->setTimezone($tz)->startOfDay();
             // Compared as calendar days (Meta's time in Dhaka against the settled day), never across time zones.
             $kind = $c['kind'] ?? 'charge';
-            // A Meta credit (coupon) paid for some ads, not my card: never on their bill.
-            if ($kind === 'credit' || $day->toDateString() < $since->toDateString() || PersonalAdCharge::where('meta_id', $c['id'])->exists()) {
+            if ($day->toDateString() < $since->toDateString() || PersonalAdCharge::where('meta_id', $c['id'])->exists()) {
+                continue;
+            }
+            // A Meta credit (coupon) paid for some ads, not my card: listed, never on their bill.
+            if ($kind === 'credit') {
+                PersonalAdCharge::create(['personal_client_id' => $client->id, 'date' => $day->toDateString(), 'currency' => $c['currency'], 'amount' => $c['amount'], 'kind' => 'credit',
+                    'note' => 'Meta credit (coupon) — not my card', 'source' => 'meta', 'meta_id' => $c['id']]);
+
                 continue;
             }
             if ($kind === 'refund') {
@@ -158,7 +164,7 @@ class PersonalAds
     private function refunded(PersonalClient $client, array $c, CarbonImmutable $day, ?string $card): void
     {
         if ($c['amount'] > 0) {
-            PersonalAdCharge::create(['personal_client_id' => $client->id, 'date' => $day->toDateString(), 'currency' => $c['currency'], 'amount' => -$c['amount'],
+            PersonalAdCharge::create(['personal_client_id' => $client->id, 'date' => $day->toDateString(), 'currency' => $c['currency'], 'amount' => -$c['amount'], 'kind' => 'refund',
                 'note' => 'Meta refunded '.($card ?: 'the card'), 'source' => 'meta', 'meta_id' => $c['id']]);
             $this->notify->send('billing', "↩️ Meta refunded {$client->name}'s ads: ".Notify::money($c['amount'], $c['currency']),
                 $day->format('j M').' · it comes off their next ads bill.', route('ad-clients.show', ['client' => $client, 'tab' => 'money']), 'klok-adcharge-'.$client->id);
@@ -179,7 +185,7 @@ class PersonalAds
     {
         $client = PersonalClient::find($charge->personal_client_id);
         $account = $client?->ad_card_account_id ? Account::find($client->ad_card_account_id) : null;
-        if (! $account || $charge->money_transaction_id || $charge->source !== 'meta') {
+        if (! $account || $charge->money_transaction_id || $charge->source !== 'meta' || $charge->kind === 'credit') {
             return null;
         }
         $from = strtoupper($charge->currency);
@@ -422,7 +428,7 @@ class PersonalAds
         $to = $to->min(CarbonImmutable::yesterday());
 
         if ($c->ad_bill_basis === 'charges') {
-            $charges = PersonalAdCharge::where('personal_client_id', $c->id)->whereNull('personal_ad_bill_id')->whereDate('date', '<=', $to->toDateString())->orderBy('date')->get();
+            $charges = PersonalAdCharge::where('personal_client_id', $c->id)->where('kind', '!=', 'credit')->whereNull('personal_ad_bill_id')->whereDate('date', '<=', $to->toDateString())->orderBy('date')->get();
             if ($charges->isEmpty()) {
                 return [];
             }
@@ -575,7 +581,7 @@ class PersonalAds
             'due' => (int) $list->sum(fn ($r) => $r['invoice'] && $r['invoice']['status'] !== 'void' ? max(0, $r['invoice']['total'] - $r['invoice']['paid']) : 0),
         ])->all();
         if ($c->ad_bill_basis === 'charges') {
-            $open = PersonalAdCharge::where('personal_client_id', $c->id)->whereNull('personal_ad_bill_id')->get();
+            $open = PersonalAdCharge::where('personal_client_id', $c->id)->where('kind', '!=', 'credit')->whereNull('personal_ad_bill_id')->get();
             $from = $open->min('date') ? CarbonImmutable::parse($open->min('date')) : null;
             $unbilled = $open->groupBy('currency')->map(fn ($list) => (int) $list->sum('amount'))->all();
         } else {
@@ -602,10 +608,10 @@ class PersonalAds
                 'bill' => $s->unbilled > 0 ? (int) round(self::inTaka($c, [$s->currency => $s->unbilled])['bdt'] * (1 + $c->ad_fee_percent / 100)) : 0])->values()->all(),
             'unbilled_taka' => $now ? ['usd' => $now['usd'], 'bdt' => $now['bdt'], 'with_fee' => (int) round($now['bdt'] * (1 + $c->ad_fee_percent / 100)), 'fx' => $now['fx']] : null,
             'charges' => PersonalAdCharge::where('personal_client_id', $c->id)->orderByDesc('date')->orderByDesc('id')->limit(30)->get()
-                ->map(fn ($ch) => ['id' => $ch->id, 'date' => $ch->date->toDateString(), 'currency' => $ch->currency, 'amount' => $ch->amount, 'note' => $ch->note,
+                ->map(fn ($ch) => ['id' => $ch->id, 'date' => $ch->date->toDateString(), 'currency' => $ch->currency, 'amount' => $ch->amount, 'note' => $ch->note, 'kind' => $ch->kind,
                     'auto' => in_array($ch->source, ['auto', 'meta'], true), 'billed' => (bool) $ch->personal_ad_bill_id,
                     // not billed → on a bill, unpaid → part paid → paid (by the client's payments)
-                    'state' => ! $ch->personal_ad_bill_id ? 'to_bill' : ($stateOf[$ch->personal_ad_bill_id] ?? 'unpaid'),
+                    'state' => $ch->kind === 'credit' ? 'credit' : (! $ch->personal_ad_bill_id ? 'to_bill' : ($stateOf[$ch->personal_ad_bill_id] ?? 'unpaid')),
                     'invoice' => $ch->personal_ad_bill_id ? ($numberOf[$ch->personal_ad_bill_id] ?? null) : null])->all()];
     }
 }

@@ -170,7 +170,7 @@ const savePay = () => pay.post(route('ad-clients.payments.store', props.client.i
 const billTo = ref('');
 const billNow = () => router.post(route('ad-clients.bill', props.client.id), { to: billTo.value || yesterday }, { preserveScroll: true, onSuccess: () => (sheet.value = null) });
 const sending = ref(null);
-const CHARGE = { to_bill: ['To bill', 'text-sky-600'], unpaid: ['Billed · unpaid', 'text-amber-600'], partial: ['Part paid', 'text-amber-600'], paid: ['Paid ✓', 'text-emerald-600'], void: ['Void', 'text-ink-400'] };
+const CHARGE = { credit: ['Meta credit · not billed', 'text-violet-600'], to_bill: ['To bill', 'text-sky-600'], unpaid: ['Billed · unpaid', 'text-amber-600'], partial: ['Part paid', 'text-amber-600'], paid: ['Paid ✓', 'text-emerald-600'], void: ['Void', 'text-ink-400'] };
 const INVOICE = { unpaid: ['Unpaid', 'text-amber-600'], partial: ['Part paid', 'text-amber-600'], paid: ['Paid', 'text-emerald-600'], void: ['Void', 'text-ink-400'] };
 const byCharges = computed(() => props.client.ad_bill_basis === 'charges');
 
@@ -391,14 +391,14 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
 
             <!-- Card charges -->
             <section v-if="byCharges" class="rounded-3xl border border-line/70 bg-surface p-4 shadow-sm sm:p-5">
-                <h3 class="text-sm font-bold text-ink-900">Card charges</h3>
+                <h3 class="text-sm font-bold text-ink-900">Card charges &amp; Meta credits</h3>
                 <div class="mt-2 divide-y divide-line/70">
                     <div v-for="ch in ledger.charges" :key="ch.id" class="flex items-center gap-3 py-2.5 text-sm">
                         <span class="w-24 text-ink-500">{{ date(ch.date) }}</span>
                         <span class="min-w-0 flex-1 truncate text-ink-600">{{ ch.note }}<span v-if="ch.auto" class="ml-1.5 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">seen from Meta</span></span>
-                        <span class="font-semibold tabular-nums">{{ m(ch.amount, ch.currency) }}</span>
+                        <span class="font-semibold tabular-nums" :class="ch.kind === 'credit' ? 'text-violet-600' : ''">{{ m(ch.amount, ch.currency) }}</span>
                         <span class="w-28 text-right text-xs font-bold" :class="CHARGE[ch.state]?.[1]">{{ CHARGE[ch.state]?.[0] }}<span v-if="ch.invoice" class="block font-normal text-ink-400">{{ ch.invoice }}</span></span>
-                        <button v-if="!ch.billed" class="icon-btn" aria-label="Remove" @click="removeCharge(ch)"><Icon name="trash" :size="14" /></button>
+                        <button v-if="!ch.billed && ch.kind !== 'credit'" class="icon-btn" aria-label="Remove" @click="removeCharge(ch)"><Icon name="trash" :size="14" /></button>
                     </div>
                     <p v-if="!ledger.charges.length" class="py-2 text-xs text-ink-500">None yet.</p>
                 </div>

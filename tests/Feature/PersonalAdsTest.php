@@ -245,7 +245,9 @@ class PersonalAdsTest extends TestCase
         app(PersonalAds::class)->sync(force: true);
 
         $charges = PersonalAdCharge::where('personal_client_id', $this->edge->id)->get();
-        $this->assertSame(['tx-new', 'refund'], $charges->pluck('meta_id')->all(), 'the 1 Oct charge is settled already; the coupon is no charge');
+        $this->assertSame(['tx-new', 'coupon', 'refund'], $charges->pluck('meta_id')->all(), 'the 1 Oct charge is settled already');
+        $this->assertSame('credit', $charges->firstWhere('meta_id', 'coupon')->kind, 'the coupon is listed as a credit');
+        $charges = $charges->where('kind', '!=', 'credit')->values();
         $this->assertSame(-5000, $charges->last()->amount, 'a refund comes off the bill');
         $this->assertSame(1, AppNotification::where('title', 'like', '%amount not shown%')->count());
         $charges = $charges->take(1);
