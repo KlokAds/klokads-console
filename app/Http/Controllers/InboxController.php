@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Account;
 use App\Models\InboxMessage;
+use App\Models\MoneyTransaction;
 use App\Models\Setting;
 use App\Services\AutoEntries;
 use App\Services\EmailInbox;
@@ -84,15 +85,18 @@ class InboxController extends Controller
     public function index(Request $request): Response
     {
         $request->session()->put('mode', 'personal');
-        $status = $request->input('status', 'review');
+        $status = $request->input('status', 'approve');
 
         return Inertia::render('Personal/Inbox', [
             'messages' => InboxMessage::with('account:id,name,currency')
-                ->when($status !== 'all', fn ($q) => $q->where('status', $status))
+                ->when($status === 'approve', fn ($q) => $q->whereIn('status', ['added', 'matched'])->whereNull('confirmed_at'))
+                ->when(! in_array($status, ['all', 'approve'], true), fn ($q) => $q->where('status', $status))
                 ->latest('id')->limit(100)->get()
                 ->map(fn (InboxMessage $m) => $m->only('id', 'source', 'sender', 'body', 'parsed', 'status', 'note', 'account_id', 'money_transaction_id', 'personal_invoice_id')
+                    + ['confirmed' => (bool) $m->confirmed_at, 'category' => $m->money_transaction_id ? MoneyTransaction::find($m->money_transaction_id)?->category : null]
                     + ['account' => $m->account?->name, 'received_at' => $m->received_at?->toIso8601String()]),
-            'counts' => InboxMessage::selectRaw('status, count(*) as n')->groupBy('status')->pluck('n', 'status'),
+            'counts' => InboxMessage::selectRaw('status, count(*) as n')->groupBy('status')->pluck('n', 'status')
+                ->put('approve', InboxMessage::whereIn('status', ['added', 'matched'])->whereNull('confirmed_at')->count()),
             'status' => $status,
             'accounts' => Account::where('archived', false)->orderBy('scope', 'desc')->orderBy('name')->get(['id', 'name', 'currency', 'scope', 'provider']),
             'categories' => [
@@ -133,6 +137,9 @@ class InboxController extends Controller
 
         $this->entries->process($message, (int) $data['account_id'], $data['category'] ?? null);
         $message->refresh();
+        if (in_array($message->status, ['added', 'matched'], true)) {
+            $message->update(['confirmed_at' => now()]);
+        }
         // Next time the same bank / wallet (and app copy) can't decide, it goes here.
         if ($message->status !== 'review') {
             AutoEntries::learn($message->parsed, (int) $data['account_id']);
@@ -151,6 +158,36 @@ class InboxController extends Controller
         return back()->with('success', $trust
             ? "{$message->sender} is trusted — {$n} message".($n === 1 ? '' : 's').' booked, and every next one is booked on its own.'
             : "{$message->sender} is blocked — its messages are never booked.");
+    }
+
+    /** Right as it was booked: mine. Its kind is learned — after a few, ones like it are approved on their own. */
+    public function approve(InboxMessage $message): RedirectResponse
+    {
+        abort_unless(in_array($message->status, ['added', 'matched'], true), 422);
+        $message->update(['confirmed_at' => now()]);
+        AutoEntries::learnApproval(AutoEntries::pattern($message), true);
+
+        return back()->with('success', 'Approved.');
+    }
+
+    /** Booked wrong: booked again on the account and category I pick, and approved. */
+    public function change(Request $request, InboxMessage $message): RedirectResponse
+    {
+        abort_unless(in_array($message->status, ['added', 'matched'], true) && $message->parsed, 422);
+        $data = $request->validate([
+            'account_id' => ['required', 'exists:accounts,id'],
+            'category' => ['nullable', 'string', 'max:40'],
+        ]);
+        AutoEntries::learnApproval(AutoEntries::pattern($message), false);
+        $this->entries->undo($message);
+        $message->update(['parsed' => ['pending' => false] + $message->fresh()->parsed]);
+        $message = $this->entries->process($message->fresh(), (int) $data['account_id'], $data['category'] ?? null);
+        if (in_array($message->status, ['added', 'matched'], true)) {
+            $message->update(['confirmed_at' => now()]);
+            AutoEntries::learn($message->parsed, (int) $data['account_id']);
+        }
+
+        return back()->with($message->status === 'review' ? 'error' : 'success', $message->status === 'review' ? ($message->note ?: 'Could not book it.') : 'Changed and approved.');
     }
 
     public function ignore(InboxMessage $message): RedirectResponse

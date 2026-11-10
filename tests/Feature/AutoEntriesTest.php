@@ -191,7 +191,7 @@ class AutoEntriesTest extends TestCase
             ->assertOk()->assertJsonPath('parsed.amount', 5000);
 
         InboxMessage::create(['source' => 'sms', 'sender' => 'x', 'body' => 'y', 'hash' => 'h', 'status' => 'review', 'parsed' => null]);
-        $this->get('/personal/inbox')->assertOk()->assertInertia(fn ($page) => $page->component('Personal/Inbox')->has('messages', 1)->where('setup.sms_url', fn ($u) => str_contains($u, '/inbox/sms/')));
+        $this->get('/personal/inbox?status=review')->assertOk()->assertInertia(fn ($page) => $page->component('Personal/Inbox')->has('messages', 1)->where('setup.sms_url', fn ($u) => str_contains($u, '/inbox/sms/')));
     }
 
     public function test_metas_charge_on_a_card_is_ad_spend_on_the_right_nsave_and_never_counted_twice(): void
@@ -366,22 +366,46 @@ class AutoEntriesTest extends TestCase
         $this->assertSame(0, MoneyTransaction::where('kind', 'income')->count(), 'no reversal is ever income');
     }
 
-    public function test_a_small_gap_with_the_banks_balance_is_a_bank_charge_and_a_big_one_is_told(): void
+    public function test_money_that_moved_with_no_sms_waits_for_my_approval_with_a_guess(): void
     {
         $this->actingAs(User::factory()->create(['is_owner' => true]));
-        $small = Account::create(['name' => 'City Bank', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'city', 'last4' => '0001', 'currency' => 'BDT', 'opening_balance' => 100000, 'bank_balance' => 98850, 'bank_balance_at' => now()->subMinutes(20)]);
-        $big = Account::create(['name' => 'Midland', 'scope' => 'personal', 'kind' => 'bank', 'provider' => 'other', 'last4' => '2093', 'currency' => 'BDT', 'opening_balance' => 500000, 'bank_balance' => 400000, 'bank_balance_at' => now()->subMinutes(20)]);
+        $bkash = Account::create(['name' => 'bKash', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'last4' => '9304', 'currency' => 'BDT', 'opening_balance' => 100000, 'bank_balance' => 95000, 'bank_balance_at' => now()->subMinutes(20)]);
+        $auto = app(AutoEntries::class);
 
-        $this->assertSame(1, app(AutoEntries::class)->reconcile());
-        $this->assertSame(98850, Ledger::balance($small->fresh()));
-        $this->assertSame(500000, Ledger::balance($big->fresh()), 'a big gap is never guessed');
-        $this->assertSame(1, AppNotification::where('title', 'like', '⚖️ Midland%')->count());
-        app(AutoEntries::class)->reconcile();
-        $this->assertSame(1, AppNotification::where('title', 'like', '⚖️ Midland%')->count(), 'told once');
+        $auto->reconcile();
+        $auto->reconcile();
+        $gap = InboxMessage::sole();
+        $this->assertSame(['gap', 'review', 5000, 'out', 'mobile_recharge'], [$gap->source, $gap->status, $gap->parsed['amount'], $gap->parsed['direction'], $gap->parsed['guess']]);
+        $this->assertSame(100000, Ledger::balance($bkash), 'never booked by a guess');
+        $this->assertSame(1, AppNotification::where('title', 'like', '❔ bKash%')->count(), 'asked once');
 
-        // One tap: the books say what the bank says.
-        $this->post("/money/accounts/{$big->id}/match-bank")->assertSessionHas('success');
-        $this->assertSame(400000, Ledger::balance($big->fresh()));
+        // I say what it was: booked, approved, and the books say what bKash says.
+        $this->post("/personal/inbox/{$gap->id}/add", ['account_id' => $bkash->id, 'category' => 'mobile_recharge'])->assertSessionHas('success');
+        $this->assertSame(95000, Ledger::balance($bkash));
+        $this->assertSame('mobile_recharge', MoneyTransaction::sole()->category);
+        $this->assertNotNull($gap->fresh()->confirmed_at);
+    }
+
+    public function test_auto_entries_wait_for_approval_until_their_kind_is_learned(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        Account::create(['name' => 'bKash', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'last4' => '9304', 'currency' => 'BDT', 'opening_balance' => 1000000]);
+        $auto = app(AutoEntries::class);
+        $pay = fn (int $i) => $auto->ingest('sms', 'bKash', "Payment of Tk 50.00 to GRAMEEN HEALTHTECH LIMITED is successful. Balance Tk 9,000.00. TrxID DKAPPROVE{$i} at 07/11/2026 18:57");
+
+        foreach (range(1, AutoEntries::LEARNED_AFTER) as $i) {
+            $m = $pay($i);
+            $this->assertSame(['added', null], [$m->status, $m->confirmed_at]);
+            $this->get('/personal/inbox')->assertInertia(fn ($page) => $page->has('messages', 1)->where('messages.0.confirmed', false));
+            $this->post("/personal/inbox/{$m->id}/approve")->assertSessionHas('success');
+        }
+        // Approved three times as it was: the next like it is approved on its own.
+        $this->assertNotNull($pay(9)->confirmed_at);
+
+        // Change one: booked again where I say, and that kind is asked again.
+        $this->post('/personal/inbox/'.InboxMessage::latest('id')->first()->id.'/change', ['account_id' => Account::first()->id, 'category' => 'health'])->assertSessionHas('success');
+        $this->assertSame('health', MoneyTransaction::latest('id')->first()->category);
+        $this->assertNull($pay(10)->confirmed_at);
     }
 
     public function test_a_reversal_with_no_debit_on_record_adds_nothing(): void

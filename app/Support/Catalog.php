@@ -68,6 +68,7 @@ class Catalog
         'charity' => 'Charity / zakat',
         'sadaqah' => 'Sadaqah (not recorded)',
         'envelope' => 'Monthly envelope',
+        'mobile_recharge' => 'Mobile recharge',
         'bank_fees' => 'Bank & transfer fees',
         'client_ads' => 'Client ads (Meta charged my card)',
         'other' => 'Other',

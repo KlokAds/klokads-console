@@ -21,13 +21,16 @@ const props = defineProps({
     rules: Object,
 });
 
-const TABS = [['review', 'Needs a look'], ['pending', 'Processing'], ['added', 'Added'], ['matched', 'Paid invoices'], ['ignored', 'Ignored'], ['skipped', 'Not money'], ['all', 'All']];
+const TABS = [['approve', 'To approve'], ['review', 'Needs a look'], ['pending', 'Processing'], ['added', 'Added'], ['matched', 'Paid invoices'], ['ignored', 'Ignored'], ['skipped', 'Not money'], ['all', 'All']];
 const go = (status) => router.get(route('personal.inbox.index'), { status }, { preserveScroll: true });
 const showSetup = ref(!props.setup.last_sms && !props.setup.imap.checked_at);
 
 // Pick account / category for one message
 const picks = reactive({});
-const pick = (m) => (picks[m.id] ??= { account_id: m.account_id ?? props.accounts.find((a) => a.provider === m.parsed?.provider && a.currency.toUpperCase() === m.parsed?.currency)?.id ?? '', category: '' });
+const pick = (m) => (picks[m.id] ??= { account_id: m.account_id ?? props.accounts.find((a) => a.provider === m.parsed?.provider && a.currency.toUpperCase() === m.parsed?.currency)?.id ?? '', category: m.category ?? m.parsed?.guess ?? '' });
+const changing = reactive({});
+const approve = (m) => router.post(route('personal.inbox.approve', m.id), {}, { preserveScroll: true });
+const change = (m) => router.post(route('personal.inbox.change', m.id), pick(m), { preserveScroll: true, onSuccess: () => (changing[m.id] = false) });
 const accountOptions = (m) => props.accounts.filter((a) => !m.parsed || a.currency.toUpperCase() === m.parsed.currency)
     .map((a) => ({ value: a.id, label: a.name, hint: `${a.currency.toUpperCase()}${a.scope === 'business' ? ' · business' : ''}`, group: a.scope === 'business' ? 'Business' : 'Personal' }));
 const categoryOptions = (m) => [{ value: '', label: 'Auto category', icon: '✨' }, ...props.categories[m.parsed.direction === 'in' ? 'income' : 'expense'].map((c) => ({ ...c, icon: cat(c.value)[0] }))];
@@ -234,6 +237,20 @@ const appStatus = computed(() => {
                         <Select v-model="pick(m).category" :options="categoryOptions(m)" size="sm" class="min-w-[160px]" />
                         <button class="btn-primary btn-sm" :disabled="!pick(m).account_id" @click="add(m)"><Icon name="plus" :size="14" /> Add</button>
                         <button class="btn-ghost btn-sm" @click="ignore(m)">Ignore</button>
+                    </div>
+                    <div v-else-if="['added', 'matched'].includes(m.status) && !m.confirmed" class="mt-3">
+                        <div v-if="!changing[m.id]" class="flex flex-wrap items-center gap-2">
+                            <span class="text-xs text-ink-500">Booked on <b class="text-ink-800">{{ m.account }}</b><template v-if="m.category"> · {{ cat(m.category)[0] }} {{ m.category.replace('_', ' ') }}</template> — right?</span>
+                            <button class="btn-primary btn-sm" @click="approve(m)"><Icon name="check" :size="14" /> Approve</button>
+                            <button class="btn-secondary btn-sm" @click="changing[m.id] = true"><Icon name="pencil" :size="14" /> Change</button>
+                            <button class="inline-flex items-center gap-1 btn-link text-xs" @click="undo(m)"><Icon name="repeat" :size="14" /> Undo</button>
+                        </div>
+                        <div v-else class="flex flex-wrap items-center gap-2">
+                            <Select v-model="pick(m).account_id" :options="accountOptions(m)" placeholder="Account…" size="sm" class="min-w-[170px]" />
+                            <Select v-model="pick(m).category" :options="categoryOptions(m)" size="sm" class="min-w-[160px]" />
+                            <button class="btn-primary btn-sm" :disabled="!pick(m).account_id" @click="change(m)"><Icon name="check" :size="14" /> Save &amp; approve</button>
+                            <button class="btn-ghost btn-sm" @click="changing[m.id] = false">Cancel</button>
+                        </div>
                     </div>
                     <div v-else-if="['added', 'matched'].includes(m.status)" class="mt-2">
                         <button class="inline-flex items-center gap-1 btn-link text-xs" @click="undo(m)"><Icon name="repeat" :size="14" /> Undo</button>

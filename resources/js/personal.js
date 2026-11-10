@@ -19,6 +19,7 @@ export const CATEGORY = {
     loan: ['🏦', 'bg-slate-100 text-slate-700'],
     charity: ['💝', 'bg-lime-100 text-lime-700'],
     sadaqah: ['🤲', 'bg-emerald-100 text-emerald-700'],
+    mobile_recharge: ['📱', 'bg-sky-100 text-sky-700'],
     bank_fees: ['🧾', 'bg-slate-100 text-slate-600'],
     other: ['✨', 'bg-slate-100 text-slate-600'],
     // money in

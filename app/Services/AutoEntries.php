@@ -86,7 +86,43 @@ class AutoEntries
             return $this->holdNewSender($message);
         }
 
-        return $parsed ? $this->process($message) : $message;
+        return $parsed ? $this->confirmIfLearned($this->process($message)) : $message;
+    }
+
+    /** Approvals in a row (unchanged) after which entries like it are approved on their own. */
+    public const LEARNED_AFTER = 3;
+
+    /** The kind of entry an approval teaches: account, in/out, category and who. */
+    public static function pattern(InboxMessage $message): ?string
+    {
+        $tx = $message->money_transaction_id ? MoneyTransaction::find($message->money_transaction_id) : null;
+
+        return $tx ? implode('|', [$tx->account_id, $tx->kind, $tx->category, InboxRules::normalise((string) $tx->counterparty)]) : null;
+    }
+
+    /** I approved it as it was (+1), or changed it (that kind starts again). */
+    public static function learnApproval(?string $pattern, bool $unchanged): void
+    {
+        if (! $pattern) {
+            return;
+        }
+        $seen = json_decode((string) Setting::get('inbox_approved'), true) ?: [];
+        $seen[$pattern] = $unchanged ? ($seen[$pattern] ?? 0) + 1 : 0;
+        Setting::put('inbox_approved', json_encode($seen));
+    }
+
+    /** Booked: approved at once when I approved its kind enough times; else it waits for me. */
+    public function confirmIfLearned(InboxMessage $message): InboxMessage
+    {
+        if (! in_array($message->status, ['added', 'matched'], true) || $message->confirmed_at) {
+            return $message;
+        }
+        $seen = json_decode((string) Setting::get('inbox_approved'), true) ?: [];
+        if (($seen[self::pattern($message)] ?? 0) >= self::LEARNED_AFTER) {
+            $message->update(['confirmed_at' => now()]);
+        }
+
+        return $message;
     }
 
     /** From a sender not on my list yet: kept, not booked, and I'm asked once whether to trust it. */
@@ -151,7 +187,7 @@ class AutoEntries
 
             return $message;
         }
-        if ($this->alreadyRecorded($account, $p, $date, $message->source)) {
+        if ($message->source !== 'gap' && $this->alreadyRecorded($account, $p, $date, $message->source)) {
             $message->update(['status' => 'ignored', 'account_id' => $account->id, 'note' => 'Already recorded']);
 
             return $message;
@@ -312,16 +348,8 @@ class AutoEntries
             if ($gap === 0) {
                 continue;
             }
-            if (abs($gap) <= self::SMALL_GAP) {
-                $this->matchBank($account, $account->kind === 'wallet' ? 'No SMS for it (a recharge or fee)' : 'Bank charge / VAT (no SMS)');
-                $fixed++;
-
-                continue;
-            }
-            $this->notify->once("bank-gap:{$account->id}:{$account->bank_balance_at->timestamp}", 'info',
-                '⚖️ '.$account->name.($account->last4 ? " ••{$account->last4}" : '').' is '.Notify::money(abs($gap), $account->currency).($gap < 0 ? ' more' : ' less').' than the bank says',
-                'Bank says '.Notify::money($account->bank_balance, $account->currency).', books say '.Notify::money(Ledger::balance($account), $account->currency).'. Tap to check — or match it in one tap.',
-                route('personal.activity', ['account' => $account->id]));
+            $this->askAboutGap($account, $gap);
+            $fixed++;
         }
 
         return $fixed;
@@ -377,6 +405,35 @@ class AutoEntries
         }
 
         return true;
+    }
+
+    /**
+     * Money that moved with no SMS (the bank's balance and the books differ): one item to approve,
+     * with a guess — a wallet's small one is mostly a mobile recharge, a bank's a fee — never booked by itself.
+     */
+    private function askAboutGap(Account $account, int $gap): void
+    {
+        $out = $gap < 0;
+        $amount = abs($gap);
+        $guess = match (true) {
+            ! $out => (str_contains(mb_strtolower($account->name), 'bank') ? 'interest' : 'other_income'),
+            $account->kind === 'wallet' && $amount <= 50000 => 'mobile_recharge',
+            $amount <= 5000 => 'bank_fees',
+            default => 'other',
+        };
+        $words = ['mobile_recharge' => 'a mobile recharge?', 'bank_fees' => 'a bank charge or VAT?', 'interest' => 'interest or a refund?', 'other_income' => 'money in with no SMS?', 'other' => 'what was it?'];
+        $name = $account->name.($account->last4 ? " ••{$account->last4}" : '');
+        $body = Notify::money($amount, $account->currency).($out ? ' left ' : ' came into ')."{$name} with no SMS — {$words[$guess]} Books ".Notify::money(Ledger::balance($account), $account->currency).', '.($account->kind === 'wallet' ? 'wallet' : 'bank').' says '.Notify::money($account->bank_balance, $account->currency).'.';
+        $parsed = ['provider' => $account->provider, 'direction' => $out ? 'out' : 'in', 'amount' => $amount, 'currency' => strtoupper($account->currency), 'counterparty' => null,
+            'reference' => null, 'fee' => 0, 'last4' => $account->last4, 'balance' => null, 'pending' => false, 'guess' => $guess, 'profile' => 'main'];
+        // One open question per account: a newer balance updates it.
+        $message = InboxMessage::firstOrNew(['source' => 'gap', 'account_id' => $account->id, 'status' => 'review']);
+        $isNew = ! $message->exists || $message->parsed['amount'] !== $amount;
+        $message->fill(['sender' => $account->name, 'body' => $body, 'parsed' => $parsed, 'received_at' => $account->bank_balance_at, 'note' => 'No SMS for it — approve what it was',
+            'hash' => $message->hash ?? hash('sha256', 'gap|'.$account->id.'|'.now()->timestamp)])->save();
+        if ($isNew) {
+            $this->notify->send('info', '❔ '.$name.': '.Notify::money($amount, $account->currency).($out ? ' out' : ' in').' with no SMS', $body.' Tap to approve or change.', route('personal.inbox.index', ['status' => 'review']), 'klok-gap-'.$account->id);
+        }
     }
 
     /** Gaps up to this (cents) are a fee or VAT the bank sent no SMS for. */
