@@ -415,7 +415,7 @@ const initial = computed(() => props.client.name.trim().charAt(0).toUpperCase())
                                 <div class="font-bold tabular-nums" :class="ch.kind === 'credit' ? 'text-violet-600 dark:text-violet-300' : 'text-ink-900'">{{ m(ch.amount, ch.currency) }}</div>
                                 <span class="mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ring-1" :class="CHARGE[ch.state]?.[1]">{{ CHARGE[ch.state]?.[0] }}</span>
                             </div>
-                            <button v-if="!ch.billed && ch.kind !== 'credit'" type="button" class="-mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-400 transition hover:bg-rose-50 hover:text-rose-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 dark:hover:bg-rose-500/15"
+                            <button v-if="!ch.billed && ch.kind !== 'credit'" type="button" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600 ring-1 ring-rose-200 transition hover:bg-rose-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/30 dark:hover:bg-rose-500/25"
                                 aria-label="Remove this charge" title="Remove" @click="removeCharge(ch)"><Icon name="trash" :size="16" /></button>
                         </div>
                         <div v-if="ch.invoice || (!ch.billed && ch.kind !== 'credit')" class="mt-2 flex items-center justify-end gap-2 border-t border-line/60 pt-2">
