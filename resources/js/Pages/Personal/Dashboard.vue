@@ -148,16 +148,20 @@ function dismissReminders() {
 
             <!-- Interest to give away -->
             <div v-if="interest.due > 0 || interest.received > 0" class="mt-4 rounded-3xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
-                <div class="flex flex-wrap items-center gap-3">
-                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-lg dark:bg-amber-500/20">🤲</span>
-                    <div class="min-w-0 flex-1">
-                        <div class="text-sm font-bold text-ink-900">Interest to give away: {{ cash(interest.due, 'BDT') }}</div>
-                        <div class="text-xs text-ink-500">Banks paid {{ cash(interest.received, 'BDT') }} · tax cut {{ cash(interest.tax, 'BDT') }} · given {{ cash(interest.given, 'BDT') }} — never counted as my income.</div>
+                <!-- Phones: the words on top, the account and the button full width under them -->
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div class="flex min-w-0 flex-1 items-start gap-3">
+                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-lg dark:bg-amber-500/20">🤲</span>
+                        <div class="min-w-0 flex-1">
+                            <div class="text-xs font-semibold text-amber-700 dark:text-amber-300">Interest to give away</div>
+                            <div class="text-xl font-extrabold tabular-nums text-ink-900">{{ cash(interest.due, 'BDT') }}</div>
+                            <div class="mt-0.5 text-xs text-ink-500">Banks paid {{ cash(interest.received, 'BDT') }} · tax cut {{ cash(interest.tax, 'BDT') }} · given {{ cash(interest.given, 'BDT') }} · never my income</div>
+                        </div>
                     </div>
-                    <template v-if="interest.due > 0">
-                        <Select v-model="giveFrom" :options="accounts.filter((a) => a.currency === 'BDT').map((a) => ({ value: a.id, label: a.name + (a.last4 ? ' ••' + a.last4 : '') }))" size="sm" class="min-w-[150px]" />
-                        <button class="btn-primary btn-sm" :disabled="!giveFrom" @click="giveInterest"><Icon name="check" :size="14" /> Gave it away</button>
-                    </template>
+                    <div v-if="interest.due > 0" class="flex w-full gap-2 sm:w-auto">
+                        <Select v-model="giveFrom" :options="accounts.filter((a) => a.currency === 'BDT').map((a) => ({ value: a.id, label: a.name + (a.last4 ? ' ••' + a.last4 : '') }))" size="sm" class="min-w-0 flex-1 sm:w-48 sm:flex-none" />
+                        <button class="btn-primary btn-sm shrink-0" :disabled="!giveFrom" @click="giveInterest"><Icon name="check" :size="14" /> Gave it away</button>
+                    </div>
                 </div>
             </div>
 
