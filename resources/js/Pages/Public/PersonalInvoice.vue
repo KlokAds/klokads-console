@@ -89,7 +89,6 @@ const report = () => {
                     <div class="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6B6F82]">{{ open ? 'Amount due' : 'Total' }}</div>
                     <div class="mt-1 text-[40px] font-semibold leading-none tabular-nums sm:text-[52px]" style="font-family: Fraunces, serif">{{ T(open ? inv.due : inv.grand) }}</div>
                     <div v-if="inv.carried_into" class="mt-2 text-sm text-[#2B3A6B]">This invoice is now part of <a :href="route('personal.invoice.public', inv.carried_into.public_token)" class="font-semibold underline">{{ inv.carried_into.number }}</a> — please pay that one.</div>
-                    <div v-if="open && inv.due_on" class="mt-2 text-sm text-[#3A4060]">Please pay by <b>{{ date(inv.due_on) }}</b></div>
                 </section>
 
                 <!-- Parties & dates: who on the left, the dates on the right -->
@@ -103,10 +102,6 @@ const report = () => {
                         <div>
                             <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">Issued</div>
                             <div class="mt-1 text-sm font-semibold tabular-nums sm:mt-1.5 sm:text-base">{{ date(inv.issued_on) }}</div>
-                        </div>
-                        <div>
-                            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8D8A80]">Due</div>
-                            <div class="mt-1 text-sm font-semibold tabular-nums sm:mt-1.5 sm:text-base">{{ inv.due_on ? date(inv.due_on) : 'On receipt' }}</div>
                         </div>
                     </div>
                 </section>

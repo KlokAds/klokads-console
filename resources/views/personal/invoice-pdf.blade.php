@@ -90,10 +90,6 @@
                     <div class="cap">Issued</div>
                     <div style="margin-top:6px;font-weight:bold">{{ $invoice->issued_on->format('j M Y') }}</div>
                 </td>
-                <td style="width:16%">
-                    <div class="cap">Due</div>
-                    <div style="margin-top:6px;font-weight:bold">{{ $invoice->due_on ? $invoice->due_on->format('j M Y') : 'On receipt' }}</div>
-                </td>
                 <td class="r">
                     <div class="cap">{{ $open ? 'Amount due' : 'Total' }}</div>
                     <div class="serif" style="margin-top:4px;font-size:24px;font-weight:bold">{{ $money($open ? $invoice->due() : $invoice->grand()) }}</div>
@@ -214,7 +210,16 @@
                 @endif
             </tr>
         </table>
-        <div class="muted" style="margin-top:8px">Please write <b style="color:{{ $navy }}">{{ $invoice->number }}</b> as the reference. &nbsp;Online: {{ $invoice->publicUrl() }}</div>
+        {{-- The online page as a short, tappable link — never the long address --}}
+        <table style="margin-top:10px">
+            <tr>
+                <td class="muted" style="vertical-align:middle">Please write <b style="color:{{ $navy }}">{{ $invoice->number }}</b> as the reference.</td>
+                <td class="r" style="vertical-align:middle;white-space:nowrap">
+                    <a href="{{ $invoice->publicUrl() }}" style="color:{{ $navy }};text-decoration:none;font-weight:bold;border:0.8px solid {{ $brass }};border-radius:10px;padding:4px 11px">View &amp; pay online &rarr;</a>
+                    <div class="muted" style="margin-top:6px;font-size:8.5px"><a href="{{ $invoice->publicUrl() }}" style="color:{{ $muted }};text-decoration:none">{{ parse_url($invoice->publicUrl(), PHP_URL_HOST) }}/pi/{{ \Illuminate\Support\Str::limit(basename($invoice->publicUrl()), 6, '…') }}</a></div>
+                </td>
+            </tr>
+        </table>
     </div>
 @endif
 

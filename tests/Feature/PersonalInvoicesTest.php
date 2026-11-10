@@ -89,10 +89,14 @@ class PersonalInvoicesTest extends TestCase
     public function test_lines_billed_once_show_their_period_instead_of_qty_and_rate(): void
     {
         $once = app(PersonalInvoicing::class)->create($this->client, [['description' => 'Leads campaign — 3 Nov – 9 Nov 2026', 'qty' => 1, 'rate' => 275192]], CarbonImmutable::today(), null);
+        $once->update(['status' => 'unpaid']);
         $html = view('personal.invoice-pdf', ['invoice' => $once, 'me' => PersonalInvoicing::profile()])->render();
         $this->assertStringContainsString('>Period<', $html);
         $this->assertStringContainsString('>3 Nov – 9 Nov 2026<', $html);
         $this->assertStringNotContainsString('>Qty<', $html);
+        $this->assertStringContainsString('href="'.$once->publicUrl().'"', $html, 'the online page is a link');
+        $this->assertStringNotContainsString('>'.$once->publicUrl().'<', $html, 'never the long address as text');
+        $this->assertStringNotContainsString('>Due<', $html, 'issued only — no separate due date');
 
         $many = app(PersonalInvoicing::class)->create($this->client, [['description' => 'Hosting', 'qty' => 2, 'rate' => 1250]], CarbonImmutable::today(), null);
         $html = view('personal.invoice-pdf', ['invoice' => $many, 'me' => PersonalInvoicing::profile()])->render();

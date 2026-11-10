@@ -11,7 +11,7 @@
             <tr><td style="background:#0b1020;color:#fff;padding:24px 28px">
                 <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#aaa2ff">Invoice {{ $invoice->number }}</div>
                 <div style="font-size:30px;font-weight:bold;margin-top:6px">{{ $money($invoice->due()) }}</div>
-                <div style="font-size:13px;color:#b6bbcf;margin-top:4px">from {{ $me['name'] }}@if ($invoice->due_on) · due {{ $invoice->due_on->format('j M Y') }}@endif</div>
+                <div style="font-size:13px;color:#b6bbcf;margin-top:4px">from {{ $me['name'] }}</div>
             </td></tr>
             <tr><td style="padding:22px 28px;font-size:14px;line-height:1.6">
                 @if ($body)
