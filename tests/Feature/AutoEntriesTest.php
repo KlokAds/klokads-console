@@ -7,6 +7,7 @@ use App\Models\AppNotification;
 use App\Models\InboxMessage;
 use App\Models\MoneyTransaction;
 use App\Models\PersonalClient;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\AutoEntries;
 use App\Services\PersonalInvoicing;
@@ -366,8 +367,23 @@ class AutoEntriesTest extends TestCase
         $this->assertSame(0, MoneyTransaction::where('kind', 'income')->count(), 'no reversal is ever income');
     }
 
+    public function test_by_default_nothing_waits_money_with_no_sms_is_booked_as_its_guess(): void
+    {
+        $this->actingAs(User::factory()->create(['is_owner' => true]));
+        $bkash = Account::create(['name' => 'bKash', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'last4' => '9304', 'currency' => 'BDT', 'opening_balance' => 100000, 'bank_balance' => 95000, 'bank_balance_at' => now()->subMinutes(20)]);
+        $auto = app(AutoEntries::class);
+
+        $auto->reconcile();
+        $this->assertSame(95000, Ledger::balance($bkash));
+        $this->assertSame('mobile_recharge', MoneyTransaction::sole()->category);
+        $this->assertSame(0, InboxMessage::where('status', 'review')->count());
+        $m = $auto->ingest('sms', 'bKash', 'Payment of Tk 70.00 to GRAMEEN HEALTHTECH LIMITED is successful. Balance Tk 880.00. TrxID DKNOWAIT1 at 07/11/2026 18:57');
+        $this->assertNotNull($m->confirmed_at, 'approved at once');
+    }
+
     public function test_money_that_moved_with_no_sms_waits_for_my_approval_with_a_guess(): void
     {
+        Setting::put('inbox_approve_first', '1');
         $this->actingAs(User::factory()->create(['is_owner' => true]));
         $bkash = Account::create(['name' => 'bKash', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'last4' => '9304', 'currency' => 'BDT', 'opening_balance' => 100000, 'bank_balance' => 95000, 'bank_balance_at' => now()->subMinutes(20)]);
         $auto = app(AutoEntries::class);
@@ -388,6 +404,7 @@ class AutoEntriesTest extends TestCase
 
     public function test_an_amount_that_was_several_things_is_split_and_the_rest_stays_a_question(): void
     {
+        Setting::put('inbox_approve_first', '1');
         $this->actingAs(User::factory()->create(['is_owner' => true]));
         $bkash = Account::create(['name' => 'bKash', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'last4' => '9304', 'currency' => 'BDT', 'opening_balance' => 420382, 'bank_balance' => 341882, 'bank_balance_at' => now()->subMinutes(20)]);
         app(AutoEntries::class)->reconcile();
@@ -411,6 +428,7 @@ class AutoEntriesTest extends TestCase
 
     public function test_auto_entries_wait_for_approval_until_their_kind_is_learned(): void
     {
+        Setting::put('inbox_approve_first', '1');
         $this->actingAs(User::factory()->create(['is_owner' => true]));
         Account::create(['name' => 'bKash', 'scope' => 'personal', 'kind' => 'wallet', 'provider' => 'bkash', 'last4' => '9304', 'currency' => 'BDT', 'opening_balance' => 1000000]);
         $auto = app(AutoEntries::class);

@@ -126,6 +126,22 @@ class AutoEntries
         return $message;
     }
 
+    /** Entries wait for my approval only when I switch it on (Setting inbox_approve_first = 1). */
+    public static function approveFirst(): bool
+    {
+        return Setting::get('inbox_approve_first', '0') === '1';
+    }
+
+    /** Money that moved with no SMS, booked at once as its best guess (a recharge, a bank charge…) and told. */
+    private function bookGap(Account $account, int $gap): void
+    {
+        $this->askAboutGap($account, $gap);
+        $message = InboxMessage::where('source', 'gap')->where('account_id', $account->id)->where('status', 'review')->latest('id')->first();
+        if ($message) {
+            $this->split($message, $account, [['amount' => abs($gap), 'category' => $message->parsed['guess'] ?? 'other', 'note' => 'No SMS for it — booked as a guess, change it if wrong']]);
+        }
+    }
+
     /** Approvals in a row (unchanged) after which entries like it are approved on their own. */
     public const LEARNED_AFTER = 3;
 
@@ -155,7 +171,8 @@ class AutoEntries
             return $message;
         }
         $seen = json_decode((string) Setting::get('inbox_approved'), true) ?: [];
-        if (($seen[self::pattern($message)] ?? 0) >= self::LEARNED_AFTER) {
+        // Approve-first is off (I said: leave nothing waiting for me): every entry is mine at once.
+        if (! self::approveFirst() || ($seen[self::pattern($message)] ?? 0) >= self::LEARNED_AFTER) {
             $message->update(['confirmed_at' => now()]);
         }
 
@@ -385,7 +402,8 @@ class AutoEntries
             if ($gap === 0) {
                 continue;
             }
-            $this->askAboutGap($account, $gap);
+            // Nothing waits for me: money that moved with no SMS is booked as its best guess (and told); I can change it later.
+            self::approveFirst() ? $this->askAboutGap($account, $gap) : $this->bookGap($account, $gap);
             $fixed++;
         }
 
